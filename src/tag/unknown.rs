@@ -4,17 +4,17 @@ use nom::{
 };
 
 #[derive(Debug, PartialEq)]
-pub struct UnknownTag<'a> {
+pub struct Tag<'a> {
     pub name: &'a str,
     pub value: &'a str,
 }
 
-pub fn parse(input: &str) -> IResult<&str, UnknownTag> {
+pub fn parse(input: &str) -> IResult<&str, Tag> {
     let (input, name) = take_till(|c| c == ':')(input)?;
     if input.starts_with(':') {
         let (value, _) = complete::tag(":")(input)?;
-        Ok(("", UnknownTag { name, value }))
+        Ok(("", Tag { name, value }))
     } else {
-        Ok((input, UnknownTag { name, value: "" }))
+        Ok((input, Tag { name, value: "" }))
     }
 }

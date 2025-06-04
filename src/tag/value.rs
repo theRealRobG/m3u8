@@ -11,6 +11,7 @@ use std::collections::HashMap;
 // `tag-name`, but this list covers the possible raw values.
 //
 // Examples:
+//   Empty                                 -> #EXTM3U
 //   TypeEnum                              -> #EXT-X-PLAYLIST-TYPE:<type-enum>
 //   DecimalInteger                        -> #EXT-X-VERSION:<n>
 //   DecimalIntegerRange                   -> #EXT-X-BYTERANGE:<n>[@<o>]
@@ -19,6 +20,7 @@ use std::collections::HashMap;
 //
 #[derive(Debug, PartialEq)]
 pub enum ParsedTagValue<'a> {
+    Empty,
     TypeEnum(HlsPlaylistType),
     DecimalInteger(u64),
     DecimalIntegerRange(u64, u64),
@@ -44,6 +46,9 @@ pub enum ParsedAttributeValue<'a> {
 }
 
 pub fn parse(input: &str) -> IResult<&str, ParsedTagValue> {
+    if input.is_empty() {
+        return Ok((input, ParsedTagValue::Empty));
+    }
     let (input, value) = opt(alt((complete::tag("EVENT"), complete::tag("VOD")))).parse(input)?;
     if let Some(playlist_type) = value {
         if playlist_type == "EVENT" {
