@@ -18,7 +18,11 @@ where
     Blank,
 }
 
-pub fn parse<'a, CustomTag>(input: &'a str) -> IResult<&'a str, HlsLine<'a, CustomTag>>
+pub fn parse(input: &str) -> IResult<&str, HlsLine> {
+    parse_with_custom::<NoCustomTag>(input)
+}
+
+pub fn parse_with_custom<'a, CustomTag>(input: &'a str) -> IResult<&'a str, HlsLine<'a, CustomTag>>
 where
     CustomTag: TryFrom<ParsedTag<'a>, Error = &'static str> + IsKnownName + Debug + PartialEq,
 {
@@ -67,21 +71,18 @@ mod tests {
     fn uri_line() {
         assert_eq!(
             Ok(("", HlsLine::Uri("hello/world.m3u8"))),
-            parse::<NoCustomTag>("hello/world.m3u8")
+            parse("hello/world.m3u8")
         )
     }
 
     #[test]
     fn blank_line() {
-        assert_eq!(Ok(("", HlsLine::Blank)), parse::<NoCustomTag>(""));
+        assert_eq!(Ok(("", HlsLine::Blank)), parse(""));
     }
 
     #[test]
     fn comment() {
-        assert_eq!(
-            Ok(("", HlsLine::Comment("Comment"))),
-            parse::<NoCustomTag>("#Comment")
-        );
+        assert_eq!(Ok(("", HlsLine::Comment("Comment"))), parse("#Comment"));
     }
 
     #[test]
@@ -91,7 +92,7 @@ mod tests {
                 "",
                 HlsLine::KnownTag(known::Tag::Hls(draft_pantos_hls::Tag::M3u(M3u)))
             )),
-            parse::<NoCustomTag>("#EXTM3U")
+            parse("#EXTM3U")
         );
     }
 
@@ -123,7 +124,7 @@ mod tests {
                 "",
                 HlsLine::KnownTag(known::Tag::Custom(TestTag { number: 42 }))
             )),
-            parse::<TestTag>("#EXT-X-TEST-TAG:42")
+            parse_with_custom::<TestTag>("#EXT-X-TEST-TAG:42")
         );
     }
 }
