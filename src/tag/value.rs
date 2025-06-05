@@ -2,10 +2,15 @@ use crate::date::{DateTime, parse_date_time};
 use nom::{
     IResult, Parser,
     branch::alt,
-    bytes::complete::{self, take_till},
-    combinator::opt,
+    bytes::complete::{self, take_till, take_while},
+    combinator::{eof, map, map_res, opt},
+    multi::many0,
+    sequence::{delimited, preceded, terminated},
 };
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    num::{ParseFloatError, ParseIntError},
+};
 
 // Not exactly the same as `tag-value`, because some of the types must be contextualized by the
 // `tag-name`, but this list covers the possible raw values.
@@ -62,7 +67,18 @@ pub fn parse(input: &str) -> IResult<&str, ParsedTagValue> {
     }
     let (input, parsed) = take_till(|c| ",-=@".contains(c)).parse(input)?;
     match input.chars().nth(0) {
-        Some('=') => todo!(),
+        // Can only be an AttributeList
+        Some('=') => {
+            let (input, attribute_value) = handle_tag_value_equals_sign(input)?;
+            let mut attribute_list = HashMap::new();
+            attribute_list.insert(parsed, attribute_value);
+            let (input, list) =
+                many0(preceded(complete::tag(","), attribute_list_name_and_value)).parse(input)?;
+            for (attribute_name, attribute_value) in list {
+                attribute_list.insert(attribute_name, attribute_value);
+            }
+            Ok((input, ParsedTagValue::AttributeList(attribute_list)))
+        }
         // Can only be a DecimalFloatingPointWithOptionalTitle
         Some(',') => handle_tag_value_comma(input, parsed),
         // Can only be a DecimalIntegerRange
@@ -70,6 +86,61 @@ pub fn parse(input: &str) -> IResult<&str, ParsedTagValue> {
         // Could be DecimalInteger or DecimalFloatingPointWithOptionalTitle
         _ => handle_tag_value_end_of_line(parsed),
     }
+}
+
+fn handle_tag_value_equals_sign(input: &str) -> IResult<&str, ParsedAttributeValue> {
+    let (input, _) = complete::tag("=")(input)?;
+    alt((
+        // DecimalInteger(u64)
+        map_res(
+            terminated(
+                take_while(|c: char| c.is_digit(10)),
+                alt((eof, complete::tag(","))),
+            ),
+            |value: &str| -> Result<ParsedAttributeValue, ParseIntError> {
+                let number = value.parse::<u64>()?;
+                Ok(ParsedAttributeValue::DecimalInteger(number))
+            },
+        ),
+        // SignedDecimalFloatingPoint(f64)
+        map_res(
+            terminated(
+                take_while(|c: char| "-.".contains(c) || c.is_digit(10)),
+                alt((eof, complete::tag(","))),
+            ),
+            |value: &str| -> Result<ParsedAttributeValue, ParseFloatError> {
+                let number = value.parse::<f64>()?;
+                Ok(ParsedAttributeValue::SignedDecimalFloatingPoint(number))
+            },
+        ),
+        // QuotedString(&'a str)
+        map(
+            terminated(
+                delimited(
+                    complete::tag("\""),
+                    take_while(|c: char| c != '"'),
+                    complete::tag("\""),
+                ),
+                alt((eof, complete::tag(","))),
+            ),
+            |value| ParsedAttributeValue::QuotedString(value),
+        ),
+        // UnquotedString(&'a str)
+        map(
+            terminated(
+                take_while(|c: char| !"\", ".contains(c)),
+                alt((eof, complete::tag(","))),
+            ),
+            |value| ParsedAttributeValue::UnquotedString(value),
+        ),
+    ))
+    .parse(input)
+}
+
+fn attribute_list_name_and_value(input: &str) -> IResult<&str, (&str, ParsedAttributeValue)> {
+    let (input, attribute_name) = take_till(|c| c == '=').parse(input)?;
+    let (input, attribute_value) = handle_tag_value_equals_sign(input)?;
+    Ok((input, (attribute_name, attribute_value)))
 }
 
 fn handle_tag_value_comma<'a>(
@@ -217,5 +288,137 @@ mod tests {
             )),
             parse("2025-06-03T17:56:42.123Z")
         );
+    }
+
+    mod attribute_list {
+        use super::*;
+
+        mod decimal_integer {
+            use super::*;
+            use pretty_assertions::assert_eq;
+
+            #[test]
+            fn eof_terminated() {
+                assert_eq!(
+                    Ok(("", ParsedAttributeValue::DecimalInteger(123))),
+                    handle_tag_value_equals_sign("=123")
+                );
+            }
+
+            #[test]
+            fn comma_terminated() {
+                assert_eq!(
+                    Ok(("", ParsedAttributeValue::DecimalInteger(123))),
+                    handle_tag_value_equals_sign("=123,")
+                );
+            }
+        }
+
+        mod signed_decimal_floating_point {
+            use super::*;
+            use pretty_assertions::assert_eq;
+
+            #[test]
+            fn positive_float_eof_terminated() {
+                assert_eq!(
+                    Ok(("", ParsedAttributeValue::SignedDecimalFloatingPoint(42.42))),
+                    handle_tag_value_equals_sign("=42.42")
+                );
+            }
+
+            #[test]
+            fn negative_integer_eof_terminated() {
+                assert_eq!(
+                    Ok(("", ParsedAttributeValue::SignedDecimalFloatingPoint(-42.0))),
+                    handle_tag_value_equals_sign("=-42")
+                );
+            }
+
+            #[test]
+            fn negative_float_eof_terminated() {
+                assert_eq!(
+                    Ok(("", ParsedAttributeValue::SignedDecimalFloatingPoint(-42.42))),
+                    handle_tag_value_equals_sign("=-42.42")
+                );
+                assert_eq!(
+                    Ok(("", ParsedAttributeValue::SignedDecimalFloatingPoint(42.42))),
+                    handle_tag_value_equals_sign("=42.42,")
+                );
+                assert_eq!(
+                    Ok(("", ParsedAttributeValue::SignedDecimalFloatingPoint(-42.0))),
+                    handle_tag_value_equals_sign("=-42,")
+                );
+                assert_eq!(
+                    Ok(("", ParsedAttributeValue::SignedDecimalFloatingPoint(-42.42))),
+                    handle_tag_value_equals_sign("=-42.42,")
+                );
+            }
+
+            #[test]
+            fn positive_float_comma_terminated() {
+                assert_eq!(
+                    Ok(("", ParsedAttributeValue::SignedDecimalFloatingPoint(42.42))),
+                    handle_tag_value_equals_sign("=42.42,")
+                );
+            }
+
+            #[test]
+            fn negative_integer_comma_terminated() {
+                assert_eq!(
+                    Ok(("", ParsedAttributeValue::SignedDecimalFloatingPoint(-42.0))),
+                    handle_tag_value_equals_sign("=-42,")
+                );
+            }
+
+            #[test]
+            fn negative_float_comma_terminated() {
+                assert_eq!(
+                    Ok(("", ParsedAttributeValue::SignedDecimalFloatingPoint(-42.42))),
+                    handle_tag_value_equals_sign("=-42.42,")
+                );
+            }
+        }
+
+        mod quoted_string {
+            use super::*;
+            use pretty_assertions::assert_eq;
+
+            #[test]
+            fn eof_terminated() {
+                assert_eq!(
+                    Ok(("", ParsedAttributeValue::QuotedString("Hello, World!"))),
+                    handle_tag_value_equals_sign("=\"Hello, World!\"")
+                );
+            }
+
+            #[test]
+            fn comma_terminated() {
+                assert_eq!(
+                    Ok(("", ParsedAttributeValue::QuotedString("Hello, World!"))),
+                    handle_tag_value_equals_sign("=\"Hello, World!\",")
+                );
+            }
+        }
+
+        mod unquoted_string {
+            use super::*;
+            use pretty_assertions::assert_eq;
+
+            #[test]
+            fn eof_terminated() {
+                assert_eq!(
+                    Ok(("", ParsedAttributeValue::UnquotedString("PQ"))),
+                    handle_tag_value_equals_sign("=PQ")
+                );
+            }
+
+            #[test]
+            fn comma_terminated() {
+                assert_eq!(
+                    Ok(("", ParsedAttributeValue::UnquotedString("PQ"))),
+                    handle_tag_value_equals_sign("=PQ,")
+                );
+            }
+        }
     }
 }
