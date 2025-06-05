@@ -66,7 +66,19 @@ impl<'a> ParsedAttributeValue<'a> {
         }
     }
 
-    /// Helper method to extract `SignedDecimalFloatingPoint` value.
+    /// Helper method to extract either `DecimalInteger` or `SignedDecimalFloatingPoint` as `f64`.
+    ///
+    /// We consider both enum cases because at time of parsing we do not yet know the context of the
+    /// attribuet to understand whether the value MUST be a positive integer or whether it MAY be
+    /// any decimal float. This therefore makes extraction of `f64` values easier.
+    ///
+    /// For example, consider if we had the tag `#EXT-X-START:TIME-OFFSET=6`. When parsing, we would
+    /// consider the value of `TIME-OFFSET` to be `DecimalInteger(6)`; however, the EXT-X-START tag
+    /// considers the value of `TIME-OFFSET` to be "a signed-decimal-floating-point number". So to
+    /// extract the f64, if this method did not consider both `DecimalInteger` and
+    /// `SignedDecimalFloatingPoint` cases, all users of the library would need to know that they
+    /// should check both themselves. Therefore, it seems that the more normal usage pattern would
+    /// be to take both enum cases into account.
     /// ```
     /// use m3u8::tag::value::ParsedAttributeValue;
     ///
@@ -74,11 +86,14 @@ impl<'a> ParsedAttributeValue<'a> {
     ///     Some(42.0),
     ///     ParsedAttributeValue::SignedDecimalFloatingPoint(42.0).as_option_f64()
     /// );
-    /// assert_eq!(None, ParsedAttributeValue::DecimalInteger(42).as_option_f64());
+    /// assert_eq!(Some(42.0), ParsedAttributeValue::DecimalInteger(42).as_option_f64());
+    /// assert_eq!(None, ParsedAttributeValue::QuotedString("42").as_option_f64());
     /// ```
     pub fn as_option_f64(&self) -> Option<f64> {
         if let Self::SignedDecimalFloatingPoint(f) = self {
             Some(*f)
+        } else if let Self::DecimalInteger(n) = self {
+            Some(*n as f64)
         } else {
             None
         }
@@ -125,6 +140,12 @@ impl<'a> ParsedAttributeValue<'a> {
             None
         }
     }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct DecimalResolution {
+    pub width: u64,
+    pub height: u64,
 }
 
 pub fn parse(input: &str) -> IResult<&str, ParsedTagValue> {
