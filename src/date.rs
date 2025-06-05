@@ -28,17 +28,17 @@ pub struct DateTimeTimezoneOffset {
 pub fn parse_date_time(input: &str) -> IResult<&str, DateTime> {
     map_res(
         (
-            take_while_m_n(4, 4, |c: char| c.is_digit(10)),
+            take_while_m_n(4, 4, |c: char| c.is_ascii_digit()),
             tag::<_, _, nom::error::Error<&str>>("-"),
-            take_while_m_n(2, 2, |c: char| c.is_digit(10)),
+            take_while_m_n(2, 2, |c: char| c.is_ascii_digit()),
             tag("-"),
-            take_while_m_n(2, 2, |c: char| c.is_digit(10)),
+            take_while_m_n(2, 2, |c: char| c.is_ascii_digit()),
             tag("T"),
-            take_while_m_n(2, 2, |c: char| c.is_digit(10)),
+            take_while_m_n(2, 2, |c: char| c.is_ascii_digit()),
             tag(":"),
-            take_while_m_n(2, 2, |c: char| c.is_digit(10)),
+            take_while_m_n(2, 2, |c: char| c.is_ascii_digit()),
             tag(":"),
-            take_while(|c: char| c.is_digit(10) || c == '.'),
+            take_while(|c: char| c.is_ascii_digit() || c == '.'),
             rest,
         ),
         |(
@@ -108,7 +108,7 @@ fn parse_time_offset(input: &str) -> IResult<&str, DateTimeTimezoneOffset> {
             Ok((
                 input,
                 DateTimeTimezoneOffset {
-                    time_hour: -1 * time_hour,
+                    time_hour: -time_hour,
                     time_minute,
                 },
             ))
@@ -118,9 +118,9 @@ fn parse_time_offset(input: &str) -> IResult<&str, DateTimeTimezoneOffset> {
 }
 
 fn parse_hours_minutes_time(input: &str) -> IResult<&str, (i8, u8)> {
-    let (input, time_hour) = take_while_m_n(2, 2, |c: char| c.is_digit(10))(input)?;
+    let (input, time_hour) = take_while_m_n(2, 2, |c: char| c.is_ascii_digit())(input)?;
     let (input, _) = tag(":")(input)?;
-    let (input, time_minute) = take_while_m_n(2, 2, |c: char| c.is_digit(10))(input)?;
+    let (input, time_minute) = take_while_m_n(2, 2, |c: char| c.is_ascii_digit())(input)?;
     let Ok(time_hour) = time_hour.parse::<i8>() else {
         return Err(nom::Err::Failure(nom::error::Error::new(
             input,

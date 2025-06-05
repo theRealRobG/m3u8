@@ -66,7 +66,7 @@ pub fn parse(input: &str) -> IResult<&str, ParsedTagValue> {
         return Ok((input, ParsedTagValue::DateTimeMsec(parsed_date)));
     }
     let (input, parsed) = take_till(|c| ",-=@".contains(c)).parse(input)?;
-    match input.chars().nth(0) {
+    match input.chars().next() {
         // Can only be an AttributeList
         Some('=') => {
             let (input, attribute_value) = handle_tag_value_equals_sign(input)?;
@@ -94,7 +94,7 @@ fn handle_tag_value_equals_sign(input: &str) -> IResult<&str, ParsedAttributeVal
         // DecimalInteger(u64)
         map_res(
             terminated(
-                take_while(|c: char| c.is_digit(10)),
+                take_while(|c: char| c.is_ascii_digit()),
                 alt((eof, complete::tag(","))),
             ),
             |value: &str| -> Result<ParsedAttributeValue, ParseIntError> {
@@ -105,7 +105,7 @@ fn handle_tag_value_equals_sign(input: &str) -> IResult<&str, ParsedAttributeVal
         // SignedDecimalFloatingPoint(f64)
         map_res(
             terminated(
-                take_while(|c: char| "-.".contains(c) || c.is_digit(10)),
+                take_while(|c: char| "-.".contains(c) || c.is_ascii_digit()),
                 alt((eof, complete::tag(","))),
             ),
             |value: &str| -> Result<ParsedAttributeValue, ParseFloatError> {
@@ -123,7 +123,7 @@ fn handle_tag_value_equals_sign(input: &str) -> IResult<&str, ParsedAttributeVal
                 ),
                 alt((eof, complete::tag(","))),
             ),
-            |value| ParsedAttributeValue::QuotedString(value),
+            ParsedAttributeValue::QuotedString,
         ),
         // UnquotedString(&'a str)
         map(
@@ -131,7 +131,7 @@ fn handle_tag_value_equals_sign(input: &str) -> IResult<&str, ParsedAttributeVal
                 take_while(|c: char| !"\", ".contains(c)),
                 alt((eof, complete::tag(","))),
             ),
-            |value| ParsedAttributeValue::UnquotedString(value),
+            ParsedAttributeValue::UnquotedString,
         ),
     ))
     .parse(input)
