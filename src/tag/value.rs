@@ -5,7 +5,7 @@ use nom::{
     bytes::complete::{self, take_till, take_while},
     combinator::{eof, map, map_res, opt},
     multi::many0,
-    sequence::{delimited, preceded, terminated},
+    sequence::{delimited, terminated},
 };
 use std::{
     collections::HashMap,
@@ -50,6 +50,83 @@ pub enum ParsedAttributeValue<'a> {
     UnquotedString(&'a str),
 }
 
+impl<'a> ParsedAttributeValue<'a> {
+    /// Helper method to extract `DecimalInteger` value.
+    /// ```
+    /// use m3u8::tag::value::ParsedAttributeValue;
+    ///
+    /// assert_eq!(Some(42), ParsedAttributeValue::DecimalInteger(42).as_option_u64());
+    /// assert_eq!(None, ParsedAttributeValue::QuotedString("42").as_option_u64());
+    /// ```
+    pub fn as_option_u64(&self) -> Option<u64> {
+        if let Self::DecimalInteger(d) = self {
+            Some(*d)
+        } else {
+            None
+        }
+    }
+
+    /// Helper method to extract `SignedDecimalFloatingPoint` value.
+    /// ```
+    /// use m3u8::tag::value::ParsedAttributeValue;
+    ///
+    /// assert_eq!(
+    ///     Some(42.0),
+    ///     ParsedAttributeValue::SignedDecimalFloatingPoint(42.0).as_option_f64()
+    /// );
+    /// assert_eq!(None, ParsedAttributeValue::DecimalInteger(42).as_option_f64());
+    /// ```
+    pub fn as_option_f64(&self) -> Option<f64> {
+        if let Self::SignedDecimalFloatingPoint(f) = self {
+            Some(*f)
+        } else {
+            None
+        }
+    }
+
+    /// Helper method to extract `QuotedString` value.
+    /// ```
+    /// use m3u8::tag::value::ParsedAttributeValue;
+    ///
+    /// assert_eq!(
+    ///     Some("Hello, World!"),
+    ///     ParsedAttributeValue::QuotedString("Hello, World!").as_option_quoted_str()
+    /// );
+    /// assert_eq!(
+    ///     None,
+    ///     ParsedAttributeValue::UnquotedString("Hello, World!").as_option_quoted_str()
+    /// );
+    /// ```
+    pub fn as_option_quoted_str(&self) -> Option<&str> {
+        if let Self::QuotedString(s) = self {
+            Some(s)
+        } else {
+            None
+        }
+    }
+
+    /// Helper method to extract `UnquotedString` value.
+    /// ```
+    /// use m3u8::tag::value::ParsedAttributeValue;
+    ///
+    /// assert_eq!(
+    ///     Some("Hello, World!"),
+    ///     ParsedAttributeValue::UnquotedString("Hello, World!").as_option_unquoted_str()
+    /// );
+    /// assert_eq!(
+    ///     None,
+    ///     ParsedAttributeValue::QuotedString("Hello, World!").as_option_unquoted_str()
+    /// );
+    /// ```
+    pub fn as_option_unquoted_str(&self) -> Option<&str> {
+        if let Self::UnquotedString(s) = self {
+            Some(s)
+        } else {
+            None
+        }
+    }
+}
+
 pub fn parse(input: &str) -> IResult<&str, ParsedTagValue> {
     if input.is_empty() {
         return Ok((input, ParsedTagValue::Empty));
@@ -72,8 +149,7 @@ pub fn parse(input: &str) -> IResult<&str, ParsedTagValue> {
             let (input, attribute_value) = handle_tag_value_equals_sign(input)?;
             let mut attribute_list = HashMap::new();
             attribute_list.insert(parsed, attribute_value);
-            let (input, list) =
-                many0(preceded(complete::tag(","), attribute_list_name_and_value)).parse(input)?;
+            let (input, list) = many0(attribute_list_name_and_value).parse(input)?;
             for (attribute_name, attribute_value) in list {
                 attribute_list.insert(attribute_name, attribute_value);
             }

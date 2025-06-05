@@ -100,20 +100,49 @@ mod tests {
     fn custom_tag() {
         // Set up custom tag
         #[derive(Debug, PartialEq)]
-        struct TestTag {
-            number: u64,
+        struct TestTag<'a> {
+            greeting_type: &'a str,
+            message: &'a str,
+            times: u64,
+            score: Option<f64>,
         }
-        impl TryFrom<ParsedTag<'_>> for TestTag {
+        impl<'a> TryFrom<ParsedTag<'a>> for TestTag<'a> {
             type Error = &'static str;
 
-            fn try_from(tag: ParsedTag<'_>) -> Result<Self, Self::Error> {
+            fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
                 match tag.value {
-                    tag::value::ParsedTagValue::DecimalInteger(number) => Ok(Self { number }),
+                    tag::value::ParsedTagValue::AttributeList(list) => {
+                        let Some(tag::value::ParsedAttributeValue::UnquotedString(greeting_type)) =
+                            list.get("TYPE")
+                        else {
+                            return Err("Missing TYPE attriubte.");
+                        };
+                        let Some(tag::value::ParsedAttributeValue::QuotedString(message)) =
+                            list.get("MESSAGE")
+                        else {
+                            return Err("Missing MESSAGE attriubte.");
+                        };
+                        let Some(tag::value::ParsedAttributeValue::DecimalInteger(times)) =
+                            list.get("TIMES")
+                        else {
+                            return Err("Missing TIMES attriubte.");
+                        };
+                        let score = list
+                            .get("SCORE")
+                            .map(tag::value::ParsedAttributeValue::as_option_f64)
+                            .flatten();
+                        Ok(Self {
+                            greeting_type,
+                            message,
+                            times: *times,
+                            score,
+                        })
+                    }
                     _ => Err("Unexpected tag value."),
                 }
             }
         }
-        impl IsKnownName for TestTag {
+        impl IsKnownName for TestTag<'_> {
             fn is_known_name(name: &str) -> bool {
                 name == "-X-TEST-TAG"
             }
@@ -122,9 +151,16 @@ mod tests {
         assert_eq!(
             Ok((
                 "",
-                HlsLine::KnownTag(known::Tag::Custom(TestTag { number: 42 }))
+                HlsLine::KnownTag(known::Tag::Custom(TestTag {
+                    greeting_type: "GREETING",
+                    message: "Hello, World!",
+                    times: 42,
+                    score: None,
+                }))
             )),
-            parse_with_custom::<TestTag>("#EXT-X-TEST-TAG:42")
+            parse_with_custom::<TestTag>(
+                "#EXT-X-TEST-TAG:TYPE=GREETING,MESSAGE=\"Hello, World!\",TIMES=42"
+            )
         );
     }
 }
