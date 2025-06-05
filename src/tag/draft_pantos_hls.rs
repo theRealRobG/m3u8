@@ -345,20 +345,163 @@ impl<'a> TryFrom<ParsedTag<'a>> for Tag<'a> {
                 };
                 Ok(Tag::Targetduration(Targetduration(d)))
             }
-            "-X-MEDIA-SEQUENCE" => todo!(),
-            "-X-DISCONTINUITY-SEQUENCE" => todo!(),
-            "-X-ENDLIST" => todo!(),
-            "-X-PLAYLIST-TYPE" => todo!(),
-            "-X-I-FRAMES-ONLY" => todo!(),
-            "-X-PART-INF" => todo!(),
-            "-X-SERVER-CONTROL" => todo!(),
-            "INF" => todo!(),
-            "-X-BYTERANGE" => todo!(),
-            "-X-DISCONTINUITY" => todo!(),
-            "-X-KEY" => todo!(),
-            "-X-MAP" => todo!(),
-            "-X-PROGRAM-DATE-TIME" => todo!(),
-            "-X-GAP" => todo!(),
+            "-X-MEDIA-SEQUENCE" => {
+                let ParsedTagValue::DecimalInteger(d) = tag.value else {
+                    return Self::unexpected_value_type();
+                };
+                Ok(Tag::MediaSequence(MediaSequence(d)))
+            }
+            "-X-DISCONTINUITY-SEQUENCE" => {
+                let ParsedTagValue::DecimalInteger(d) = tag.value else {
+                    return Self::unexpected_value_type();
+                };
+                Ok(Tag::DiscontinuitySequence(DiscontinuitySequence(d)))
+            }
+            "-X-ENDLIST" => Ok(Tag::Endlist(Endlist)),
+            "-X-PLAYLIST-TYPE" => {
+                let ParsedTagValue::TypeEnum(t) = tag.value else {
+                    return Self::unexpected_value_type();
+                };
+                Ok(Tag::PlaylistType(PlaylistType(t)))
+            }
+            "-X-I-FRAMES-ONLY" => Ok(Tag::IFramesOnly(IFramesOnly)),
+            "-X-PART-INF" => {
+                let ParsedTagValue::AttributeList(attribute_list) = tag.value else {
+                    return Self::unexpected_value_type();
+                };
+                let Some(Some(part_target)) = attribute_list
+                    .get("PART-TARGET")
+                    .map(ParsedAttributeValue::as_option_f64)
+                else {
+                    return Self::missing_required_attribute();
+                };
+                Ok(Tag::PartInf(PartInf { part_target }))
+            }
+            "-X-SERVER-CONTROL" => {
+                let ParsedTagValue::AttributeList(attribute_list) = tag.value else {
+                    return Self::unexpected_value_type();
+                };
+                let mut can_skip_until = None;
+                let mut can_skip_dateranges = false;
+                let mut hold_back = None;
+                let mut part_hold_back = None;
+                let mut can_block_reload = false;
+                for (key, value) in attribute_list {
+                    match key {
+                        "CAN-SKIP-UNTIL" => can_skip_until = value.as_option_f64(),
+                        "CAN-SKIP-DATERANGES" => {
+                            can_skip_dateranges = value.as_option_unquoted_str() == Some("YES")
+                        }
+                        "HOLD-BACK" => hold_back = value.as_option_f64(),
+                        "PART-HOLD-BACK" => part_hold_back = value.as_option_f64(),
+                        "CAN-BLOCK-RELOAD" => {
+                            can_block_reload = value.as_option_unquoted_str() == Some("YES")
+                        }
+                        _ => (),
+                    }
+                }
+                Ok(Tag::ServerControl(ServerControl {
+                    can_skip_until,
+                    can_skip_dateranges,
+                    hold_back,
+                    part_hold_back,
+                    can_block_reload,
+                }))
+            }
+            "INF" => match tag.value {
+                ParsedTagValue::DecimalInteger(d) => Ok(Tag::Inf(Inf {
+                    duration: d as f64,
+                    title: "",
+                })),
+                ParsedTagValue::DecimalFloatingPointWithOptionalTitle(duration, title) => {
+                    Ok(Tag::Inf(Inf { duration, title }))
+                }
+                _ => Self::unexpected_value_type(),
+            },
+            "-X-BYTERANGE" => match tag.value {
+                ParsedTagValue::DecimalInteger(length) => Ok(Tag::Byterange(Byterange {
+                    length,
+                    offset: None,
+                })),
+                ParsedTagValue::DecimalIntegerRange(length, offset) => {
+                    Ok(Tag::Byterange(Byterange {
+                        length,
+                        offset: Some(offset),
+                    }))
+                }
+                _ => Self::unexpected_value_type(),
+            },
+            "-X-DISCONTINUITY" => Ok(Tag::Discontinuity(Discontinuity)),
+            "-X-KEY" => {
+                let ParsedTagValue::AttributeList(mut attribute_list) = tag.value else {
+                    return Self::unexpected_value_type();
+                };
+                let Some(ParsedAttributeValue::UnquotedString(method)) =
+                    attribute_list.remove("METHOD")
+                else {
+                    return Self::missing_required_attribute();
+                };
+                let uri = match attribute_list.remove("URI") {
+                    Some(ParsedAttributeValue::QuotedString(uri)) => Some(uri),
+                    _ => None,
+                };
+                let iv = match attribute_list.remove("IV") {
+                    Some(ParsedAttributeValue::UnquotedString(iv)) => Some(iv),
+                    _ => None,
+                };
+                let keyformat = match attribute_list.remove("KEYFORMAT") {
+                    Some(ParsedAttributeValue::QuotedString(keyformat)) => Some(keyformat),
+                    _ => None,
+                };
+                let keyformatversions = match attribute_list.remove("KEYFORMATVERSIONS") {
+                    Some(ParsedAttributeValue::QuotedString(keyformatversions)) => {
+                        Some(keyformatversions)
+                    }
+                    _ => None,
+                };
+                Ok(Tag::Key(Key {
+                    method,
+                    uri,
+                    iv,
+                    keyformat,
+                    keyformatversions,
+                }))
+            }
+            "-X-MAP" => {
+                let ParsedTagValue::AttributeList(mut attribute_list) = tag.value else {
+                    return Self::unexpected_value_type();
+                };
+                let Some(ParsedAttributeValue::QuotedString(uri)) = attribute_list.remove("URI")
+                else {
+                    return Self::missing_required_attribute();
+                };
+                let byterange = 'byterange_match: {
+                    match attribute_list.remove("BYTERANGE") {
+                        Some(ParsedAttributeValue::QuotedString(byterange_str)) => {
+                            let mut parts = byterange_str.split('@');
+                            let Some(Ok(length)) = parts.next().map(str::parse::<u64>) else {
+                                break 'byterange_match None;
+                            };
+                            let Some(Ok(offset)) = parts.next().map(str::parse::<u64>) else {
+                                break 'byterange_match None;
+                            };
+                            if parts.next().is_some() {
+                                break 'byterange_match None;
+                            }
+                            Some(MapByterange { length, offset })
+                        }
+                        _ => None,
+                    }
+                };
+                Ok(Tag::Map(Map { uri, byterange }))
+            }
+            "-X-PROGRAM-DATE-TIME" => {
+                let ParsedTagValue::DateTimeMsec(date_time) = tag.value else {
+                    return Self::unexpected_value_type();
+                };
+                Ok(Tag::ProgramDateTime(ProgramDateTime(date_time)))
+            }
+            "-X-GAP" => Ok(Tag::Gap(Gap)),
             "-X-BITRATE" => todo!(),
             "-X-PART" => todo!(),
             "-X-DATERANGE" => todo!(),
@@ -433,6 +576,7 @@ impl Tag<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::date::DateTimeTimezoneOffset;
     use pretty_assertions::assert_eq;
 
     #[test]
@@ -680,6 +824,16 @@ mod tests {
     fn inf() {
         assert_eq!(
             Ok(Tag::Inf(Inf {
+                duration: 6.0,
+                title: ""
+            })),
+            Tag::try_from(ParsedTag {
+                name: "INF",
+                value: ParsedTagValue::DecimalInteger(6)
+            })
+        );
+        assert_eq!(
+            Ok(Tag::Inf(Inf {
                 duration: 6.006,
                 title: ""
             })),
@@ -726,14 +880,132 @@ mod tests {
             })
         );
     }
+
+    #[test]
+    fn discontinuity() {
+        assert_eq!(
+            Ok(Tag::Discontinuity(Discontinuity)),
+            Tag::try_from(ParsedTag {
+                name: "-X-DISCONTINUITY",
+                value: ParsedTagValue::Empty
+            })
+        );
+    }
+
+    #[test]
+    fn key() {
+        assert_eq!(
+            Ok(Tag::Key(Key {
+                method: "SAMPLE-AES",
+                uri: Some("skd://some-key-id"),
+                iv: Some("0xABCD"),
+                keyformat: Some("com.apple.streamingkeydelivery"),
+                keyformatversions: Some("1"),
+            })),
+            Tag::try_from(ParsedTag {
+                name: "-X-KEY",
+                value: ParsedTagValue::AttributeList(HashMap::from([
+                    ("METHOD", ParsedAttributeValue::UnquotedString("SAMPLE-AES")),
+                    (
+                        "URI",
+                        ParsedAttributeValue::QuotedString("skd://some-key-id")
+                    ),
+                    ("IV", ParsedAttributeValue::UnquotedString("0xABCD")),
+                    (
+                        "KEYFORMAT",
+                        ParsedAttributeValue::QuotedString("com.apple.streamingkeydelivery")
+                    ),
+                    ("KEYFORMATVERSIONS", ParsedAttributeValue::QuotedString("1")),
+                ]))
+            })
+        );
+        assert_eq!(
+            Ok(Tag::Key(Key {
+                method: "NONE",
+                uri: None,
+                iv: None,
+                keyformat: None,
+                keyformatversions: None,
+            })),
+            Tag::try_from(ParsedTag {
+                name: "-X-KEY",
+                value: ParsedTagValue::AttributeList(HashMap::from([(
+                    "METHOD",
+                    ParsedAttributeValue::UnquotedString("NONE")
+                )]))
+            })
+        );
+    }
+
+    #[test]
+    fn map() {
+        assert_eq!(
+            Ok(Tag::Map(Map {
+                uri: "init.mp4",
+                byterange: Some(MapByterange {
+                    length: 1024,
+                    offset: 0
+                })
+            })),
+            Tag::try_from(ParsedTag {
+                name: "-X-MAP",
+                value: ParsedTagValue::AttributeList(HashMap::from([
+                    ("URI", ParsedAttributeValue::QuotedString("init.mp4")),
+                    ("BYTERANGE", ParsedAttributeValue::QuotedString("1024@0")),
+                ]))
+            })
+        );
+        assert_eq!(
+            Ok(Tag::Map(Map {
+                uri: "init.mp4",
+                byterange: None,
+            })),
+            Tag::try_from(ParsedTag {
+                name: "-X-MAP",
+                value: ParsedTagValue::AttributeList(HashMap::from([(
+                    "URI",
+                    ParsedAttributeValue::QuotedString("init.mp4")
+                ),]))
+            })
+        );
+    }
+
+    #[test]
+    fn program_date_time() {
+        let date_time = DateTime {
+            date_fullyear: 2025,
+            date_month: 6,
+            date_mday: 5,
+            time_hour: 16,
+            time_minute: 46,
+            time_second: 42.123,
+            timezone_offset: DateTimeTimezoneOffset {
+                time_hour: -5,
+                time_minute: 0,
+            },
+        };
+        assert_eq!(
+            Ok(Tag::ProgramDateTime(ProgramDateTime(date_time))),
+            Tag::try_from(ParsedTag {
+                name: "-X-PROGRAM-DATE-TIME",
+                value: ParsedTagValue::DateTimeMsec(date_time)
+            })
+        );
+    }
+
+    #[test]
+    fn gap() {
+        assert_eq!(
+            Ok(Tag::Gap(Gap)),
+            Tag::try_from(ParsedTag {
+                name: "-X-GAP",
+                value: ParsedTagValue::Empty
+            })
+        );
+    }
 }
 
 // TODO - parse the following:
-// "-X-DISCONTINUITY",
-// "-X-KEY",
-// "-X-MAP",
-// "-X-PROGRAM-DATE-TIME",
-// "-X-GAP",
 // "-X-BITRATE",
 // "-X-PART",
 // "-X-DATERANGE",

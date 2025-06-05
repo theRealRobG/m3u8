@@ -8,7 +8,7 @@ use nom::{
     combinator::{map_res, rest},
 };
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub struct DateTime {
     pub date_fullyear: u32,
     pub date_month: u8,
@@ -19,7 +19,7 @@ pub struct DateTime {
     pub timezone_offset: DateTimeTimezoneOffset,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub struct DateTimeTimezoneOffset {
     pub time_hour: i8,
     pub time_minute: u8,
