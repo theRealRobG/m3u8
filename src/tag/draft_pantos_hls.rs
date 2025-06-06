@@ -721,7 +721,90 @@ impl<'a> TryFrom<ParsedTag<'a>> for Tag<'a> {
                     last_part,
                 }))
             }
-            "-X-MEDIA" => todo!(),
+            "-X-MEDIA" => {
+                let ParsedTagValue::AttributeList(mut attribute_list) = tag.value else {
+                    return Self::unexpected_value_type();
+                };
+                let Some(ParsedAttributeValue::UnquotedString(media_type)) =
+                    attribute_list.remove("TYPE")
+                else {
+                    return Self::missing_required_attribute();
+                };
+                let uri = match attribute_list.remove("URI") {
+                    Some(ParsedAttributeValue::QuotedString(uri)) => Some(uri),
+                    _ => None,
+                };
+                let Some(ParsedAttributeValue::QuotedString(group_id)) =
+                    attribute_list.remove("GROUP-ID")
+                else {
+                    return Self::missing_required_attribute();
+                };
+                let language = match attribute_list.remove("LANGUAGE") {
+                    Some(ParsedAttributeValue::QuotedString(language)) => Some(language),
+                    _ => None,
+                };
+                let assoc_language = match attribute_list.remove("ASSOC-LANGUAGE") {
+                    Some(ParsedAttributeValue::QuotedString(language)) => Some(language),
+                    _ => None,
+                };
+                let Some(ParsedAttributeValue::QuotedString(name)) = attribute_list.remove("NAME")
+                else {
+                    return Self::missing_required_attribute();
+                };
+                let stable_rendition_id = match attribute_list.remove("STABLE-RENDITION-ID") {
+                    Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
+                    _ => None,
+                };
+                let default = match attribute_list.remove("DEFAULT") {
+                    Some(ParsedAttributeValue::UnquotedString("YES")) => true,
+                    _ => false,
+                };
+                let autoselect = match attribute_list.remove("AUTOSELECT") {
+                    Some(ParsedAttributeValue::UnquotedString("YES")) => true,
+                    _ => false,
+                };
+                let forced = match attribute_list.remove("FORCED") {
+                    Some(ParsedAttributeValue::UnquotedString("YES")) => true,
+                    _ => false,
+                };
+                let instream_id = match attribute_list.remove("INSTREAM-ID") {
+                    Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
+                    _ => None,
+                };
+                let bit_depth = match attribute_list.remove("BIT-DEPTH") {
+                    Some(ParsedAttributeValue::DecimalInteger(d)) => Some(d),
+                    _ => None,
+                };
+                let sample_rate = match attribute_list.remove("SAMPLE-RATE") {
+                    Some(ParsedAttributeValue::DecimalInteger(rate)) => Some(rate),
+                    _ => None,
+                };
+                let characteristics = match attribute_list.remove("CHARACTERISTICS") {
+                    Some(ParsedAttributeValue::QuotedString(c)) => Some(c),
+                    _ => None,
+                };
+                let channels = match attribute_list.remove("CHANNELS") {
+                    Some(ParsedAttributeValue::QuotedString(c)) => Some(c),
+                    _ => None,
+                };
+                Ok(Tag::Media(Media {
+                    media_type,
+                    uri,
+                    group_id,
+                    language,
+                    assoc_language,
+                    name,
+                    stable_rendition_id,
+                    default,
+                    autoselect,
+                    forced,
+                    instream_id,
+                    bit_depth,
+                    sample_rate,
+                    characteristics,
+                    channels,
+                }))
+            }
             "-X-STREAM-INF" => todo!(),
             "-X-I-FRAME-STREAM-INF" => todo!(),
             "-X-SESSION-DATA" => todo!(),
@@ -1517,10 +1600,91 @@ mod tests {
             })
         );
     }
+
+    #[test]
+    fn media() {
+        assert_eq!(
+            Ok(Tag::Media(Media {
+                media_type: "AUDIO",
+                uri: Some("audio/en/stereo.m3u8"),
+                group_id: "stereo",
+                language: Some("en"),
+                assoc_language: Some("en"),
+                name: "English",
+                stable_rendition_id: Some("1234"),
+                default: true,
+                autoselect: true,
+                forced: true,
+                instream_id: None,
+                bit_depth: Some(8),
+                sample_rate: Some(48000),
+                characteristics: Some("public.accessibility.describes-video"),
+                channels: Some("2"),
+            })),
+            Tag::try_from(ParsedTag {
+                name: "-X-MEDIA",
+                value: ParsedTagValue::AttributeList(HashMap::from([
+                    ("TYPE", ParsedAttributeValue::UnquotedString("AUDIO")),
+                    (
+                        "URI",
+                        ParsedAttributeValue::QuotedString("audio/en/stereo.m3u8")
+                    ),
+                    ("GROUP-ID", ParsedAttributeValue::QuotedString("stereo")),
+                    ("LANGUAGE", ParsedAttributeValue::QuotedString("en")),
+                    ("ASSOC-LANGUAGE", ParsedAttributeValue::QuotedString("en")),
+                    ("NAME", ParsedAttributeValue::QuotedString("English")),
+                    (
+                        "STABLE-RENDITION-ID",
+                        ParsedAttributeValue::QuotedString("1234")
+                    ),
+                    ("DEFAULT", ParsedAttributeValue::UnquotedString("YES")),
+                    ("AUTOSELECT", ParsedAttributeValue::UnquotedString("YES")),
+                    ("FORCED", ParsedAttributeValue::UnquotedString("YES")),
+                    ("BIT-DEPTH", ParsedAttributeValue::DecimalInteger(8)),
+                    ("SAMPLE-RATE", ParsedAttributeValue::DecimalInteger(48000)),
+                    (
+                        "CHARACTERISTICS",
+                        ParsedAttributeValue::QuotedString("public.accessibility.describes-video")
+                    ),
+                    ("CHANNELS", ParsedAttributeValue::QuotedString("2")),
+                ]))
+            })
+        );
+        assert_eq!(
+            Ok(Tag::Media(Media {
+                media_type: "CLOSED-CAPTIONS",
+                uri: None,
+                group_id: "cc",
+                language: None,
+                assoc_language: None,
+                name: "English",
+                stable_rendition_id: None,
+                default: false,
+                autoselect: false,
+                forced: false,
+                instream_id: Some("CC1"),
+                bit_depth: None,
+                sample_rate: None,
+                characteristics: None,
+                channels: None,
+            })),
+            Tag::try_from(ParsedTag {
+                name: "-X-MEDIA",
+                value: ParsedTagValue::AttributeList(HashMap::from([
+                    (
+                        "TYPE",
+                        ParsedAttributeValue::UnquotedString("CLOSED-CAPTIONS")
+                    ),
+                    ("GROUP-ID", ParsedAttributeValue::QuotedString("cc")),
+                    ("NAME", ParsedAttributeValue::QuotedString("English")),
+                    ("INSTREAM-ID", ParsedAttributeValue::QuotedString("CC1")),
+                ]))
+            })
+        );
+    }
 }
 
 // TODO - test the following:
-// "-X-MEDIA",
 // "-X-STREAM-INF",
 // "-X-I-FRAME-STREAM-INF",
 // "-X-SESSION-DATA",
