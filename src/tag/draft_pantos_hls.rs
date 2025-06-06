@@ -88,7 +88,7 @@ pub struct Key<'a> {
     pub method: &'a str,
     pub uri: Option<&'a str>,
     pub iv: Option<&'a str>,
-    pub keyformat: Option<&'a str>,
+    pub keyformat: &'a str,
     pub keyformatversions: Option<&'a str>,
 }
 //         4.4.4.5.  EXT-X-MAP
@@ -235,9 +235,9 @@ pub struct SessionData<'a> {
 #[derive(Debug, PartialEq)]
 pub struct SessionKey<'a> {
     pub method: &'a str,
-    pub uri: Option<&'a str>,
+    pub uri: &'a str,
     pub iv: Option<&'a str>,
-    pub keyformat: Option<&'a str>,
+    pub keyformat: &'a str,
     pub keyformatversions: Option<&'a str>,
 }
 //         4.4.6.6.  EXT-X-CONTENT-STEERING
@@ -450,8 +450,8 @@ impl<'a> TryFrom<ParsedTag<'a>> for Tag<'a> {
                     _ => None,
                 };
                 let keyformat = match attribute_list.remove("KEYFORMAT") {
-                    Some(ParsedAttributeValue::QuotedString(keyformat)) => Some(keyformat),
-                    _ => None,
+                    Some(ParsedAttributeValue::QuotedString(keyformat)) => keyformat,
+                    _ => "identity",
                 };
                 let keyformatversions = match attribute_list.remove("KEYFORMATVERSIONS") {
                     Some(ParsedAttributeValue::QuotedString(keyformatversions)) => {
@@ -1037,7 +1037,41 @@ impl<'a> TryFrom<ParsedTag<'a>> for Tag<'a> {
                     language,
                 }))
             }
-            "-X-SESSION-KEY" => todo!(),
+            "-X-SESSION-KEY" => {
+                let ParsedTagValue::AttributeList(mut attribute_list) = tag.value else {
+                    return Self::unexpected_value_type();
+                };
+                let Some(ParsedAttributeValue::UnquotedString(method)) =
+                    attribute_list.remove("METHOD")
+                else {
+                    return Self::missing_required_attribute();
+                };
+                let Some(ParsedAttributeValue::QuotedString(uri)) = attribute_list.remove("URI")
+                else {
+                    return Self::missing_required_attribute();
+                };
+                let iv = match attribute_list.remove("IV") {
+                    Some(ParsedAttributeValue::UnquotedString(iv)) => Some(iv),
+                    _ => None,
+                };
+                let keyformat = match attribute_list.remove("KEYFORMAT") {
+                    Some(ParsedAttributeValue::QuotedString(keyformat)) => keyformat,
+                    _ => "identity",
+                };
+                let keyformatversions = match attribute_list.remove("KEYFORMATVERSIONS") {
+                    Some(ParsedAttributeValue::QuotedString(keyformatversions)) => {
+                        Some(keyformatversions)
+                    }
+                    _ => None,
+                };
+                Ok(Tag::SessionKey(SessionKey {
+                    method,
+                    uri,
+                    iv,
+                    keyformat,
+                    keyformatversions,
+                }))
+            }
             "-X-CONTENT-STEERING" => todo!(),
             _ => Self::unknown_name(),
         }
@@ -1424,7 +1458,7 @@ mod tests {
                 method: "SAMPLE-AES",
                 uri: Some("skd://some-key-id"),
                 iv: Some("0xABCD"),
-                keyformat: Some("com.apple.streamingkeydelivery"),
+                keyformat: "com.apple.streamingkeydelivery",
                 keyformatversions: Some("1"),
             })),
             Tag::try_from(ParsedTag {
@@ -1449,7 +1483,7 @@ mod tests {
                 method: "NONE",
                 uri: None,
                 iv: None,
-                keyformat: None,
+                keyformat: "identity",
                 keyformatversions: None,
             })),
             Tag::try_from(ParsedTag {
@@ -2189,8 +2223,55 @@ mod tests {
             })
         );
     }
+
+    #[test]
+    fn session_key() {
+        assert_eq!(
+            Ok(Tag::SessionKey(SessionKey {
+                method: "SAMPLE-AES",
+                uri: "skd://some-key-id",
+                iv: Some("0xABCD"),
+                keyformat: "com.apple.streamingkeydelivery",
+                keyformatversions: Some("1"),
+            })),
+            Tag::try_from(ParsedTag {
+                name: "-X-SESSION-KEY",
+                value: ParsedTagValue::AttributeList(HashMap::from([
+                    ("METHOD", ParsedAttributeValue::UnquotedString("SAMPLE-AES")),
+                    (
+                        "URI",
+                        ParsedAttributeValue::QuotedString("skd://some-key-id")
+                    ),
+                    ("IV", ParsedAttributeValue::UnquotedString("0xABCD")),
+                    (
+                        "KEYFORMAT",
+                        ParsedAttributeValue::QuotedString("com.apple.streamingkeydelivery")
+                    ),
+                    ("KEYFORMATVERSIONS", ParsedAttributeValue::QuotedString("1")),
+                ]))
+            })
+        );
+        assert_eq!(
+            Ok(Tag::SessionKey(SessionKey {
+                method: "AES-128",
+                uri: "skd://some-key-id",
+                iv: None,
+                keyformat: "identity",
+                keyformatversions: None,
+            })),
+            Tag::try_from(ParsedTag {
+                name: "-X-SESSION-KEY",
+                value: ParsedTagValue::AttributeList(HashMap::from([
+                    ("METHOD", ParsedAttributeValue::UnquotedString("AES-128")),
+                    (
+                        "URI",
+                        ParsedAttributeValue::QuotedString("skd://some-key-id")
+                    ),
+                ]))
+            })
+        );
+    }
 }
 
 // TODO - test the following:
-// "-X-SESSION-KEY",
 // "-X-CONTENT-STEERING",
