@@ -25,7 +25,7 @@ pub struct DateTimeTimezoneOffset {
     pub time_minute: u8,
 }
 
-pub fn parse_date_time(input: &str) -> IResult<&str, DateTime> {
+pub fn parse(input: &str) -> IResult<&str, DateTime> {
     map_res(
         (
             take_while_m_n(4, 4, |c: char| c.is_ascii_digit()),
@@ -169,7 +169,7 @@ mod tests {
                     time_minute: 0
                 }
             },
-            parse_date_time("2025-06-04T13:50:42.148Z").unwrap().1
+            parse("2025-06-04T13:50:42.148Z").unwrap().1
         );
     }
 
@@ -188,7 +188,7 @@ mod tests {
                     time_minute: 0
                 }
             },
-            parse_date_time("2025-06-04T13:50:42.148+03:00").unwrap().1
+            parse("2025-06-04T13:50:42.148+03:00").unwrap().1
         );
     }
 
@@ -207,7 +207,7 @@ mod tests {
                     time_minute: 30
                 }
             },
-            parse_date_time("2025-06-04T13:50:42.148-01:30").unwrap().1
+            parse("2025-06-04T13:50:42.148-01:30").unwrap().1
         );
     }
 
@@ -226,7 +226,7 @@ mod tests {
                     time_minute: 0
                 }
             },
-            parse_date_time("2025-06-04T13:50:42Z").unwrap().1
+            parse("2025-06-04T13:50:42Z").unwrap().1
         );
     }
 }

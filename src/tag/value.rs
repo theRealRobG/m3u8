@@ -1,4 +1,4 @@
-use crate::date::{DateTime, parse_date_time};
+use crate::date::{self, DateTime};
 use nom::{
     IResult, Parser,
     branch::alt,
@@ -160,7 +160,7 @@ pub fn parse(input: &str) -> IResult<&str, ParsedTagValue> {
             return Ok((input, ParsedTagValue::TypeEnum(HlsPlaylistType::Vod)));
         }
     }
-    if let (input, Some(parsed_date)) = opt(parse_date_time).parse(input)? {
+    if let (input, Some(parsed_date)) = opt(date::parse).parse(input)? {
         return Ok((input, ParsedTagValue::DateTimeMsec(parsed_date)));
     }
     let (input, parsed) = take_till(|c| ",-=@".contains(c)).parse(input)?;

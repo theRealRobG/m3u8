@@ -572,7 +572,7 @@ impl<'a> TryFrom<ParsedTag<'a>> for Tag<'a> {
                 };
                 let Some(start_date) = (match attribute_list.remove("START-DATE") {
                     Some(ParsedAttributeValue::QuotedString(date_str)) => {
-                        match date::parse_date_time(date_str) {
+                        match date::parse(date_str) {
                             Ok((_, date_time)) => Some(date_time),
                             Err(_) => None,
                         }
@@ -587,7 +587,7 @@ impl<'a> TryFrom<ParsedTag<'a>> for Tag<'a> {
                 };
                 let end_date = match attribute_list.remove("END-DATE") {
                     Some(ParsedAttributeValue::QuotedString(date_str)) => {
-                        match date::parse_date_time(date_str) {
+                        match date::parse(date_str) {
                             Ok((_, date_time)) => Some(date_time),
                             Err(_) => None,
                         }
