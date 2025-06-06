@@ -805,7 +805,113 @@ impl<'a> TryFrom<ParsedTag<'a>> for Tag<'a> {
                     channels,
                 }))
             }
-            "-X-STREAM-INF" => todo!(),
+            "-X-STREAM-INF" => {
+                let ParsedTagValue::AttributeList(mut attribute_list) = tag.value else {
+                    return Self::unexpected_value_type();
+                };
+                let Some(ParsedAttributeValue::DecimalInteger(bandwidth)) =
+                    attribute_list.remove("BANDWIDTH")
+                else {
+                    return Self::missing_required_attribute();
+                };
+                let average_bandwidth = match attribute_list.remove("AVERAGE-BANDWIDTH") {
+                    Some(ParsedAttributeValue::DecimalInteger(b)) => Some(b),
+                    _ => None,
+                };
+                let score = match attribute_list.remove("SCORE") {
+                    Some(value) => value.as_option_f64(),
+                    _ => None,
+                };
+                let codecs = match attribute_list.remove("CODECS") {
+                    Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
+                    _ => None,
+                };
+                let supplemental_codecs = match attribute_list.remove("SUPPLEMENTAL-CODECS") {
+                    Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
+                    _ => None,
+                };
+                let resolution = 'resolution_match: {
+                    match attribute_list.remove("RESOLUTION") {
+                        Some(ParsedAttributeValue::UnquotedString(r)) => {
+                            let mut split = r.split('x');
+                            let Some(Ok(width)) = split.next().map(str::parse::<u64>) else {
+                                break 'resolution_match None;
+                            };
+                            let Some(Ok(height)) = split.next().map(str::parse::<u64>) else {
+                                break 'resolution_match None;
+                            };
+                            if split.next().is_some() {
+                                break 'resolution_match None;
+                            };
+                            Some(DecimalResolution { width, height })
+                        }
+                        _ => None,
+                    }
+                };
+                let frame_rate = match attribute_list.remove("FRAME-RATE") {
+                    Some(v) => v.as_option_f64(),
+                    _ => None,
+                };
+                let hdcp_level = match attribute_list.remove("HDCP-LEVEL") {
+                    Some(ParsedAttributeValue::UnquotedString(s)) => Some(s),
+                    _ => None,
+                };
+                let allowed_cpc = match attribute_list.remove("ALLOWED-CPC") {
+                    Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
+                    _ => None,
+                };
+                let video_range = match attribute_list.remove("VIDEO-RANGE") {
+                    Some(ParsedAttributeValue::UnquotedString(s)) => Some(s),
+                    _ => None,
+                };
+                let req_video_layout = match attribute_list.remove("REQ-VIDEO-LAYOUT") {
+                    Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
+                    _ => None,
+                };
+                let stable_variant_id = match attribute_list.remove("STABLE-VARIANT-ID") {
+                    Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
+                    _ => None,
+                };
+                let audio = match attribute_list.remove("AUDIO") {
+                    Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
+                    _ => None,
+                };
+                let video = match attribute_list.remove("VIDEO") {
+                    Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
+                    _ => None,
+                };
+                let subtitles = match attribute_list.remove("SUBTITLES") {
+                    Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
+                    _ => None,
+                };
+                let closed_captions = match attribute_list.remove("CLOSED-CAPTIONS") {
+                    Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
+                    _ => None,
+                };
+                let pathway_id = match attribute_list.remove("PATHWAY-ID") {
+                    Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
+                    _ => None,
+                };
+                Ok(Tag::StreamInf(StreamInf {
+                    bandwidth,
+                    average_bandwidth,
+                    score,
+                    codecs,
+                    supplemental_codecs,
+                    resolution,
+                    frame_rate,
+                    hdcp_level,
+                    allowed_cpc,
+                    video_range,
+                    req_video_layout,
+                    stable_variant_id,
+                    audio,
+                    video,
+                    subtitles,
+                    closed_captions,
+                    pathway_id,
+                }))
+            }
             "-X-I-FRAME-STREAM-INF" => todo!(),
             "-X-SESSION-DATA" => todo!(),
             "-X-SESSION-KEY" => todo!(),
