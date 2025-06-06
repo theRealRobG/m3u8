@@ -192,7 +192,7 @@ pub struct StreamInf<'a> {
     pub codecs: Option<&'a str>,
     pub supplemental_codecs: Option<&'a str>,
     pub resolution: Option<DecimalResolution>,
-    pub frame_rate: f64,
+    pub frame_rate: Option<f64>,
     pub hdcp_level: Option<&'a str>,
     pub allowed_cpc: Option<&'a str>,
     pub video_range: Option<&'a str>,
@@ -1682,10 +1682,147 @@ mod tests {
             })
         );
     }
+
+    #[test]
+    fn stream_inf() {
+        assert_eq!(
+            Ok(Tag::StreamInf(StreamInf {
+                bandwidth: 10000000,
+                average_bandwidth: Some(9000000),
+                score: Some(2.0),
+                codecs: Some("hvc1.2.4.L153.b0,ec-3"),
+                supplemental_codecs: Some("dvh1.08.07/db4h"),
+                resolution: Some(DecimalResolution {
+                    width: 3840,
+                    height: 2160
+                }),
+                frame_rate: Some(23.976),
+                hdcp_level: Some("TYPE-1"),
+                allowed_cpc: Some("com.example.drm1:SMART-TV/PC"),
+                video_range: Some("PQ"),
+                req_video_layout: Some("CH-STEREO,CH-MONO"),
+                stable_variant_id: Some("1234"),
+                audio: Some("surround"),
+                video: Some("alternate-view"),
+                subtitles: Some("subs"),
+                closed_captions: Some("cc"),
+                pathway_id: Some("1234"),
+            })),
+            Tag::try_from(ParsedTag {
+                name: "-X-STREAM-INF",
+                value: ParsedTagValue::AttributeList(HashMap::from([
+                    ("BANDWIDTH", ParsedAttributeValue::DecimalInteger(10000000)),
+                    (
+                        "AVERAGE-BANDWIDTH",
+                        ParsedAttributeValue::DecimalInteger(9000000)
+                    ),
+                    (
+                        "SCORE",
+                        ParsedAttributeValue::SignedDecimalFloatingPoint(2.0)
+                    ),
+                    (
+                        "CODECS",
+                        ParsedAttributeValue::QuotedString("hvc1.2.4.L153.b0,ec-3")
+                    ),
+                    (
+                        "SUPPLEMENTAL-CODECS",
+                        ParsedAttributeValue::QuotedString("dvh1.08.07/db4h")
+                    ),
+                    (
+                        "RESOLUTION",
+                        ParsedAttributeValue::UnquotedString("3840x2160")
+                    ),
+                    (
+                        "FRAME-RATE",
+                        ParsedAttributeValue::SignedDecimalFloatingPoint(23.976)
+                    ),
+                    ("HDCP-LEVEL", ParsedAttributeValue::UnquotedString("TYPE-1")),
+                    (
+                        "ALLOWED-CPC",
+                        ParsedAttributeValue::QuotedString("com.example.drm1:SMART-TV/PC")
+                    ),
+                    ("VIDEO-RANGE", ParsedAttributeValue::UnquotedString("PQ")),
+                    (
+                        "REQ-VIDEO-LAYOUT",
+                        ParsedAttributeValue::QuotedString("CH-STEREO,CH-MONO")
+                    ),
+                    (
+                        "STABLE-VARIANT-ID",
+                        ParsedAttributeValue::QuotedString("1234")
+                    ),
+                    ("AUDIO", ParsedAttributeValue::QuotedString("surround")),
+                    (
+                        "VIDEO",
+                        ParsedAttributeValue::QuotedString("alternate-view")
+                    ),
+                    ("SUBTITLES", ParsedAttributeValue::QuotedString("subs")),
+                    ("CLOSED-CAPTIONS", ParsedAttributeValue::QuotedString("cc")),
+                    ("PATHWAY-ID", ParsedAttributeValue::QuotedString("1234")),
+                ]))
+            })
+        );
+        // One more test to check that integer frame rate parses well
+        assert_eq!(
+            Ok(Tag::StreamInf(StreamInf {
+                bandwidth: 10000000,
+                average_bandwidth: None,
+                score: None,
+                codecs: None,
+                supplemental_codecs: None,
+                resolution: None,
+                frame_rate: Some(25.0),
+                hdcp_level: None,
+                allowed_cpc: None,
+                video_range: None,
+                req_video_layout: None,
+                stable_variant_id: None,
+                audio: None,
+                video: None,
+                subtitles: None,
+                closed_captions: None,
+                pathway_id: None,
+            })),
+            Tag::try_from(ParsedTag {
+                name: "-X-STREAM-INF",
+                value: ParsedTagValue::AttributeList(HashMap::from([
+                    ("BANDWIDTH", ParsedAttributeValue::DecimalInteger(10000000)),
+                    ("FRAME-RATE", ParsedAttributeValue::DecimalInteger(25)),
+                ]))
+            })
+        );
+        // Final check with all options unset
+        assert_eq!(
+            Ok(Tag::StreamInf(StreamInf {
+                bandwidth: 10000000,
+                average_bandwidth: None,
+                score: None,
+                codecs: None,
+                supplemental_codecs: None,
+                resolution: None,
+                frame_rate: None,
+                hdcp_level: None,
+                allowed_cpc: None,
+                video_range: None,
+                req_video_layout: None,
+                stable_variant_id: None,
+                audio: None,
+                video: None,
+                subtitles: None,
+                closed_captions: None,
+                pathway_id: None,
+            })),
+            Tag::try_from(ParsedTag {
+                name: "-X-STREAM-INF",
+                value: ParsedTagValue::AttributeList(HashMap::from([(
+                    "BANDWIDTH",
+                    ParsedAttributeValue::DecimalInteger(10000000)
+                )]))
+            })
+        );
+    }
 }
 
 // TODO - test the following:
-// "-X-STREAM-INF",
 // "-X-I-FRAME-STREAM-INF",
 // "-X-SESSION-DATA",
 // "-X-SESSION-KEY",
