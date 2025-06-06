@@ -912,7 +912,98 @@ impl<'a> TryFrom<ParsedTag<'a>> for Tag<'a> {
                     pathway_id,
                 }))
             }
-            "-X-I-FRAME-STREAM-INF" => todo!(),
+            "-X-I-FRAME-STREAM-INF" => {
+                let ParsedTagValue::AttributeList(mut attribute_list) = tag.value else {
+                    return Self::unexpected_value_type();
+                };
+                let Some(ParsedAttributeValue::QuotedString(uri)) = attribute_list.remove("URI")
+                else {
+                    return Self::missing_required_attribute();
+                };
+                let Some(ParsedAttributeValue::DecimalInteger(bandwidth)) =
+                    attribute_list.remove("BANDWIDTH")
+                else {
+                    return Self::missing_required_attribute();
+                };
+                let average_bandwidth = match attribute_list.remove("AVERAGE-BANDWIDTH") {
+                    Some(ParsedAttributeValue::DecimalInteger(b)) => Some(b),
+                    _ => None,
+                };
+                let score = match attribute_list.remove("SCORE") {
+                    Some(value) => value.as_option_f64(),
+                    _ => None,
+                };
+                let codecs = match attribute_list.remove("CODECS") {
+                    Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
+                    _ => None,
+                };
+                let supplemental_codecs = match attribute_list.remove("SUPPLEMENTAL-CODECS") {
+                    Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
+                    _ => None,
+                };
+                let resolution = 'resolution_match: {
+                    match attribute_list.remove("RESOLUTION") {
+                        Some(ParsedAttributeValue::UnquotedString(r)) => {
+                            let mut split = r.split('x');
+                            let Some(Ok(width)) = split.next().map(str::parse::<u64>) else {
+                                break 'resolution_match None;
+                            };
+                            let Some(Ok(height)) = split.next().map(str::parse::<u64>) else {
+                                break 'resolution_match None;
+                            };
+                            if split.next().is_some() {
+                                break 'resolution_match None;
+                            };
+                            Some(DecimalResolution { width, height })
+                        }
+                        _ => None,
+                    }
+                };
+                let hdcp_level = match attribute_list.remove("HDCP-LEVEL") {
+                    Some(ParsedAttributeValue::UnquotedString(s)) => Some(s),
+                    _ => None,
+                };
+                let allowed_cpc = match attribute_list.remove("ALLOWED-CPC") {
+                    Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
+                    _ => None,
+                };
+                let video_range = match attribute_list.remove("VIDEO-RANGE") {
+                    Some(ParsedAttributeValue::UnquotedString(s)) => Some(s),
+                    _ => None,
+                };
+                let req_video_layout = match attribute_list.remove("REQ-VIDEO-LAYOUT") {
+                    Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
+                    _ => None,
+                };
+                let stable_variant_id = match attribute_list.remove("STABLE-VARIANT-ID") {
+                    Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
+                    _ => None,
+                };
+                let video = match attribute_list.remove("VIDEO") {
+                    Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
+                    _ => None,
+                };
+                let pathway_id = match attribute_list.remove("PATHWAY-ID") {
+                    Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
+                    _ => None,
+                };
+                Ok(Tag::IFrameStreamInf(IFrameStreamInf {
+                    uri,
+                    bandwidth,
+                    average_bandwidth,
+                    score,
+                    codecs,
+                    supplemental_codecs,
+                    resolution,
+                    hdcp_level,
+                    allowed_cpc,
+                    video_range,
+                    req_video_layout,
+                    stable_variant_id,
+                    video,
+                    pathway_id,
+                }))
+            }
             "-X-SESSION-DATA" => todo!(),
             "-X-SESSION-KEY" => todo!(),
             "-X-CONTENT-STEERING" => todo!(),
@@ -1926,10 +2017,111 @@ mod tests {
             })
         );
     }
+
+    #[test]
+    fn i_frame_stream_inf() {
+        assert_eq!(
+            Ok(Tag::IFrameStreamInf(IFrameStreamInf {
+                uri: "iframe.high.m3u8",
+                bandwidth: 10000000,
+                average_bandwidth: Some(9000000),
+                score: Some(2.0),
+                codecs: Some("hvc1.2.4.L153.b0,ec-3"),
+                supplemental_codecs: Some("dvh1.08.07/db4h"),
+                resolution: Some(DecimalResolution {
+                    width: 3840,
+                    height: 2160
+                }),
+                hdcp_level: Some("TYPE-1"),
+                allowed_cpc: Some("com.example.drm1:SMART-TV/PC"),
+                video_range: Some("PQ"),
+                req_video_layout: Some("CH-STEREO,CH-MONO"),
+                stable_variant_id: Some("1234"),
+                video: Some("alternate-view"),
+                pathway_id: Some("1234"),
+            })),
+            Tag::try_from(ParsedTag {
+                name: "-X-I-FRAME-STREAM-INF",
+                value: ParsedTagValue::AttributeList(HashMap::from([
+                    (
+                        "URI",
+                        ParsedAttributeValue::QuotedString("iframe.high.m3u8")
+                    ),
+                    ("BANDWIDTH", ParsedAttributeValue::DecimalInteger(10000000)),
+                    (
+                        "AVERAGE-BANDWIDTH",
+                        ParsedAttributeValue::DecimalInteger(9000000)
+                    ),
+                    (
+                        "SCORE",
+                        ParsedAttributeValue::SignedDecimalFloatingPoint(2.0)
+                    ),
+                    (
+                        "CODECS",
+                        ParsedAttributeValue::QuotedString("hvc1.2.4.L153.b0,ec-3")
+                    ),
+                    (
+                        "SUPPLEMENTAL-CODECS",
+                        ParsedAttributeValue::QuotedString("dvh1.08.07/db4h")
+                    ),
+                    (
+                        "RESOLUTION",
+                        ParsedAttributeValue::UnquotedString("3840x2160")
+                    ),
+                    ("HDCP-LEVEL", ParsedAttributeValue::UnquotedString("TYPE-1")),
+                    (
+                        "ALLOWED-CPC",
+                        ParsedAttributeValue::QuotedString("com.example.drm1:SMART-TV/PC")
+                    ),
+                    ("VIDEO-RANGE", ParsedAttributeValue::UnquotedString("PQ")),
+                    (
+                        "REQ-VIDEO-LAYOUT",
+                        ParsedAttributeValue::QuotedString("CH-STEREO,CH-MONO")
+                    ),
+                    (
+                        "STABLE-VARIANT-ID",
+                        ParsedAttributeValue::QuotedString("1234")
+                    ),
+                    (
+                        "VIDEO",
+                        ParsedAttributeValue::QuotedString("alternate-view")
+                    ),
+                    ("PATHWAY-ID", ParsedAttributeValue::QuotedString("1234")),
+                ]))
+            })
+        );
+        assert_eq!(
+            Ok(Tag::IFrameStreamInf(IFrameStreamInf {
+                uri: "iframe.high.m3u8",
+                bandwidth: 10000000,
+                average_bandwidth: None,
+                score: None,
+                codecs: None,
+                supplemental_codecs: None,
+                resolution: None,
+                hdcp_level: None,
+                allowed_cpc: None,
+                video_range: None,
+                req_video_layout: None,
+                stable_variant_id: None,
+                video: None,
+                pathway_id: None,
+            })),
+            Tag::try_from(ParsedTag {
+                name: "-X-I-FRAME-STREAM-INF",
+                value: ParsedTagValue::AttributeList(HashMap::from([
+                    (
+                        "URI",
+                        ParsedAttributeValue::QuotedString("iframe.high.m3u8")
+                    ),
+                    ("BANDWIDTH", ParsedAttributeValue::DecimalInteger(10000000))
+                ]))
+            })
+        );
+    }
 }
 
 // TODO - test the following:
-// "-X-I-FRAME-STREAM-INF",
 // "-X-SESSION-DATA",
 // "-X-SESSION-KEY",
 // "-X-CONTENT-STEERING",
