@@ -1072,7 +1072,24 @@ impl<'a> TryFrom<ParsedTag<'a>> for Tag<'a> {
                     keyformatversions,
                 }))
             }
-            "-X-CONTENT-STEERING" => todo!(),
+            "-X-CONTENT-STEERING" => {
+                let ParsedTagValue::AttributeList(mut attribute_list) = tag.value else {
+                    return Self::unexpected_value_type();
+                };
+                let Some(ParsedAttributeValue::QuotedString(server_uri)) =
+                    attribute_list.remove("SERVER-URI")
+                else {
+                    return Self::missing_required_attribute();
+                };
+                let pathway_id = match attribute_list.remove("PATHWAY-ID") {
+                    Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
+                    _ => None,
+                };
+                Ok(Tag::ContentSteering(ContentSteering {
+                    server_uri,
+                    pathway_id,
+                }))
+            }
             _ => Self::unknown_name(),
         }
     }
@@ -2271,7 +2288,37 @@ mod tests {
             })
         );
     }
-}
 
-// TODO - test the following:
-// "-X-CONTENT-STEERING",
+    #[test]
+    fn content_steering() {
+        assert_eq!(
+            Ok(Tag::ContentSteering(ContentSteering {
+                server_uri: "content-steering.json",
+                pathway_id: Some("1234"),
+            })),
+            Tag::try_from(ParsedTag {
+                name: "-X-CONTENT-STEERING",
+                value: ParsedTagValue::AttributeList(HashMap::from([
+                    (
+                        "SERVER-URI",
+                        ParsedAttributeValue::QuotedString("content-steering.json")
+                    ),
+                    ("PATHWAY-ID", ParsedAttributeValue::QuotedString("1234")),
+                ]))
+            })
+        );
+        assert_eq!(
+            Ok(Tag::ContentSteering(ContentSteering {
+                server_uri: "content-steering.json",
+                pathway_id: None,
+            })),
+            Tag::try_from(ParsedTag {
+                name: "-X-CONTENT-STEERING",
+                value: ParsedTagValue::AttributeList(HashMap::from([(
+                    "SERVER-URI",
+                    ParsedAttributeValue::QuotedString("content-steering.json")
+                ),]))
+            })
+        );
+    }
+}
