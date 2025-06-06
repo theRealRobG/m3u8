@@ -1004,7 +1004,39 @@ impl<'a> TryFrom<ParsedTag<'a>> for Tag<'a> {
                     pathway_id,
                 }))
             }
-            "-X-SESSION-DATA" => todo!(),
+            "-X-SESSION-DATA" => {
+                let ParsedTagValue::AttributeList(mut attribute_list) = tag.value else {
+                    return Self::unexpected_value_type();
+                };
+                let Some(ParsedAttributeValue::QuotedString(data_id)) =
+                    attribute_list.remove("DATA-ID")
+                else {
+                    return Self::missing_required_attribute();
+                };
+                let value = match attribute_list.remove("VALUE") {
+                    Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
+                    _ => None,
+                };
+                let uri = match attribute_list.remove("URI") {
+                    Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
+                    _ => None,
+                };
+                let format = match attribute_list.remove("FORMAT") {
+                    Some(ParsedAttributeValue::UnquotedString(s)) => s,
+                    _ => "JSON",
+                };
+                let language = match attribute_list.remove("LANGUAGE") {
+                    Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
+                    _ => None,
+                };
+                Ok(Tag::SessionData(SessionData {
+                    data_id,
+                    value,
+                    uri,
+                    format,
+                    language,
+                }))
+            }
             "-X-SESSION-KEY" => todo!(),
             "-X-CONTENT-STEERING" => todo!(),
             _ => Self::unknown_name(),
@@ -2119,9 +2151,46 @@ mod tests {
             })
         );
     }
+
+    #[test]
+    fn session_data() {
+        assert_eq!(
+            Ok(Tag::SessionData(SessionData {
+                data_id: "1234",
+                value: Some("test"),
+                uri: None,
+                format: "JSON",
+                language: Some("en"),
+            })),
+            Tag::try_from(ParsedTag {
+                name: "-X-SESSION-DATA",
+                value: ParsedTagValue::AttributeList(HashMap::from([
+                    ("DATA-ID", ParsedAttributeValue::QuotedString("1234")),
+                    ("VALUE", ParsedAttributeValue::QuotedString("test")),
+                    ("LANGUAGE", ParsedAttributeValue::QuotedString("en")),
+                ]))
+            })
+        );
+        assert_eq!(
+            Ok(Tag::SessionData(SessionData {
+                data_id: "1234",
+                value: None,
+                uri: Some("test.bin"),
+                format: "RAW",
+                language: None,
+            })),
+            Tag::try_from(ParsedTag {
+                name: "-X-SESSION-DATA",
+                value: ParsedTagValue::AttributeList(HashMap::from([
+                    ("DATA-ID", ParsedAttributeValue::QuotedString("1234")),
+                    ("URI", ParsedAttributeValue::QuotedString("test.bin")),
+                    ("FORMAT", ParsedAttributeValue::UnquotedString("RAW")),
+                ]))
+            })
+        );
+    }
 }
 
 // TODO - test the following:
-// "-X-SESSION-DATA",
 // "-X-SESSION-KEY",
 // "-X-CONTENT-STEERING",
