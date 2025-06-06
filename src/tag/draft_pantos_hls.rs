@@ -1,5 +1,5 @@
 use crate::{
-    date::DateTime,
+    date::{self, DateTime},
     tag::{
         known::{IsKnownName, ParsedTag},
         value::{DecimalResolution, HlsPlaylistType, ParsedAttributeValue, ParsedTagValue},
@@ -502,12 +502,225 @@ impl<'a> TryFrom<ParsedTag<'a>> for Tag<'a> {
                 Ok(Tag::ProgramDateTime(ProgramDateTime(date_time)))
             }
             "-X-GAP" => Ok(Tag::Gap(Gap)),
-            "-X-BITRATE" => todo!(),
-            "-X-PART" => todo!(),
-            "-X-DATERANGE" => todo!(),
-            "-X-SKIP" => todo!(),
-            "-X-PRELOAD-HINT" => todo!(),
-            "-X-RENDITION-REPORT" => todo!(),
+            "-X-BITRATE" => {
+                let ParsedTagValue::DecimalInteger(rate) = tag.value else {
+                    return Self::unexpected_value_type();
+                };
+                Ok(Tag::Bitrate(Bitrate(rate)))
+            }
+            "-X-PART" => {
+                let ParsedTagValue::AttributeList(mut attribute_list) = tag.value else {
+                    return Self::unexpected_value_type();
+                };
+                let Some(ParsedAttributeValue::QuotedString(uri)) = attribute_list.remove("URI")
+                else {
+                    return Self::missing_required_attribute();
+                };
+                let Some(duration) = (match attribute_list.remove("DURATION") {
+                    Some(a) => a.as_option_f64(),
+                    _ => None,
+                }) else {
+                    return Self::missing_required_attribute();
+                };
+                let independent = match attribute_list.remove("INDEPENDENT") {
+                    Some(ParsedAttributeValue::UnquotedString("YES")) => true,
+                    _ => false,
+                };
+                let byterange = 'byterange_match: {
+                    match attribute_list.remove("BYTERANGE") {
+                        Some(ParsedAttributeValue::QuotedString(range)) => {
+                            let mut parts = range.split('@');
+                            let Some(Ok(length)) = parts.next().map(str::parse::<u64>) else {
+                                break 'byterange_match None;
+                            };
+                            let offset = match parts.next().map(str::parse::<u64>) {
+                                Some(Ok(d)) => Some(d),
+                                None => None,
+                                Some(Err(_)) => break 'byterange_match None,
+                            };
+                            if parts.next().is_some() {
+                                break 'byterange_match None;
+                            }
+                            Some(PartByterange { length, offset })
+                        }
+                        _ => None,
+                    }
+                };
+                let gap = match attribute_list.remove("GAP") {
+                    Some(ParsedAttributeValue::UnquotedString("YES")) => true,
+                    _ => false,
+                };
+                Ok(Tag::Part(Part {
+                    uri,
+                    duration,
+                    independent,
+                    byterange,
+                    gap,
+                }))
+            }
+            "-X-DATERANGE" => {
+                let ParsedTagValue::AttributeList(mut attribute_list) = tag.value else {
+                    return Self::unexpected_value_type();
+                };
+                let Some(ParsedAttributeValue::QuotedString(id)) = attribute_list.remove("ID")
+                else {
+                    return Self::missing_required_attribute();
+                };
+                let class = match attribute_list.remove("CLASS") {
+                    Some(ParsedAttributeValue::QuotedString(class)) => Some(class),
+                    _ => None,
+                };
+                let Some(start_date) = (match attribute_list.remove("START-DATE") {
+                    Some(ParsedAttributeValue::QuotedString(date_str)) => {
+                        match date::parse_date_time(date_str) {
+                            Ok((_, date_time)) => Some(date_time),
+                            Err(_) => None,
+                        }
+                    }
+                    _ => None,
+                }) else {
+                    return Self::missing_required_attribute();
+                };
+                let cue = match attribute_list.remove("CUE") {
+                    Some(ParsedAttributeValue::QuotedString(cue)) => Some(cue),
+                    _ => None,
+                };
+                let end_date = match attribute_list.remove("END-DATE") {
+                    Some(ParsedAttributeValue::QuotedString(date_str)) => {
+                        match date::parse_date_time(date_str) {
+                            Ok((_, date_time)) => Some(date_time),
+                            Err(_) => None,
+                        }
+                    }
+                    _ => None,
+                };
+                let duration = match attribute_list.remove("DURATION") {
+                    Some(d) => d.as_option_f64(),
+                    _ => None,
+                };
+                let planned_duration = match attribute_list.remove("PLANNED-DURATION") {
+                    Some(d) => d.as_option_f64(),
+                    _ => None,
+                };
+                // The specification indicates that the SCTE35-(CMD|OUT|IN) attributes are
+                // represented as hexadecimal sequences. This implies that they should be parsed as
+                // UnquotedString (given that section "4.2. Attribute Lists" indicates that a
+                // "hexadecimal-sequence [is] an unquoted string of characters"); however, in
+                // practice, I've found that some packagers have put this information in quoted
+                // strings (containing the hexadecimal sequence), so I'll allow this parser to be
+                // lenient on that requirement and accept both.
+                let scte35_cmd = match attribute_list.remove("SCTE35-CMD") {
+                    Some(ParsedAttributeValue::UnquotedString(s)) => Some(s),
+                    Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
+                    _ => None,
+                };
+                let scte35_out = match attribute_list.remove("SCTE35-OUT") {
+                    Some(ParsedAttributeValue::UnquotedString(s)) => Some(s),
+                    Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
+                    _ => None,
+                };
+                let scte35_in = match attribute_list.remove("SCTE35-IN") {
+                    Some(ParsedAttributeValue::UnquotedString(s)) => Some(s),
+                    Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
+                    _ => None,
+                };
+                let end_on_next = match attribute_list.remove("END-ON-NEXT") {
+                    Some(ParsedAttributeValue::UnquotedString("YES")) => true,
+                    _ => false,
+                };
+
+                // Deal with client attributes last as I will drain the rest of the HashMap.
+                let mut client_attributes = HashMap::new();
+                for (key, value) in attribute_list.drain() {
+                    if key.starts_with("X-") {
+                        client_attributes.insert(key, value);
+                    }
+                }
+                Ok(Tag::Daterange(Daterange {
+                    id,
+                    class,
+                    start_date,
+                    cue,
+                    end_date,
+                    duration,
+                    planned_duration,
+                    client_attributes,
+                    scte35_cmd,
+                    scte35_out,
+                    scte35_in,
+                    end_on_next,
+                }))
+            }
+            "-X-SKIP" => {
+                let ParsedTagValue::AttributeList(mut attribute_list) = tag.value else {
+                    return Self::unexpected_value_type();
+                };
+                let Some(ParsedAttributeValue::DecimalInteger(skipped_segments)) =
+                    attribute_list.remove("SKIPPED-SEGMENTS")
+                else {
+                    return Self::missing_required_attribute();
+                };
+                let recently_removed_dateranges =
+                    match attribute_list.remove("RECENTLY-REMOVED-DATERANGES") {
+                        Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
+                        _ => None,
+                    };
+                Ok(Tag::Skip(Skip {
+                    skipped_segments,
+                    recently_removed_dateranges,
+                }))
+            }
+            "-X-PRELOAD-HINT" => {
+                let ParsedTagValue::AttributeList(mut attribute_list) = tag.value else {
+                    return Self::unexpected_value_type();
+                };
+                let Some(ParsedAttributeValue::UnquotedString(hint_type)) =
+                    attribute_list.remove("TYPE")
+                else {
+                    return Self::missing_required_attribute();
+                };
+                let Some(ParsedAttributeValue::QuotedString(uri)) = attribute_list.remove("URI")
+                else {
+                    return Self::missing_required_attribute();
+                };
+                let byterange_start = match attribute_list.remove("BYTERANGE-START") {
+                    Some(ParsedAttributeValue::DecimalInteger(start)) => start,
+                    _ => 0,
+                };
+                let byterange_length = match attribute_list.remove("BYTERANGE-LENGTH") {
+                    Some(ParsedAttributeValue::DecimalInteger(length)) => Some(length),
+                    _ => None,
+                };
+                Ok(Tag::PreloadHint(PreloadHint {
+                    hint_type,
+                    uri,
+                    byterange_start,
+                    byterange_length,
+                }))
+            }
+            "-X-RENDITION-REPORT" => {
+                let ParsedTagValue::AttributeList(mut attribute_list) = tag.value else {
+                    return Self::unexpected_value_type();
+                };
+                let Some(ParsedAttributeValue::QuotedString(uri)) = attribute_list.remove("URI")
+                else {
+                    return Self::missing_required_attribute();
+                };
+                let Some(ParsedAttributeValue::DecimalInteger(last_msn)) =
+                    attribute_list.remove("LAST-MSN")
+                else {
+                    return Self::missing_required_attribute();
+                };
+                let last_part = match attribute_list.remove("LAST-PART") {
+                    Some(ParsedAttributeValue::DecimalInteger(part)) => Some(part),
+                    _ => None,
+                };
+                Ok(Tag::RenditionReport(RenditionReport {
+                    uri,
+                    last_msn,
+                    last_part,
+                }))
+            }
             "-X-MEDIA" => todo!(),
             "-X-STREAM-INF" => todo!(),
             "-X-I-FRAME-STREAM-INF" => todo!(),
@@ -1003,15 +1216,310 @@ mod tests {
             })
         );
     }
+
+    #[test]
+    fn bitrate() {
+        assert_eq!(
+            Ok(Tag::Bitrate(Bitrate(10000000))),
+            Tag::try_from(ParsedTag {
+                name: "-X-BITRATE",
+                value: ParsedTagValue::DecimalInteger(10000000)
+            })
+        );
+    }
+
+    #[test]
+    fn part() {
+        assert_eq!(
+            Ok(Tag::Part(Part {
+                uri: "part.1.mp4",
+                duration: 0.5,
+                independent: true,
+                byterange: Some(PartByterange {
+                    length: 1024,
+                    offset: Some(512)
+                }),
+                gap: true,
+            })),
+            Tag::try_from(ParsedTag {
+                name: "-X-PART",
+                value: ParsedTagValue::AttributeList(HashMap::from([
+                    ("URI", ParsedAttributeValue::QuotedString("part.1.mp4")),
+                    (
+                        "DURATION",
+                        ParsedAttributeValue::SignedDecimalFloatingPoint(0.5)
+                    ),
+                    ("INDEPENDENT", ParsedAttributeValue::UnquotedString("YES")),
+                    ("BYTERANGE", ParsedAttributeValue::QuotedString("1024@512")),
+                    ("GAP", ParsedAttributeValue::UnquotedString("YES"))
+                ]))
+            })
+        );
+        assert_eq!(
+            Ok(Tag::Part(Part {
+                uri: "part.1.mp4",
+                duration: 0.5,
+                independent: false,
+                byterange: Some(PartByterange {
+                    length: 1024,
+                    offset: None
+                }),
+                gap: false,
+            })),
+            Tag::try_from(ParsedTag {
+                name: "-X-PART",
+                value: ParsedTagValue::AttributeList(HashMap::from([
+                    ("URI", ParsedAttributeValue::QuotedString("part.1.mp4")),
+                    (
+                        "DURATION",
+                        ParsedAttributeValue::SignedDecimalFloatingPoint(0.5)
+                    ),
+                    ("BYTERANGE", ParsedAttributeValue::QuotedString("1024")),
+                ]))
+            })
+        );
+        assert_eq!(
+            Ok(Tag::Part(Part {
+                uri: "part.1.mp4",
+                duration: 0.5,
+                independent: false,
+                byterange: None,
+                gap: false,
+            })),
+            Tag::try_from(ParsedTag {
+                name: "-X-PART",
+                value: ParsedTagValue::AttributeList(HashMap::from([
+                    ("URI", ParsedAttributeValue::QuotedString("part.1.mp4")),
+                    (
+                        "DURATION",
+                        ParsedAttributeValue::SignedDecimalFloatingPoint(0.5)
+                    ),
+                ]))
+            })
+        );
+    }
+
+    #[test]
+    fn daterange() {
+        assert_eq!(
+            Ok(Tag::Daterange(Daterange {
+                id: "test",
+                class: Some("com.m3u8.test"),
+                start_date: DateTime {
+                    date_fullyear: 2025,
+                    date_month: 6,
+                    date_mday: 5,
+                    time_hour: 20,
+                    time_minute: 38,
+                    time_second: 42.149,
+                    timezone_offset: DateTimeTimezoneOffset {
+                        time_hour: -5,
+                        time_minute: 0
+                    }
+                },
+                cue: Some("ONCE"),
+                end_date: Some(DateTime {
+                    date_fullyear: 2025,
+                    date_month: 6,
+                    date_mday: 5,
+                    time_hour: 20,
+                    time_minute: 40,
+                    time_second: 42.149,
+                    timezone_offset: DateTimeTimezoneOffset {
+                        time_hour: -5,
+                        time_minute: 0
+                    }
+                }),
+                duration: Some(120.0),
+                planned_duration: Some(180.0),
+                client_attributes: HashMap::from([(
+                    "X-COM-M3U8-TEST",
+                    ParsedAttributeValue::QuotedString("YES")
+                )]),
+                scte35_cmd: Some("0xABCD"),
+                scte35_out: Some("0xABCD"),
+                scte35_in: Some("0xABCD"),
+                end_on_next: true,
+            })),
+            Tag::try_from(ParsedTag {
+                name: "-X-DATERANGE",
+                value: ParsedTagValue::AttributeList(HashMap::from([
+                    ("ID", ParsedAttributeValue::QuotedString("test")),
+                    ("CLASS", ParsedAttributeValue::QuotedString("com.m3u8.test")),
+                    (
+                        "START-DATE",
+                        ParsedAttributeValue::QuotedString("2025-06-05T20:38:42.149-05:00")
+                    ),
+                    ("CUE", ParsedAttributeValue::QuotedString("ONCE")),
+                    (
+                        "END-DATE",
+                        ParsedAttributeValue::QuotedString("2025-06-05T20:40:42.149-05:00")
+                    ),
+                    (
+                        "DURATION",
+                        ParsedAttributeValue::SignedDecimalFloatingPoint(120.0)
+                    ),
+                    (
+                        "PLANNED-DURATION",
+                        ParsedAttributeValue::SignedDecimalFloatingPoint(180.0)
+                    ),
+                    ("X-COM-M3U8-TEST", ParsedAttributeValue::QuotedString("YES")),
+                    ("SCTE35-CMD", ParsedAttributeValue::UnquotedString("0xABCD")),
+                    ("SCTE35-OUT", ParsedAttributeValue::UnquotedString("0xABCD")),
+                    ("SCTE35-IN", ParsedAttributeValue::UnquotedString("0xABCD")),
+                    ("END-ON-NEXT", ParsedAttributeValue::UnquotedString("YES")),
+                ]))
+            })
+        );
+        assert_eq!(
+            Ok(Tag::Daterange(Daterange {
+                id: "test",
+                class: None,
+                start_date: DateTime {
+                    date_fullyear: 2025,
+                    date_month: 6,
+                    date_mday: 5,
+                    time_hour: 20,
+                    time_minute: 38,
+                    time_second: 42.149,
+                    timezone_offset: DateTimeTimezoneOffset {
+                        time_hour: -5,
+                        time_minute: 0
+                    }
+                },
+                cue: None,
+                end_date: None,
+                duration: None,
+                planned_duration: None,
+                client_attributes: HashMap::new(),
+                scte35_cmd: None,
+                scte35_out: None,
+                scte35_in: None,
+                end_on_next: false,
+            })),
+            Tag::try_from(ParsedTag {
+                name: "-X-DATERANGE",
+                value: ParsedTagValue::AttributeList(HashMap::from([
+                    ("ID", ParsedAttributeValue::QuotedString("test")),
+                    (
+                        "START-DATE",
+                        ParsedAttributeValue::QuotedString("2025-06-05T20:38:42.149-05:00")
+                    ),
+                ]))
+            })
+        );
+    }
+
+    #[test]
+    fn skip() {
+        assert_eq!(
+            Ok(Tag::Skip(Skip {
+                skipped_segments: 100,
+                recently_removed_dateranges: Some("1234\tabcd"),
+            })),
+            Tag::try_from(ParsedTag {
+                name: "-X-SKIP",
+                value: ParsedTagValue::AttributeList(HashMap::from([
+                    (
+                        "SKIPPED-SEGMENTS",
+                        ParsedAttributeValue::DecimalInteger(100)
+                    ),
+                    (
+                        "RECENTLY-REMOVED-DATERANGES",
+                        ParsedAttributeValue::QuotedString("1234\tabcd")
+                    ),
+                ]))
+            })
+        );
+        assert_eq!(
+            Ok(Tag::Skip(Skip {
+                skipped_segments: 100,
+                recently_removed_dateranges: None,
+            })),
+            Tag::try_from(ParsedTag {
+                name: "-X-SKIP",
+                value: ParsedTagValue::AttributeList(HashMap::from([(
+                    "SKIPPED-SEGMENTS",
+                    ParsedAttributeValue::DecimalInteger(100)
+                ),]))
+            })
+        );
+    }
+
+    #[test]
+    fn preload_hint() {
+        assert_eq!(
+            Ok(Tag::PreloadHint(PreloadHint {
+                hint_type: "PART",
+                uri: "part.2.mp4",
+                byterange_start: 512,
+                byterange_length: Some(1024),
+            })),
+            Tag::try_from(ParsedTag {
+                name: "-X-PRELOAD-HINT",
+                value: ParsedTagValue::AttributeList(HashMap::from([
+                    ("TYPE", ParsedAttributeValue::UnquotedString("PART")),
+                    ("URI", ParsedAttributeValue::QuotedString("part.2.mp4")),
+                    ("BYTERANGE-START", ParsedAttributeValue::DecimalInteger(512)),
+                    (
+                        "BYTERANGE-LENGTH",
+                        ParsedAttributeValue::DecimalInteger(1024)
+                    ),
+                ]))
+            })
+        );
+        assert_eq!(
+            Ok(Tag::PreloadHint(PreloadHint {
+                hint_type: "PART",
+                uri: "part.2.mp4",
+                byterange_start: 0,
+                byterange_length: None,
+            })),
+            Tag::try_from(ParsedTag {
+                name: "-X-PRELOAD-HINT",
+                value: ParsedTagValue::AttributeList(HashMap::from([
+                    ("TYPE", ParsedAttributeValue::UnquotedString("PART")),
+                    ("URI", ParsedAttributeValue::QuotedString("part.2.mp4")),
+                ]))
+            })
+        );
+    }
+
+    #[test]
+    fn rendition_report() {
+        assert_eq!(
+            Ok(Tag::RenditionReport(RenditionReport {
+                uri: "high.m3u8",
+                last_msn: 1000,
+                last_part: Some(2),
+            })),
+            Tag::try_from(ParsedTag {
+                name: "-X-RENDITION-REPORT",
+                value: ParsedTagValue::AttributeList(HashMap::from([
+                    ("URI", ParsedAttributeValue::QuotedString("high.m3u8")),
+                    ("LAST-MSN", ParsedAttributeValue::DecimalInteger(1000)),
+                    ("LAST-PART", ParsedAttributeValue::DecimalInteger(2)),
+                ]))
+            })
+        );
+        assert_eq!(
+            Ok(Tag::RenditionReport(RenditionReport {
+                uri: "high.m3u8",
+                last_msn: 1000,
+                last_part: None,
+            })),
+            Tag::try_from(ParsedTag {
+                name: "-X-RENDITION-REPORT",
+                value: ParsedTagValue::AttributeList(HashMap::from([
+                    ("URI", ParsedAttributeValue::QuotedString("high.m3u8")),
+                    ("LAST-MSN", ParsedAttributeValue::DecimalInteger(1000)),
+                ]))
+            })
+        );
+    }
 }
 
-// TODO - parse the following:
-// "-X-BITRATE",
-// "-X-PART",
-// "-X-DATERANGE",
-// "-X-SKIP",
-// "-X-PRELOAD-HINT",
-// "-X-RENDITION-REPORT",
+// TODO - test the following:
 // "-X-MEDIA",
 // "-X-STREAM-INF",
 // "-X-I-FRAME-STREAM-INF",
