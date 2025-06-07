@@ -163,7 +163,7 @@ pub fn parse(input: &str) -> IResult<&str, ParsedTagValue> {
     if let (input, Some(parsed_date)) = opt(date::parse).parse(input)? {
         return Ok((input, ParsedTagValue::DateTimeMsec(parsed_date)));
     }
-    let (input, parsed) = take_till(|c| ",-=@".contains(c)).parse(input)?;
+    let (input, parsed) = take_till(|c| ",=@".contains(c)).parse(input)?;
     match input.chars().next() {
         // Can only be an AttributeList
         Some('=') => {
