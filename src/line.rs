@@ -21,7 +21,7 @@ where
     Blank,
 }
 
-pub fn parse<'a, 'b>(input: &'a str, options: &'b ParsingOptions) -> IResult<&'a str, HlsLine<'a>> {
+pub fn parse<'a>(input: &'a str, options: &ParsingOptions) -> IResult<&'a str, HlsLine<'a>> {
     parse_with_custom::<NoCustomTag>(input, options)
 }
 
