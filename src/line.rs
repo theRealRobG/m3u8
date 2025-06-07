@@ -21,13 +21,13 @@ where
     Blank,
 }
 
-pub fn parse(input: &str, options: ParsingOptions) -> IResult<&str, HlsLine> {
+pub fn parse<'a, 'b>(input: &'a str, options: &'b ParsingOptions) -> IResult<&'a str, HlsLine<'a>> {
     parse_with_custom::<NoCustomTag>(input, options)
 }
 
-pub fn parse_with_custom<'a, CustomTag>(
+pub fn parse_with_custom<'a, 'b, CustomTag>(
     input: &'a str,
-    options: ParsingOptions,
+    options: &'b ParsingOptions,
 ) -> IResult<&'a str, HlsLine<'a, CustomTag>>
 where
     CustomTag: TryFrom<ParsedTag<'a>, Error = &'static str> + IsKnownName + Debug + PartialEq,
@@ -80,7 +80,7 @@ mod tests {
     fn uri_line() {
         assert_eq!(
             Ok(("", HlsLine::Uri("hello/world.m3u8"))),
-            parse("hello/world.m3u8", ParsingOptions::default())
+            parse("hello/world.m3u8", &ParsingOptions::default())
         )
     }
 
@@ -88,7 +88,7 @@ mod tests {
     fn blank_line() {
         assert_eq!(
             Ok(("", HlsLine::Blank)),
-            parse("", ParsingOptions::default())
+            parse("", &ParsingOptions::default())
         );
     }
 
@@ -96,7 +96,7 @@ mod tests {
     fn comment() {
         assert_eq!(
             Ok(("", HlsLine::Comment("Comment"))),
-            parse("#Comment", ParsingOptions::default())
+            parse("#Comment", &ParsingOptions::default())
         );
     }
 
@@ -107,7 +107,7 @@ mod tests {
                 "",
                 HlsLine::KnownTag(known::Tag::Hls(Box::new(draft_pantos_hls::Tag::M3u(M3u))))
             )),
-            parse("#EXTM3U", ParsingOptions::default())
+            parse("#EXTM3U", &ParsingOptions::default())
         );
     }
 
@@ -175,7 +175,7 @@ mod tests {
             )),
             parse_with_custom::<TestTag>(
                 "#EXT-X-TEST-TAG:TYPE=GREETING,MESSAGE=\"Hello, World!\",TIMES=42",
-                ParsingOptions::default()
+                &ParsingOptions::default()
             )
         );
     }
@@ -192,7 +192,7 @@ mod tests {
                     }
                 ))))
             )),
-            parse("#EXT-X-START:TIME-OFFSET=-18", ParsingOptions::default())
+            parse("#EXT-X-START:TIME-OFFSET=-18", &ParsingOptions::default())
         );
         assert_eq!(
             Ok((
@@ -204,7 +204,7 @@ mod tests {
             )),
             parse(
                 "#EXT-X-START:TIME-OFFSET=-18",
-                ParsingOptionsBuilder::new()
+                &ParsingOptionsBuilder::new()
                     .with_parsing_for_all_tags()
                     .without_parsing_for_start()
                     .build()
