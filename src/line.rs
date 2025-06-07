@@ -64,7 +64,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tag::draft_pantos_hls::M3u;
+    use crate::tag::draft_pantos_hls::m3u::M3u;
     use pretty_assertions::assert_eq;
 
     #[test]
