@@ -2,14 +2,32 @@ use crate::tag::{draft_pantos_hls, value::ParsedTagValue};
 use std::{cmp::PartialEq, fmt::Debug};
 
 #[derive(Debug, PartialEq)]
+#[allow(clippy::large_enum_variant)]
 pub enum Tag<'a, CustomTag = NoCustomTag>
 where
     CustomTag: TryFrom<ParsedTag<'a>, Error = &'static str> + IsKnownName + Debug + PartialEq,
 {
-    // Tag is in a Box based on the advice of cargo-clippy. The largest variant contains at least
-    // 272 bytes; Boxing the large field (draft_pantos_hls::Tag) reduces the total size of the enum.
+    // Clippy suggests that the `Tag` within the `Hls` case should be put in a Box, based on
     // https://rust-lang.github.io/rust-clippy/master/index.html#large_enum_variant
-    Hls(Box<draft_pantos_hls::Tag<'a>>),
+    //   > The largest variant contains at least 272 bytes; Boxing the large field
+    //   > (draft_pantos_hls::Tag) reduces the total size of the enum.
+    //
+    // However, the description also indicates:
+    //   > This lint obviously cannot take the distribution of variants in your running program into
+    //   > account. It is possible that the smaller variants make up less than 1% of all instances,
+    //   > in which case the overhead is negligible and the boxing is counter-productive. Always
+    //   > measure the change this lint suggests.
+    //
+    // In other words, the box only really makes sense, if there is a somewhat even distribution of
+    // instances of each variant. If most instances are going to be the `Hls` case then we aren't
+    // really saving on memory. Furthermore, putting the `Tag` in a `Box` incurrs a performance
+    // penalty (validated with a Criterion bench), because we are now allocating and retrieving from
+    // the heap.
+    //
+    // I believe that the vast majority of cases where the parser is being used we will be using
+    // instances of the `Hls` variant, and therefore, I am not putting the `Tag` in a `Box` and so
+    // ignoring the Clippy warning.
+    Hls(draft_pantos_hls::Tag<'a>),
     Custom(CustomTag),
 }
 
@@ -47,7 +65,7 @@ where
         if CustomTag::is_known_name(tag.name) {
             Ok(Self::Custom(CustomTag::try_from(tag)?))
         } else {
-            Ok(Self::Hls(Box::new(draft_pantos_hls::Tag::try_from(tag)?)))
+            Ok(Self::Hls(draft_pantos_hls::Tag::try_from(tag)?))
         }
     }
 }

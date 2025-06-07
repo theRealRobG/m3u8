@@ -10,6 +10,7 @@ use nom::{IResult, Parser, bytes::complete, combinator::opt};
 use std::{cmp::PartialEq, fmt::Debug};
 
 #[derive(Debug, PartialEq)]
+#[allow(clippy::large_enum_variant)] // See comment on crate::tag::known::Tag.
 pub enum HlsLine<'a, CustomTag = NoCustomTag>
 where
     CustomTag: TryFrom<ParsedTag<'a>, Error = &'static str> + IsKnownName + Debug + PartialEq,
@@ -105,7 +106,7 @@ mod tests {
         assert_eq!(
             Ok((
                 "",
-                HlsLine::KnownTag(known::Tag::Hls(Box::new(draft_pantos_hls::Tag::M3u(M3u))))
+                HlsLine::KnownTag(known::Tag::Hls(draft_pantos_hls::Tag::M3u(M3u)))
             )),
             parse("#EXTM3U", &ParsingOptions::default())
         );
@@ -185,12 +186,10 @@ mod tests {
         assert_eq!(
             Ok((
                 "",
-                HlsLine::KnownTag(known::Tag::Hls(Box::new(draft_pantos_hls::Tag::Start(
-                    Start {
-                        time_offset: -18.0,
-                        precise: false
-                    }
-                ))))
+                HlsLine::KnownTag(known::Tag::Hls(draft_pantos_hls::Tag::Start(Start {
+                    time_offset: -18.0,
+                    precise: false
+                })))
             )),
             parse("#EXT-X-START:TIME-OFFSET=-18", &ParsingOptions::default())
         );
