@@ -6,7 +6,10 @@ pub enum Tag<'a, CustomTag = NoCustomTag>
 where
     CustomTag: TryFrom<ParsedTag<'a>, Error = &'static str> + IsKnownName + Debug + PartialEq,
 {
-    Hls(draft_pantos_hls::Tag<'a>),
+    // Tag is in a Box based on the advice of cargo-clippy. The largest variant contains at least
+    // 272 bytes; Boxing the large field (draft_pantos_hls::Tag) reduces the total size of the enum.
+    // https://rust-lang.github.io/rust-clippy/master/index.html#large_enum_variant
+    Hls(Box<draft_pantos_hls::Tag<'a>>),
     Custom(CustomTag),
 }
 
@@ -44,7 +47,7 @@ where
         if CustomTag::is_known_name(tag.name) {
             Ok(Self::Custom(CustomTag::try_from(tag)?))
         } else {
-            Ok(Self::Hls(draft_pantos_hls::Tag::try_from(tag)?))
+            Ok(Self::Hls(Box::new(draft_pantos_hls::Tag::try_from(tag)?)))
         }
     }
 }

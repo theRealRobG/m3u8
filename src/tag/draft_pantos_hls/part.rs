@@ -31,10 +31,10 @@ impl<'a> TryFrom<ParsedTagValue<'a>> for Part<'a> {
         }) else {
             return Err(super::ValidationError::missing_required_attribute());
         };
-        let independent = match attribute_list.remove("INDEPENDENT") {
-            Some(ParsedAttributeValue::UnquotedString("YES")) => true,
-            _ => false,
-        };
+        let independent = matches!(
+            attribute_list.remove("INDEPENDENT"),
+            Some(ParsedAttributeValue::UnquotedString("YES"))
+        );
         let byterange = 'byterange_match: {
             match attribute_list.remove("BYTERANGE") {
                 Some(ParsedAttributeValue::QuotedString(range)) => {
@@ -55,10 +55,10 @@ impl<'a> TryFrom<ParsedTagValue<'a>> for Part<'a> {
                 _ => None,
             }
         };
-        let gap = match attribute_list.remove("GAP") {
-            Some(ParsedAttributeValue::UnquotedString("YES")) => true,
-            _ => false,
-        };
+        let gap = matches!(
+            attribute_list.remove("GAP"),
+            Some(ParsedAttributeValue::UnquotedString("YES"))
+        );
         Ok(Self {
             uri,
             duration,

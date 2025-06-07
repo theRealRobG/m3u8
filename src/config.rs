@@ -63,6 +63,7 @@ impl ParsingOptions {
     }
 }
 
+#[derive(Default)]
 pub struct ParsingOptionsBuilder {
     hls_tag_names_to_parse: HashSet<TagName>,
 }

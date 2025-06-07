@@ -54,18 +54,18 @@ impl<'a> TryFrom<ParsedTagValue<'a>> for Media<'a> {
             Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
             _ => None,
         };
-        let default = match attribute_list.remove("DEFAULT") {
-            Some(ParsedAttributeValue::UnquotedString("YES")) => true,
-            _ => false,
-        };
-        let autoselect = match attribute_list.remove("AUTOSELECT") {
-            Some(ParsedAttributeValue::UnquotedString("YES")) => true,
-            _ => false,
-        };
-        let forced = match attribute_list.remove("FORCED") {
-            Some(ParsedAttributeValue::UnquotedString("YES")) => true,
-            _ => false,
-        };
+        let default = matches!(
+            attribute_list.remove("DEFAULT"),
+            Some(ParsedAttributeValue::UnquotedString("YES"))
+        );
+        let autoselect = matches!(
+            attribute_list.remove("AUTOSELECT"),
+            Some(ParsedAttributeValue::UnquotedString("YES"))
+        );
+        let forced = matches!(
+            attribute_list.remove("FORCED"),
+            Some(ParsedAttributeValue::UnquotedString("YES"))
+        );
         let instream_id = match attribute_list.remove("INSTREAM-ID") {
             Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
             _ => None,

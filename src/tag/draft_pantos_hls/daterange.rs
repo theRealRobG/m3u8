@@ -85,10 +85,10 @@ impl<'a> TryFrom<ParsedTagValue<'a>> for Daterange<'a> {
             Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
             _ => None,
         };
-        let end_on_next = match attribute_list.remove("END-ON-NEXT") {
-            Some(ParsedAttributeValue::UnquotedString("YES")) => true,
-            _ => false,
-        };
+        let end_on_next = matches!(
+            attribute_list.remove("END-ON-NEXT"),
+            Some(ParsedAttributeValue::UnquotedString("YES"))
+        );
 
         // Deal with client attributes last as I will drain the rest of the HashMap.
         let mut client_attributes = HashMap::new();
