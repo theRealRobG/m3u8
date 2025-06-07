@@ -119,93 +119,178 @@ impl<'a> TryFrom<ParsedTag<'a>> for Tag<'a> {
     type Error = &'static str;
 
     fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
-        match tag.name {
-            "M3U" => Ok(Self::M3u(M3u::try_from(tag.value)?)),
-            "-X-VERSION" => Ok(Self::Version(Version::try_from(tag.value)?)),
-            "-X-INDEPENDENT-SEGMENTS" => Ok(Self::IndependentSegments(
+        let tag_name = TagName::try_from(tag.name)?;
+        match tag_name {
+            TagName::M3u => Ok(Self::M3u(M3u::try_from(tag.value)?)),
+            TagName::Version => Ok(Self::Version(Version::try_from(tag.value)?)),
+            TagName::IndependentSegments => Ok(Self::IndependentSegments(
                 IndependentSegments::try_from(tag.value)?,
             )),
-            "-X-START" => Ok(Self::Start(Start::try_from(tag.value)?)),
-            "-X-DEFINE" => Ok(Self::Define(Define::try_from(tag.value)?)),
-            "-X-TARGETDURATION" => Ok(Self::Targetduration(Targetduration::try_from(tag.value)?)),
-            "-X-MEDIA-SEQUENCE" => Ok(Self::MediaSequence(MediaSequence::try_from(tag.value)?)),
-            "-X-DISCONTINUITY-SEQUENCE" => Ok(Self::DiscontinuitySequence(
+            TagName::Start => Ok(Self::Start(Start::try_from(tag.value)?)),
+            TagName::Define => Ok(Self::Define(Define::try_from(tag.value)?)),
+            TagName::Targetduration => {
+                Ok(Self::Targetduration(Targetduration::try_from(tag.value)?))
+            }
+            TagName::MediaSequence => Ok(Self::MediaSequence(MediaSequence::try_from(tag.value)?)),
+            TagName::DiscontinuitySequence => Ok(Self::DiscontinuitySequence(
                 DiscontinuitySequence::try_from(tag.value)?,
             )),
-            "-X-ENDLIST" => Ok(Self::Endlist(Endlist::try_from(tag.value)?)),
-            "-X-PLAYLIST-TYPE" => Ok(Self::PlaylistType(PlaylistType::try_from(tag.value)?)),
-            "-X-I-FRAMES-ONLY" => Ok(Self::IFramesOnly(IFramesOnly::try_from(tag.value)?)),
-            "-X-PART-INF" => Ok(Self::PartInf(PartInf::try_from(tag.value)?)),
-            "-X-SERVER-CONTROL" => Ok(Self::ServerControl(ServerControl::try_from(tag.value)?)),
-            "INF" => Ok(Self::Inf(Inf::try_from(tag.value)?)),
-            "-X-BYTERANGE" => Ok(Self::Byterange(Byterange::try_from(tag.value)?)),
-            "-X-DISCONTINUITY" => Ok(Self::Discontinuity(Discontinuity::try_from(tag.value)?)),
-            "-X-KEY" => Ok(Self::Key(Key::try_from(tag.value)?)),
-            "-X-MAP" => Ok(Self::Map(Map::try_from(tag.value)?)),
-            "-X-PROGRAM-DATE-TIME" => {
+            TagName::Endlist => Ok(Self::Endlist(Endlist::try_from(tag.value)?)),
+            TagName::PlaylistType => Ok(Self::PlaylistType(PlaylistType::try_from(tag.value)?)),
+            TagName::IFramesOnly => Ok(Self::IFramesOnly(IFramesOnly::try_from(tag.value)?)),
+            TagName::PartInf => Ok(Self::PartInf(PartInf::try_from(tag.value)?)),
+            TagName::ServerControl => Ok(Self::ServerControl(ServerControl::try_from(tag.value)?)),
+            TagName::Inf => Ok(Self::Inf(Inf::try_from(tag.value)?)),
+            TagName::Byterange => Ok(Self::Byterange(Byterange::try_from(tag.value)?)),
+            TagName::Discontinuity => Ok(Self::Discontinuity(Discontinuity::try_from(tag.value)?)),
+            TagName::Key => Ok(Self::Key(Key::try_from(tag.value)?)),
+            TagName::Map => Ok(Self::Map(Map::try_from(tag.value)?)),
+            TagName::ProgramDateTime => {
                 Ok(Self::ProgramDateTime(ProgramDateTime::try_from(tag.value)?))
             }
-            "-X-GAP" => Ok(Self::Gap(Gap::try_from(tag.value)?)),
-            "-X-BITRATE" => Ok(Self::Bitrate(Bitrate::try_from(tag.value)?)),
-            "-X-PART" => Ok(Self::Part(Part::try_from(tag.value)?)),
-            "-X-DATERANGE" => Ok(Self::Daterange(Daterange::try_from(tag.value)?)),
-            "-X-SKIP" => Ok(Self::Skip(Skip::try_from(tag.value)?)),
-            "-X-PRELOAD-HINT" => Ok(Self::PreloadHint(PreloadHint::try_from(tag.value)?)),
-            "-X-RENDITION-REPORT" => {
+            TagName::Gap => Ok(Self::Gap(Gap::try_from(tag.value)?)),
+            TagName::Bitrate => Ok(Self::Bitrate(Bitrate::try_from(tag.value)?)),
+            TagName::Part => Ok(Self::Part(Part::try_from(tag.value)?)),
+            TagName::Daterange => Ok(Self::Daterange(Daterange::try_from(tag.value)?)),
+            TagName::Skip => Ok(Self::Skip(Skip::try_from(tag.value)?)),
+            TagName::PreloadHint => Ok(Self::PreloadHint(PreloadHint::try_from(tag.value)?)),
+            TagName::RenditionReport => {
                 Ok(Self::RenditionReport(RenditionReport::try_from(tag.value)?))
             }
-            "-X-MEDIA" => Ok(Self::Media(Media::try_from(tag.value)?)),
-            "-X-STREAM-INF" => Ok(Self::StreamInf(StreamInf::try_from(tag.value)?)),
-            "-X-I-FRAME-STREAM-INF" => {
+            TagName::Media => Ok(Self::Media(Media::try_from(tag.value)?)),
+            TagName::StreamInf => Ok(Self::StreamInf(StreamInf::try_from(tag.value)?)),
+            TagName::IFrameStreamInf => {
                 Ok(Self::IFrameStreamInf(IFrameStreamInf::try_from(tag.value)?))
             }
-            "-X-SESSION-DATA" => Ok(Self::SessionData(SessionData::try_from(tag.value)?)),
-            "-X-SESSION-KEY" => Ok(Self::SessionKey(SessionKey::try_from(tag.value)?)),
-            "-X-CONTENT-STEERING" => {
+            TagName::SessionData => Ok(Self::SessionData(SessionData::try_from(tag.value)?)),
+            TagName::SessionKey => Ok(Self::SessionKey(SessionKey::try_from(tag.value)?)),
+            TagName::ContentSteering => {
                 Ok(Self::ContentSteering(ContentSteering::try_from(tag.value)?))
             }
-            _ => Err("Unkown tag name."),
         }
     }
 }
 
 impl IsKnownName for Tag<'_> {
     fn is_known_name(name: &str) -> bool {
-        [
-            "M3U",
-            "-X-VERSION",
-            "-X-INDEPENDENT-SEGMENTS",
-            "-X-START",
-            "-X-DEFINE",
-            "-X-TARGETDURATION",
-            "-X-MEDIA-SEQUENCE",
-            "-X-DISCONTINUITY-SEQUENCE",
-            "-X-ENDLIST",
-            "-X-PLAYLIST-TYPE",
-            "-X-I-FRAMES-ONLY",
-            "-X-PART-INF",
-            "-X-SERVER-CONTROL",
-            "INF",
-            "-X-BYTERANGE",
-            "-X-DISCONTINUITY",
-            "-X-KEY",
-            "-X-MAP",
-            "-X-PROGRAM-DATE-TIME",
-            "-X-GAP",
-            "-X-BITRATE",
-            "-X-PART",
-            "-X-DATERANGE",
-            "-X-SKIP",
-            "-X-PRELOAD-HINT",
-            "-X-RENDITION-REPORT",
-            "-X-MEDIA",
-            "-X-STREAM-INF",
-            "-X-I-FRAME-STREAM-INF",
-            "-X-SESSION-DATA",
-            "-X-SESSION-KEY",
-            "-X-CONTENT-STEERING",
-        ]
-        .contains(&name)
+        TagName::try_from(name).is_ok()
+    }
+}
+
+#[derive(Debug, PartialEq, Clone, Copy, Hash)]
+pub enum TagName {
+    M3u,
+    Version,
+    IndependentSegments,
+    Start,
+    Define,
+    Targetduration,
+    MediaSequence,
+    DiscontinuitySequence,
+    Endlist,
+    PlaylistType,
+    IFramesOnly,
+    PartInf,
+    ServerControl,
+    Inf,
+    Byterange,
+    Discontinuity,
+    Key,
+    Map,
+    ProgramDateTime,
+    Gap,
+    Bitrate,
+    Part,
+    Daterange,
+    Skip,
+    PreloadHint,
+    RenditionReport,
+    Media,
+    StreamInf,
+    IFrameStreamInf,
+    SessionData,
+    SessionKey,
+    ContentSteering,
+}
+
+impl TryFrom<&'_ str> for TagName {
+    type Error = &'static str;
+
+    fn try_from(value: &'_ str) -> Result<Self, Self::Error> {
+        match value {
+            "M3U" => Ok(Self::M3u),
+            "-X-VERSION" => Ok(Self::Version),
+            "-X-INDEPENDENT-SEGMENTS" => Ok(Self::IndependentSegments),
+            "-X-START" => Ok(Self::Start),
+            "-X-DEFINE" => Ok(Self::Define),
+            "-X-TARGETDURATION" => Ok(Self::Targetduration),
+            "-X-MEDIA-SEQUENCE" => Ok(Self::MediaSequence),
+            "-X-DISCONTINUITY-SEQUENCE" => Ok(Self::DiscontinuitySequence),
+            "-X-ENDLIST" => Ok(Self::Endlist),
+            "-X-PLAYLIST-TYPE" => Ok(Self::PlaylistType),
+            "-X-I-FRAMES-ONLY" => Ok(Self::IFramesOnly),
+            "-X-PART-INF" => Ok(Self::PartInf),
+            "-X-SERVER-CONTROL" => Ok(Self::ServerControl),
+            "INF" => Ok(Self::Inf),
+            "-X-BYTERANGE" => Ok(Self::Byterange),
+            "-X-DISCONTINUITY" => Ok(Self::Discontinuity),
+            "-X-KEY" => Ok(Self::Key),
+            "-X-MAP" => Ok(Self::Map),
+            "-X-PROGRAM-DATE-TIME" => Ok(Self::ProgramDateTime),
+            "-X-GAP" => Ok(Self::Gap),
+            "-X-BITRATE" => Ok(Self::Bitrate),
+            "-X-PART" => Ok(Self::Part),
+            "-X-DATERANGE" => Ok(Self::Daterange),
+            "-X-SKIP" => Ok(Self::Skip),
+            "-X-PRELOAD-HINT" => Ok(Self::PreloadHint),
+            "-X-RENDITION-REPORT" => Ok(Self::RenditionReport),
+            "-X-MEDIA" => Ok(Self::Media),
+            "-X-STREAM-INF" => Ok(Self::StreamInf),
+            "-X-I-FRAME-STREAM-INF" => Ok(Self::IFrameStreamInf),
+            "-X-SESSION-DATA" => Ok(Self::SessionData),
+            "-X-SESSION-KEY" => Ok(Self::SessionKey),
+            "-X-CONTENT-STEERING" => Ok(Self::ContentSteering),
+            _ => Err("Unkown tag name."),
+        }
+    }
+}
+
+impl TagName {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::M3u => "M3U",
+            Self::Version => "-X-VERSION",
+            Self::IndependentSegments => "-X-INDEPENDENT-SEGMENTS",
+            Self::Start => "-X-START",
+            Self::Define => "-X-DEFINE",
+            Self::Targetduration => "-X-TARGETDURATION",
+            Self::MediaSequence => "-X-MEDIA-SEQUENCE",
+            Self::DiscontinuitySequence => "-X-DISCONTINUITY-SEQUENCE",
+            Self::Endlist => "-X-ENDLIST",
+            Self::PlaylistType => "-X-PLAYLIST-TYPE",
+            Self::IFramesOnly => "-X-I-FRAMES-ONLY",
+            Self::PartInf => "-X-PART-INF",
+            Self::ServerControl => "-X-SERVER-CONTROL",
+            Self::Inf => "INF",
+            Self::Byterange => "-X-BYTERANGE",
+            Self::Discontinuity => "-X-DISCONTINUITY",
+            Self::Key => "-X-KEY",
+            Self::Map => "-X-MAP",
+            Self::ProgramDateTime => "-X-PROGRAM-DATE-TIME",
+            Self::Gap => "-X-GAP",
+            Self::Bitrate => "-X-BITRATE",
+            Self::Part => "-X-PART",
+            Self::Daterange => "-X-DATERANGE",
+            Self::Skip => "-X-SKIP",
+            Self::PreloadHint => "-X-PRELOAD-HINT",
+            Self::RenditionReport => "-X-RENDITION-REPORT",
+            Self::Media => "-X-MEDIA",
+            Self::StreamInf => "-X-STREAM-INF",
+            Self::IFrameStreamInf => "-X-I-FRAME-STREAM-INF",
+            Self::SessionData => "-X-SESSION-DATA",
+            Self::SessionKey => "-X-SESSION-KEY",
+            Self::ContentSteering => "-X-CONTENT-STEERING",
+        }
     }
 }
 
