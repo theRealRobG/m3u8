@@ -11,7 +11,7 @@ use crate::tag::{
         session_data::SessionData, session_key::SessionKey, skip::Skip, start::Start,
         stream_inf::StreamInf, target_duration::Targetduration, version::Version,
     },
-    known::{IsKnownName, ParsedTag},
+    known::ParsedTag,
 };
 
 pub mod bitrate;
@@ -171,13 +171,7 @@ impl<'a> TryFrom<ParsedTag<'a>> for Tag<'a> {
     }
 }
 
-impl IsKnownName for Tag<'_> {
-    fn is_known_name(name: &str) -> bool {
-        TagName::try_from(name).is_ok()
-    }
-}
-
-#[derive(Debug, PartialEq, Clone, Copy, Hash)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub enum TagName {
     M3u,
     Version,

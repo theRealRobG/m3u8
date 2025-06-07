@@ -1,7 +1,10 @@
-use crate::tag::{
-    self, draft_pantos_hls,
-    known::{self, IsKnownName, NoCustomTag, ParsedTag},
-    unknown,
+use crate::{
+    config::ParsingOptions,
+    tag::{
+        self,
+        known::{self, IsKnownName, NoCustomTag, ParsedTag},
+        unknown,
+    },
 };
 use nom::{IResult, Parser, bytes::complete, combinator::opt};
 use std::{cmp::PartialEq, fmt::Debug};
@@ -18,11 +21,14 @@ where
     Blank,
 }
 
-pub fn parse(input: &str) -> IResult<&str, HlsLine> {
-    parse_with_custom::<NoCustomTag>(input)
+pub fn parse(input: &str, options: ParsingOptions) -> IResult<&str, HlsLine> {
+    parse_with_custom::<NoCustomTag>(input, options)
 }
 
-pub fn parse_with_custom<'a, CustomTag>(input: &'a str) -> IResult<&'a str, HlsLine<'a, CustomTag>>
+pub fn parse_with_custom<'a, CustomTag>(
+    input: &'a str,
+    options: ParsingOptions,
+) -> IResult<&'a str, HlsLine<'a, CustomTag>>
 where
     CustomTag: TryFrom<ParsedTag<'a>, Error = &'static str> + IsKnownName + Debug + PartialEq,
 {
@@ -30,7 +36,7 @@ where
     let (input, opt_tag) = opt(complete::tag("#EXT")).parse(input)?;
     if opt_tag.is_some() {
         let (input, tag) = tag::unknown::parse(input)?;
-        if draft_pantos_hls::Tag::is_known_name(tag.name) || CustomTag::is_known_name(tag.name) {
+        if options.is_known_name(tag.name) || CustomTag::is_known_name(tag.name) {
             let (input, tag_value) = tag::value::parse(tag.value)?;
             let parsed_tag = ParsedTag {
                 name: tag.name,
@@ -64,25 +70,34 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tag::draft_pantos_hls::m3u::M3u;
+    use crate::{
+        config::ParsingOptionsBuilder,
+        tag::draft_pantos_hls::{self, m3u::M3u, start::Start},
+    };
     use pretty_assertions::assert_eq;
 
     #[test]
     fn uri_line() {
         assert_eq!(
             Ok(("", HlsLine::Uri("hello/world.m3u8"))),
-            parse("hello/world.m3u8")
+            parse("hello/world.m3u8", ParsingOptions::default())
         )
     }
 
     #[test]
     fn blank_line() {
-        assert_eq!(Ok(("", HlsLine::Blank)), parse(""));
+        assert_eq!(
+            Ok(("", HlsLine::Blank)),
+            parse("", ParsingOptions::default())
+        );
     }
 
     #[test]
     fn comment() {
-        assert_eq!(Ok(("", HlsLine::Comment("Comment"))), parse("#Comment"));
+        assert_eq!(
+            Ok(("", HlsLine::Comment("Comment"))),
+            parse("#Comment", ParsingOptions::default())
+        );
     }
 
     #[test]
@@ -92,7 +107,7 @@ mod tests {
                 "",
                 HlsLine::KnownTag(known::Tag::Hls(draft_pantos_hls::Tag::M3u(M3u)))
             )),
-            parse("#EXTM3U")
+            parse("#EXTM3U", ParsingOptions::default())
         );
     }
 
@@ -159,7 +174,38 @@ mod tests {
                 }))
             )),
             parse_with_custom::<TestTag>(
-                "#EXT-X-TEST-TAG:TYPE=GREETING,MESSAGE=\"Hello, World!\",TIMES=42"
+                "#EXT-X-TEST-TAG:TYPE=GREETING,MESSAGE=\"Hello, World!\",TIMES=42",
+                ParsingOptions::default()
+            )
+        );
+    }
+
+    #[test]
+    fn avoiding_parsing_known_tag_when_configured_to_avoid_via_parsing_options() {
+        assert_eq!(
+            Ok((
+                "",
+                HlsLine::KnownTag(known::Tag::Hls(draft_pantos_hls::Tag::Start(Start {
+                    time_offset: -18.0,
+                    precise: false
+                })))
+            )),
+            parse("#EXT-X-START:TIME-OFFSET=-18", ParsingOptions::default())
+        );
+        assert_eq!(
+            Ok((
+                "",
+                HlsLine::UnknownTag(unknown::Tag {
+                    name: "-X-START",
+                    value: "TIME-OFFSET=-18"
+                })
+            )),
+            parse(
+                "#EXT-X-START:TIME-OFFSET=-18",
+                ParsingOptionsBuilder::new()
+                    .with_parsing_for_all_tags()
+                    .without_parsing_for_start()
+                    .build()
             )
         );
     }
