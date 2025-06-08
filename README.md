@@ -1,3 +1,71 @@
+# M3U8
+
+## Configuring known tags for parsing
+
+The parsing function allows the user to specify a subset of the known HLS tags that they would like
+to parse fully into `m3u8::tag::draft_pantos_hls::Tag` instances. For example, if information from
+only `EXTINF` tags are desired, then the user can specify the parsing options using the
+`ParsingOptionsBuilder` as
+```rust
+use m3u8::config::ParsingOptionsBuilder;
+// Parse only EXTINF
+ParsingOptionsBuilder::new().with_parsing_for_inf().build();
+```
+Alternatively, if most tags are desired, but a few tags can be ignored, then the user can set all
+tags for parsing and remove the undesired tags as such:
+```rust
+use m3u8::config::ParsingOptionsBuilder;
+// Parse everything except from EXT-X-BITRATE and EXT-X-PROGRAM-DATE-TIME
+ParsingOptionsBuilder::new()
+    .with_parsing_for_all_tags()
+    .without_parsing_for_bitrate()
+    .without_parsing_for_program_date_time()
+    .build();
+```
+
+It may be quite desirable to avoid parsing of tags that are not needed as this can add quite
+considerable performance overhead. Unknown tags make no attempt to parse or validate the value
+portion of the tag (the part after `:`) and just return the name of the tag along with the `&str`
+for the rest of the line. Running locally as of commit `c28f2e776f03a446af367a153dcb2d95764186cc`
+the following benchmark shows that when parsing a large playlist, including all tags in the parse is
+about 4x slower than including no tags in the parse (`2.0689 ms` vs `495.53 µs` == `0.49553 ms`).
+```
+Benchmarking Bench large playlist with full parsing on all known tags: Collecting 100 samples in estimated 5.1923 s (2500 iterations
+Bench large playlist with full parsing on all known tags
+                        time:   [2.0669 ms 2.0689 ms 2.0719 ms]
+Found 9 outliers among 100 measurements (9.00%)
+  1 (1.00%) high mild
+  8 (8.00%) high severe
+
+Benchmarking Bench large playlist with no known tags being fully parsed: Collecting 100 samples in estimated 5.0151 s (10k iteration
+Bench large playlist with no known tags being fully parsed
+                        time:   [494.48 µs 495.53 µs 496.72 µs]
+Found 3 outliers among 100 measurements (3.00%)
+  1 (1.00%) high mild
+  2 (2.00%) high severe
+```
+
+Some basic validation can still be done on `m3u8::tag::unknown::Tag`. For example, the name can be
+converted to a `m3u8::tag::draft_pantos_hls::TagName` and then you can check the `TagType` for some
+generic reasoning on the tag position/semantics without parsing the values:
+```rust
+use m3u8::tag::draft_pantos_hls::{TagName, TagType};
+let tag_name = TagName::try_from(tag.name)?;
+match tag_name.tag_type() {
+    TagType::Basic => handle_basic_tag(tag),
+    TagType::MediaOrMultivariantPlaylist => handle_media_or_multivariant_playlist_tag(tag),
+    TagType::MediaPlaylist => handle_media_playlist_tag(tag),
+    TagType::MediaSegment => handle_media_segment_tag(tag),
+    TagType::MediaMetadata => handle_media_metadata_tag(tag),
+    TagType::MultivariantPlaylist => handle_multivariant_playlist_tag(tag),
+}
+```
+
+If there is a specific scenario where more information on a value is desired (other than just having
+`&str`), then the user can use the `m3u8::tag::value::parse` method directly on the unknown
+`tag.value`. To then get the full `m3u8::tag::draft_pantos_hls::Tag` the user can pass the result
+into `Tag::try_from`.
+
 # HLS Specification
 
 The parsing rules have been derived from the HLS specification listed here:
