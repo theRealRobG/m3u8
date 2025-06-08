@@ -171,6 +171,45 @@ impl<'a> TryFrom<ParsedTag<'a>> for Tag<'a> {
     }
 }
 
+impl Tag<'_> {
+    pub fn name(&self) -> TagName {
+        match self {
+            Tag::M3u(_) => TagName::M3u,
+            Tag::Version(_) => TagName::Version,
+            Tag::IndependentSegments(_) => TagName::IndependentSegments,
+            Tag::Start(_) => TagName::Start,
+            Tag::Define(_) => TagName::Define,
+            Tag::Targetduration(_) => TagName::Targetduration,
+            Tag::MediaSequence(_) => TagName::MediaSequence,
+            Tag::DiscontinuitySequence(_) => TagName::DiscontinuitySequence,
+            Tag::Endlist(_) => TagName::Endlist,
+            Tag::PlaylistType(_) => TagName::PlaylistType,
+            Tag::IFramesOnly(_) => TagName::IFramesOnly,
+            Tag::PartInf(_) => TagName::PartInf,
+            Tag::ServerControl(_) => TagName::ServerControl,
+            Tag::Inf(_) => TagName::Inf,
+            Tag::Byterange(_) => TagName::Byterange,
+            Tag::Discontinuity(_) => TagName::Discontinuity,
+            Tag::Key(_) => TagName::Key,
+            Tag::Map(_) => TagName::Map,
+            Tag::ProgramDateTime(_) => TagName::ProgramDateTime,
+            Tag::Gap(_) => TagName::Gap,
+            Tag::Bitrate(_) => TagName::Bitrate,
+            Tag::Part(_) => TagName::Part,
+            Tag::Daterange(_) => TagName::Daterange,
+            Tag::Skip(_) => TagName::Skip,
+            Tag::PreloadHint(_) => TagName::PreloadHint,
+            Tag::RenditionReport(_) => TagName::RenditionReport,
+            Tag::Media(_) => TagName::Media,
+            Tag::StreamInf(_) => TagName::StreamInf,
+            Tag::IFrameStreamInf(_) => TagName::IFrameStreamInf,
+            Tag::SessionData(_) => TagName::SessionData,
+            Tag::SessionKey(_) => TagName::SessionKey,
+            Tag::ContentSteering(_) => TagName::ContentSteering,
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub enum TagName {
     M3u,
@@ -286,6 +325,58 @@ impl TagName {
             Self::ContentSteering => "-X-CONTENT-STEERING",
         }
     }
+
+    pub fn tag_type(&self) -> TagType {
+        match self {
+            Self::M3u => TagType::Basic,
+            Self::Version => TagType::Basic,
+            Self::IndependentSegments => TagType::MediaOrMultivariantPlaylist,
+            Self::Start => TagType::MediaOrMultivariantPlaylist,
+            Self::Define => TagType::MediaOrMultivariantPlaylist,
+            Self::Targetduration => TagType::MediaPlaylist,
+            Self::MediaSequence => TagType::MediaPlaylist,
+            Self::DiscontinuitySequence => TagType::MediaPlaylist,
+            Self::Endlist => TagType::MediaPlaylist,
+            Self::PlaylistType => TagType::MediaPlaylist,
+            Self::IFramesOnly => TagType::MediaPlaylist,
+            Self::PartInf => TagType::MediaPlaylist,
+            Self::ServerControl => TagType::MediaPlaylist,
+            Self::Inf => TagType::MediaSegment,
+            Self::Byterange => TagType::MediaSegment,
+            Self::Discontinuity => TagType::MediaSegment,
+            Self::Key => TagType::MediaSegment,
+            Self::Map => TagType::MediaSegment,
+            Self::ProgramDateTime => TagType::MediaSegment,
+            Self::Gap => TagType::MediaSegment,
+            Self::Bitrate => TagType::MediaSegment,
+            Self::Part => TagType::MediaSegment,
+            Self::Daterange => TagType::MediaMetadata,
+            Self::Skip => TagType::MediaMetadata,
+            Self::PreloadHint => TagType::MediaMetadata,
+            Self::RenditionReport => TagType::MediaMetadata,
+            Self::Media => TagType::MultivariantPlaylist,
+            Self::StreamInf => TagType::MultivariantPlaylist,
+            Self::IFrameStreamInf => TagType::MultivariantPlaylist,
+            Self::SessionData => TagType::MultivariantPlaylist,
+            Self::SessionKey => TagType::MultivariantPlaylist,
+            Self::ContentSteering => TagType::MultivariantPlaylist,
+        }
+    }
+}
+
+pub enum TagType {
+    /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.1
+    Basic,
+    /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.2
+    MediaOrMultivariantPlaylist,
+    /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.3
+    MediaPlaylist,
+    /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.4
+    MediaSegment,
+    /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.5
+    MediaMetadata,
+    /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.6
+    MultivariantPlaylist,
 }
 
 struct ValidationError;
