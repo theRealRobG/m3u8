@@ -38,7 +38,7 @@ pub fn parse(line: &str) -> Option<DaterangeInformation> {
         }
     }
 
-    Some(info)
+    if chars_count == 0 { None } else { Some(info) }
 }
 
 #[derive(Debug)]
