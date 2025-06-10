@@ -1,12 +1,4 @@
-use nom::{
-    IResult, Parser,
-    bytes::{
-        complete::{tag, take_while_m_n},
-        take_while,
-    },
-    character::complete::one_of,
-    combinator::{map_res, rest},
-};
+use std::str::Chars;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct DateTime {
@@ -25,127 +17,166 @@ pub struct DateTimeTimezoneOffset {
     pub time_minute: u8,
 }
 
-pub fn parse(input: &str) -> IResult<&str, DateTime> {
-    map_res(
-        (
-            take_while_m_n(4, 4, |c: char| c.is_ascii_digit()),
-            tag::<_, _, nom::error::Error<&str>>("-"),
-            take_while_m_n(2, 2, |c: char| c.is_ascii_digit()),
-            tag("-"),
-            take_while_m_n(2, 2, |c: char| c.is_ascii_digit()),
-            tag("T"),
-            take_while_m_n(2, 2, |c: char| c.is_ascii_digit()),
-            tag(":"),
-            take_while_m_n(2, 2, |c: char| c.is_ascii_digit()),
-            tag(":"),
-            take_while(|c: char| c.is_ascii_digit() || c == '.'),
-            rest,
-        ),
-        |(
-            date_fullyear,
-            _,
-            date_month,
-            _,
-            date_mday,
-            _,
-            time_hour,
-            _,
-            time_minute,
-            _,
-            time_second,
-            timezone_offset,
-        )| {
-            fn parse_error(_: std::num::ParseIntError) -> nom::error::Error<&'static str> {
-                nom::error::Error::new("", nom::error::ErrorKind::Digit)
-            }
-            fn parse_float_error(_: std::num::ParseFloatError) -> nom::error::Error<&'static str> {
-                nom::error::Error::new("", nom::error::ErrorKind::Float)
-            }
-            let date_fullyear = date_fullyear.parse::<u32>().map_err(parse_error)?;
-            let date_month = date_month.parse::<u8>().map_err(parse_error)?;
-            let date_mday = date_mday.parse::<u8>().map_err(parse_error)?;
-            let time_hour = time_hour.parse::<u8>().map_err(parse_error)?;
-            let time_minute = time_minute.parse::<u8>().map_err(parse_error)?;
-            let time_second = time_second.parse::<f64>().map_err(parse_float_error)?;
-            let (_, timezone_offset) = parse_time_offset(timezone_offset)
-                .map_err(|e| nom::error::Error::new("", e.kind()))?;
-            Ok::<DateTime, nom::error::Error<&str>>(DateTime {
+pub fn parse(input: &str) -> Result<DateTime, &'static str> {
+    let mut char_count = 0usize;
+    let mut input_chars = input.chars();
+    loop {
+        let Some(char) = input_chars.next() else {
+            return Err("Unexpected end of line while parsing DateTime");
+        };
+        char_count += 1;
+        match char {
+            't' | ':' => break,
+            _ => (),
+        }
+    }
+    handle_partially_parsed_date_time(input, char_count, input_chars)
+}
+
+/// Take the output of an existing parsing loop and complete the parsing of the DateTime value.
+///
+/// The `input_chars` are expected to have reached either the lowercase `t` separator or the first
+/// `:` separator of the time (after the time_hour value).
+pub fn handle_partially_parsed_date_time<'a>(
+    input: &'a str,
+    mut char_count: usize,
+    mut input_chars: Chars<'_>,
+) -> Result<DateTime, &'static str> {
+    // "2025-06-09t17:53:45z" ==> 11 to t, 14 to :
+    if !(char_count == 11 || char_count == 14) {
+        return Err("Invalid DateTimeMsec value");
+    }
+    let Ok(date_fullyear) = input[..4].parse::<u32>() else {
+        return Err("Invalid year in DateTimeMsec value");
+    };
+    let Some('-') = input.chars().nth(4) else {
+        return Err("Invalid DateTimeMsec value");
+    };
+    let Ok(date_month) = input[5..7].parse::<u8>() else {
+        return Err("Invalid month in DateTimeMsec value");
+    };
+    let Some('-') = input.chars().nth(7) else {
+        return Err("Invalid DateTimeMsec value");
+    };
+    let Ok(date_mday) = input[8..10].parse::<u8>() else {
+        return Err("Invalid day in DateTimeMsec value");
+    };
+    if char_count == 11 {
+        let Some('t') = input.chars().nth(10) else {
+            return Err("Invalid DateTimeMsec value");
+        };
+        let _ = input_chars.next();
+        let _ = input_chars.next();
+        let Some(':') = input_chars.next() else {
+            return Err("Invalid DateTimeMsec value");
+        };
+    } else {
+        let Some('T') = input.chars().nth(10) else {
+            return Err("Invalid DateTimeMsec value");
+        };
+    }
+    let Ok(time_hour) = input[11..13].parse::<u8>() else {
+        return Err("Invalid hour in DateTimeMsec value");
+    };
+    input_chars.next();
+    input_chars.next();
+    let Some(':') = input_chars.next() else {
+        return Err("Invalid DateTimeMsec value");
+    };
+    char_count = 17;
+    let Ok(time_minute) = input[14..16].parse::<u8>() else {
+        return Err("Invalid minute in DateTimeMsec value");
+    };
+    let time_offset_char = 'time_offset_loop: loop {
+        let Some(char) = input_chars.next() else {
+            break 'time_offset_loop None;
+        };
+        char_count += 1;
+        match char {
+            'Z' | 'z' | '+' | '-' => break 'time_offset_loop Some(char),
+            '\r' | '\n' => return Err("Unexpected end of line in DateTimeMsec value"),
+            '0'..='9' | '.' => (),
+            _ => return Err("Invalid second in DateTimeMsec value"),
+        }
+    };
+    let Some(time_offset_char) = time_offset_char else {
+        return Err("Unexpected end of line in DateTimeMsec value");
+    };
+    let Ok(time_second) = input[17..(char_count - 1)].parse::<f64>() else {
+        return Err("Invalid second in DateTimeMsec value");
+    };
+    match time_offset_char {
+        'Z' | 'z' => {
+            validate_end_of_line(&mut input_chars)?;
+            Ok(DateTime {
                 date_fullyear,
                 date_month,
                 date_mday,
                 time_hour,
                 time_minute,
                 time_second,
-                timezone_offset,
+                timezone_offset: DateTimeTimezoneOffset {
+                    time_hour: 0,
+                    time_minute: 0,
+                },
             })
-        },
-    )
-    .parse(input)
-}
-
-fn parse_time_offset(input: &str) -> IResult<&str, DateTimeTimezoneOffset> {
-    let (input, tag) = one_of("Z+-")(input)?;
-    match tag {
-        'Z' => Ok((
-            input,
-            DateTimeTimezoneOffset {
-                time_hour: 0,
-                time_minute: 0,
-            },
-        )),
-        '+' => {
-            let (input, (time_hour, time_minute)) = parse_hours_minutes_time(input)?;
-            Ok((
-                input,
-                DateTimeTimezoneOffset {
-                    time_hour,
-                    time_minute,
-                },
-            ))
         }
-        '-' => {
-            let (input, (time_hour, time_minute)) = parse_hours_minutes_time(input)?;
-            Ok((
-                input,
-                DateTimeTimezoneOffset {
-                    time_hour: -time_hour,
-                    time_minute,
+        _ => {
+            let multiplier = if time_offset_char == '-' { -1i8 } else { 1i8 };
+            input_chars.next();
+            input_chars.next();
+            let Some(':') = input_chars.next() else {
+                return Err("Invalid DateTimeMsec value");
+            };
+            let Ok(timeoffset_hour) = input[char_count..(char_count + 2)].parse::<i8>() else {
+                return Err("Invalid time offset hour in DateTimeMsec value");
+            };
+            let timeoffset_hour = multiplier * timeoffset_hour;
+            input_chars.next();
+            input_chars.next();
+            validate_end_of_line(&mut input_chars)?;
+            let Ok(timeoffset_minute) = input[(char_count + 3)..].parse::<u8>() else {
+                return Err("Invalid time offset minute in DateTimeMsec value");
+            };
+            Ok(DateTime {
+                date_fullyear,
+                date_month,
+                date_mday,
+                time_hour,
+                time_minute,
+                time_second,
+                timezone_offset: DateTimeTimezoneOffset {
+                    time_hour: timeoffset_hour,
+                    time_minute: timeoffset_minute,
                 },
-            ))
+            })
         }
-        _ => panic!("Char must be 'Z', '+', or '-'."),
     }
 }
 
-fn parse_hours_minutes_time(input: &str) -> IResult<&str, (i8, u8)> {
-    let (input, time_hour) = take_while_m_n(2, 2, |c: char| c.is_ascii_digit())(input)?;
-    let (input, _) = tag(":")(input)?;
-    let (input, time_minute) = take_while_m_n(2, 2, |c: char| c.is_ascii_digit())(input)?;
-    let Ok(time_hour) = time_hour.parse::<i8>() else {
-        return Err(nom::Err::Failure(nom::error::Error::new(
-            input,
-            nom::error::ErrorKind::Digit,
-        )));
-    };
-    let Ok(time_minute) = time_minute.parse::<u8>() else {
-        return Err(nom::Err::Failure(nom::error::Error::new(
-            input,
-            nom::error::ErrorKind::Digit,
-        )));
-    };
-    Ok((input, (time_hour, time_minute)))
+fn validate_end_of_line(input_chars: &mut Chars<'_>) -> Result<(), &'static str> {
+    match input_chars.next() {
+        None => Ok(()),
+        Some('\r') => validate_carriage_return(input_chars),
+        Some('\n') => validate_new_line(input_chars),
+        _ => Err("Expected end of line"),
+    }
 }
 
-trait GetKind {
-    fn kind(&self) -> nom::error::ErrorKind;
+fn validate_carriage_return(input_chars: &mut Chars<'_>) -> Result<(), &'static str> {
+    let Some('\n') = input_chars.next() else {
+        return Err("Unexpected carriage return without following line feed");
+    };
+    let None = input_chars.next() else {
+        return Err("Unexpected char after line feed");
+    };
+    Ok(())
 }
-impl<T> GetKind for nom::Err<nom::error::Error<T>> {
-    fn kind(&self) -> nom::error::ErrorKind {
-        match self {
-            nom::Err::Incomplete(_) => nom::error::ErrorKind::Alpha,
-            nom::Err::Error(error) => error.code,
-            nom::Err::Failure(error) => error.code,
-        }
+
+fn validate_new_line(input_chars: &mut Chars<'_>) -> Result<(), &'static str> {
+    match input_chars.next() {
+        Some(_) => Err("Unexpected carriage return without following line feed"),
+        None => Ok(()),
     }
 }
 
@@ -169,7 +200,7 @@ mod tests {
                     time_minute: 0
                 }
             },
-            parse("2025-06-04T13:50:42.148Z").unwrap().1
+            parse("2025-06-04T13:50:42.148Z").unwrap()
         );
     }
 
@@ -188,7 +219,7 @@ mod tests {
                     time_minute: 0
                 }
             },
-            parse("2025-06-04T13:50:42.148+03:00").unwrap().1
+            parse("2025-06-04T13:50:42.148+03:00").unwrap()
         );
     }
 
@@ -207,7 +238,7 @@ mod tests {
                     time_minute: 30
                 }
             },
-            parse("2025-06-04T13:50:42.148-01:30").unwrap().1
+            parse("2025-06-04T13:50:42.148-01:30").unwrap()
         );
     }
 
@@ -226,7 +257,7 @@ mod tests {
                     time_minute: 0
                 }
             },
-            parse("2025-06-04T13:50:42Z").unwrap().1
+            parse("2025-06-04T13:50:42Z").unwrap()
         );
     }
 }

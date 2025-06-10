@@ -36,10 +36,7 @@ impl<'a> TryFrom<ParsedTagValue<'a>> for Daterange<'a> {
             _ => None,
         };
         let Some(start_date) = (match attribute_list.remove("START-DATE") {
-            Some(ParsedAttributeValue::QuotedString(date_str)) => match date::parse(date_str) {
-                Ok((_, date_time)) => Some(date_time),
-                Err(_) => None,
-            },
+            Some(ParsedAttributeValue::QuotedString(date_str)) => date::parse(date_str).ok(),
             _ => None,
         }) else {
             return Err(super::ValidationError::missing_required_attribute());
@@ -49,10 +46,7 @@ impl<'a> TryFrom<ParsedTagValue<'a>> for Daterange<'a> {
             _ => None,
         };
         let end_date = match attribute_list.remove("END-DATE") {
-            Some(ParsedAttributeValue::QuotedString(date_str)) => match date::parse(date_str) {
-                Ok((_, date_time)) => Some(date_time),
-                Err(_) => None,
-            },
+            Some(ParsedAttributeValue::QuotedString(date_str)) => date::parse(date_str).ok(),
             _ => None,
         };
         let duration = match attribute_list.remove("DURATION") {
