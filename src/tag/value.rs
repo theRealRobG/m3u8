@@ -1,4 +1,8 @@
-use crate::date::{DateTime, DateTimeTimezoneOffset};
+use crate::{
+    date::{DateTime, DateTimeTimezoneOffset},
+    line::ParsedLineSlice,
+    utils::{take_until_end_of_line, validate_carriage_return},
+};
 use std::{collections::HashMap, str::Chars};
 
 // Not exactly the same as `tag-value`, because some of the types must be contextualized by the
@@ -137,9 +141,12 @@ pub struct DecimalResolution {
     pub height: u64,
 }
 
-pub fn parse(input: &str) -> Result<ParsedTagValue, &'static str> {
+pub fn parse(input: &str) -> Result<ParsedLineSlice<ParsedTagValue>, &'static str> {
     if input.is_empty() {
-        return Ok(ParsedTagValue::Empty);
+        return Ok(ParsedLineSlice {
+            parsed: ParsedTagValue::Empty,
+            remaining: None,
+        });
     }
     let mut input_chars = input.chars();
     let mut char_count = 0usize;
@@ -158,7 +165,12 @@ pub fn parse(input: &str) -> Result<ParsedTagValue, &'static str> {
         // If we reached the end of chars in the digits loop, that implies that the value was all
         // digits, and as such should be treated as a `DecimalInteger(u64)`.
         match input.parse::<u64>() {
-            Ok(n) => return Ok(ParsedTagValue::DecimalInteger(n)),
+            Ok(n) => {
+                return Ok(ParsedLineSlice {
+                    parsed: ParsedTagValue::DecimalInteger(n),
+                    remaining: None,
+                });
+            }
             Err(_) => return Err("Could not parse decimal integer to u64 (perhaps too large)"),
         }
     };
@@ -168,19 +180,26 @@ pub fn parse(input: &str) -> Result<ParsedTagValue, &'static str> {
         '\r' => {
             validate_carriage_return(&mut input_chars)?;
             match input.parse::<u64>() {
-                Ok(n) => return Ok(ParsedTagValue::DecimalInteger(n)),
+                Ok(n) => {
+                    return Ok(ParsedLineSlice {
+                        parsed: ParsedTagValue::DecimalInteger(n),
+                        remaining: Some(input_chars.as_str()),
+                    });
+                }
                 Err(_) => return Err("Could not parse decimal integer to u64 (perhaps too large)"),
             }
         }
         // End of line - should check if there was anything left and fail with error if so. Since
         // everything before this was a digit, this must be DecimalInteger.
-        '\n' => {
-            validate_new_line(&mut input_chars)?;
-            match input.parse::<u64>() {
-                Ok(n) => return Ok(ParsedTagValue::DecimalInteger(n)),
-                Err(_) => return Err("Could not parse decimal integer to u64 (perhaps too large)"),
+        '\n' => match input.parse::<u64>() {
+            Ok(n) => {
+                return Ok(ParsedLineSlice {
+                    parsed: ParsedTagValue::DecimalInteger(n),
+                    remaining: Some(input_chars.as_str()),
+                });
             }
-        }
+            Err(_) => return Err("Could not parse decimal integer to u64 (perhaps too large)"),
+        },
         // This must be DecimalIntegerRange(u64, u64)
         '@' => {
             let length = match input[..(char_count - 1)].parse::<u64>() {
@@ -191,14 +210,44 @@ pub fn parse(input: &str) -> Result<ParsedTagValue, &'static str> {
                     );
                 }
             };
-            let offset = match input[char_count..].trim_end().parse::<u64>() {
-                Ok(n) => n,
-                Err(_) => return Err("Could not parse decimal offset within range value"),
-            };
-            return Ok(ParsedTagValue::DecimalIntegerRange(length, offset));
+            let start_offset_index = char_count;
+            loop {
+                char_count += 1;
+                match input_chars.next() {
+                    None => {
+                        let offset = input[start_offset_index..(char_count - 1)]
+                            .parse::<u64>()
+                            .map_err(|_| "Could not parse decimal offset within range value")?;
+                        return Ok(ParsedLineSlice {
+                            parsed: ParsedTagValue::DecimalIntegerRange(length, offset),
+                            remaining: None,
+                        });
+                    }
+                    Some('\r') => {
+                        validate_carriage_return(&mut input_chars)?;
+                        let offset = input[start_offset_index..(char_count - 1)]
+                            .parse::<u64>()
+                            .map_err(|_| "Could not parse decimal offset within range value")?;
+                        return Ok(ParsedLineSlice {
+                            parsed: ParsedTagValue::DecimalIntegerRange(length, offset),
+                            remaining: Some(input_chars.as_str()),
+                        });
+                    }
+                    Some('\n') => {
+                        let offset = input[start_offset_index..(char_count - 1)]
+                            .parse::<u64>()
+                            .map_err(|_| "Could not parse decimal offset within range value")?;
+                        return Ok(ParsedLineSlice {
+                            parsed: ParsedTagValue::DecimalIntegerRange(length, offset),
+                            remaining: Some(input_chars.as_str()),
+                        });
+                    }
+                    _ => (),
+                }
+            }
         }
         // This must be DecimalFloatingPointWithOptionalTitle(f64, &str)
-        ',' => return handle_float_with_title_on_comma(input, char_count),
+        ',' => return handle_float_with_title_on_comma(input, char_count, input_chars),
         // This must be DecimalFloatingPointWithOptionalTitle(f64, &str)
         '.' => return handle_float_with_title_on_period(input, char_count, input_chars),
         _ => (),
@@ -294,10 +343,15 @@ pub fn parse(input: &str) -> Result<ParsedTagValue, &'static str> {
     };
     let Some(second_break_char) = second_break_char else {
         if still_checking_enum {
-            return handle_type_enum(input);
+            return handle_type_enum(input, char_count);
         } else if still_checking_float {
             // Add 1 to char_count so takes last char in line.
-            return handle_float_with_title_on_end_of_line(input, char_count + 1);
+            return handle_float_with_title_on_end_of_line(
+                input,
+                char_count + 1,
+                input_chars,
+                None,
+            );
         } else {
             return Err("Unexpected end of tag value");
         }
@@ -307,19 +361,18 @@ pub fn parse(input: &str) -> Result<ParsedTagValue, &'static str> {
         '\r' => {
             validate_carriage_return(&mut input_chars)?;
             if still_checking_enum {
-                handle_type_enum(input)
+                handle_type_enum(input, char_count)
             } else if still_checking_float {
-                handle_float_with_title_on_end_of_line(input, char_count)
+                handle_float_with_title_on_end_of_line(input, char_count, input_chars, Some('\r'))
             } else {
                 Err("Unexpected end of tag value")
             }
         }
         '\n' => {
-            validate_new_line(&mut input_chars)?;
             if still_checking_enum {
-                handle_type_enum(input)
+                handle_type_enum(input, char_count)
             } else if still_checking_float {
-                handle_float_with_title_on_end_of_line(input, char_count)
+                handle_float_with_title_on_end_of_line(input, char_count, input_chars, Some('\n'))
             } else {
                 return Err("Unexpected end of tag value");
             }
@@ -327,7 +380,7 @@ pub fn parse(input: &str) -> Result<ParsedTagValue, &'static str> {
         // DateTime separators
         't' | ':' => handle_date_time(input, char_count, input_chars),
         // Float with title break chars
-        ',' => handle_float_with_title_on_comma(input, char_count),
+        ',' => handle_float_with_title_on_comma(input, char_count, input_chars),
         '.' => handle_float_with_title_on_period(input, char_count, input_chars),
         // Attribute list separator
         '=' => {
@@ -336,7 +389,8 @@ pub fn parse(input: &str) -> Result<ParsedTagValue, &'static str> {
             let (has_more, initial_attribute_value, new_char_count) =
                 handle_attribute_value(input, char_count, &mut input_chars)?;
             char_count = new_char_count;
-            attribute_list.insert(initial_attribute_name, initial_attribute_value);
+            attribute_list.insert(initial_attribute_name, initial_attribute_value.parsed);
+            let mut remaining = initial_attribute_value.remaining;
             if has_more {
                 'attribute_loop: loop {
                     let (attribute_name, new_char_count) =
@@ -345,13 +399,17 @@ pub fn parse(input: &str) -> Result<ParsedTagValue, &'static str> {
                     let (has_more, attribute_value, new_char_count) =
                         handle_attribute_value(input, char_count, &mut input_chars)?;
                     char_count = new_char_count;
-                    attribute_list.insert(attribute_name, attribute_value);
+                    attribute_list.insert(attribute_name, attribute_value.parsed);
+                    remaining = attribute_value.remaining;
                     if !has_more {
                         break 'attribute_loop;
                     }
                 }
             }
-            Ok(ParsedTagValue::AttributeList(attribute_list))
+            Ok(ParsedLineSlice {
+                parsed: ParsedTagValue::AttributeList(attribute_list),
+                remaining,
+            })
         }
         _ => Err("Unexpected char in tag value"),
     }
@@ -380,8 +438,8 @@ fn handle_attribute_name<'a>(
 fn handle_attribute_value<'a>(
     input: &'a str,
     mut char_count: usize,
-    input_chars: &mut Chars<'_>,
-) -> Result<(bool, ParsedAttributeValue<'a>, usize), &'static str> {
+    input_chars: &mut Chars<'a>,
+) -> Result<(bool, ParsedLineSlice<'a, ParsedAttributeValue<'a>>, usize), &'static str> {
     let value_start_index = char_count;
     let Some(initial_char) = input_chars.next() else {
         return Err("Unexpected empty attribute value");
@@ -405,15 +463,40 @@ fn handle_attribute_value<'a>(
             let value = &input[(value_start_index + 1)..(char_count - 1)];
             char_count += 1;
             return match input_chars.next() {
-                Some(',') => Ok((true, ParsedAttributeValue::QuotedString(value), char_count)),
-                None => Ok((false, ParsedAttributeValue::QuotedString(value), char_count)),
+                Some(',') => Ok((
+                    true,
+                    ParsedLineSlice {
+                        parsed: ParsedAttributeValue::QuotedString(value),
+                        remaining: Some(input_chars.as_str()),
+                    },
+                    char_count,
+                )),
+                Some('\n') => Ok((
+                    false,
+                    ParsedLineSlice {
+                        parsed: ParsedAttributeValue::QuotedString(value),
+                        remaining: Some(input_chars.as_str()),
+                    },
+                    char_count,
+                )),
+                None => Ok((
+                    false,
+                    ParsedLineSlice {
+                        parsed: ParsedAttributeValue::QuotedString(value),
+                        remaining: None,
+                    },
+                    char_count,
+                )),
                 Some('\r') => {
                     validate_carriage_return(input_chars)?;
-                    Ok((false, ParsedAttributeValue::QuotedString(value), char_count))
-                }
-                Some('\n') => {
-                    validate_new_line(input_chars)?;
-                    Ok((false, ParsedAttributeValue::QuotedString(value), char_count))
+                    Ok((
+                        false,
+                        ParsedLineSlice {
+                            parsed: ParsedAttributeValue::QuotedString(value),
+                            remaining: Some(input_chars.as_str()),
+                        },
+                        char_count,
+                    ))
                 }
                 _ => Err("Unexpected char while reading value"),
             };
@@ -427,9 +510,11 @@ fn handle_attribute_value<'a>(
         }
         _ => (),
     }
+    let mut is_remaining_none = false;
     let more_attributes_exist = loop {
         char_count += 1; // Before next to ensure if end of line we take whole value.
         let Some(char) = input_chars.next() else {
+            is_remaining_none = true;
             break false;
         };
         match char {
@@ -441,7 +526,6 @@ fn handle_attribute_value<'a>(
                 break false;
             }
             '\n' => {
-                validate_new_line(input_chars)?;
                 break false;
             }
             _ => {
@@ -454,21 +538,41 @@ fn handle_attribute_value<'a>(
         input[value_start_index..(char_count - 1)]
             .parse::<u64>()
             .ok()
-            .map(|n| ParsedAttributeValue::DecimalInteger(n))
+            .map(ParsedAttributeValue::DecimalInteger)
     } else if still_parsing_float {
         input[value_start_index..(char_count - 1)]
             .parse::<f64>()
             .ok()
-            .map(|n| ParsedAttributeValue::SignedDecimalFloatingPoint(n))
+            .map(ParsedAttributeValue::SignedDecimalFloatingPoint)
     } else {
         None
     };
     if let Some(number_value) = number_value {
-        Ok((more_attributes_exist, number_value, char_count))
+        Ok((
+            more_attributes_exist,
+            ParsedLineSlice {
+                parsed: number_value,
+                remaining: if is_remaining_none {
+                    None
+                } else {
+                    Some(input_chars.as_str())
+                },
+            },
+            char_count,
+        ))
     } else {
         Ok((
             more_attributes_exist,
-            ParsedAttributeValue::UnquotedString(&input[value_start_index..(char_count - 1)]),
+            ParsedLineSlice {
+                parsed: ParsedAttributeValue::UnquotedString(
+                    &input[value_start_index..(char_count - 1)],
+                ),
+                remaining: if is_remaining_none {
+                    None
+                } else {
+                    Some(input_chars.as_str())
+                },
+            },
             char_count,
         ))
     }
@@ -477,8 +581,8 @@ fn handle_attribute_value<'a>(
 fn handle_date_time<'a>(
     input: &'a str,
     mut char_count: usize,
-    mut input_chars: Chars<'_>,
-) -> Result<ParsedTagValue<'a>, &'static str> {
+    mut input_chars: Chars<'a>,
+) -> Result<ParsedLineSlice<'a, ParsedTagValue<'a>>, &'static str> {
     // "2025-06-09t17:53:45z" ==> 11 to t, 14 to :
     if !(char_count == 11 || char_count == 14) {
         return Err("Invalid DateTimeMsec value");
@@ -544,19 +648,22 @@ fn handle_date_time<'a>(
     };
     match time_offset_char {
         'Z' | 'z' => {
-            validate_end_of_line(&mut input_chars)?;
-            Ok(ParsedTagValue::DateTimeMsec(DateTime {
-                date_fullyear,
-                date_month,
-                date_mday,
-                time_hour,
-                time_minute,
-                time_second,
-                timezone_offset: DateTimeTimezoneOffset {
-                    time_hour: 0,
-                    time_minute: 0,
-                },
-            }))
+            let remaining = validate_end_of_line(input_chars)?.remaining;
+            Ok(ParsedLineSlice {
+                parsed: ParsedTagValue::DateTimeMsec(DateTime {
+                    date_fullyear,
+                    date_month,
+                    date_mday,
+                    time_hour,
+                    time_minute,
+                    time_second,
+                    timezone_offset: DateTimeTimezoneOffset {
+                        time_hour: 0,
+                        time_minute: 0,
+                    },
+                }),
+                remaining,
+            })
         }
         _ => {
             let multiplier = if time_offset_char == '-' { -1i8 } else { 1i8 };
@@ -571,72 +678,105 @@ fn handle_date_time<'a>(
             let timeoffset_hour = multiplier * timeoffset_hour;
             input_chars.next();
             input_chars.next();
-            validate_end_of_line(&mut input_chars)?;
+            let remaining = validate_end_of_line(input_chars)?.remaining;
             let Ok(timeoffset_minute) = input[(char_count + 3)..].parse::<u8>() else {
                 return Err("Invalid time offset minute in DateTimeMsec value");
             };
-            Ok(ParsedTagValue::DateTimeMsec(DateTime {
-                date_fullyear,
-                date_month,
-                date_mday,
-                time_hour,
-                time_minute,
-                time_second,
-                timezone_offset: DateTimeTimezoneOffset {
-                    time_hour: timeoffset_hour,
-                    time_minute: timeoffset_minute,
-                },
-            }))
+            Ok(ParsedLineSlice {
+                parsed: ParsedTagValue::DateTimeMsec(DateTime {
+                    date_fullyear,
+                    date_month,
+                    date_mday,
+                    time_hour,
+                    time_minute,
+                    time_second,
+                    timezone_offset: DateTimeTimezoneOffset {
+                        time_hour: timeoffset_hour,
+                        time_minute: timeoffset_minute,
+                    },
+                }),
+                remaining,
+            })
         }
     }
 }
 
-fn handle_type_enum(input: &str) -> Result<ParsedTagValue, &'static str> {
-    if &input[..=2] == "VOD" {
-        Ok(ParsedTagValue::TypeEnum(HlsPlaylistType::Vod))
-    } else if &input[..=4] == "EVENT" {
-        Ok(ParsedTagValue::TypeEnum(HlsPlaylistType::Event))
+fn handle_type_enum(
+    input: &str,
+    char_count: usize,
+) -> Result<ParsedLineSlice<ParsedTagValue>, &'static str> {
+    if char_count == 3 && &input[..=2] == "VOD" {
+        let mut chars = input[2..].chars();
+        chars.next();
+        let remaining = validate_end_of_line(chars)?.remaining;
+        Ok(ParsedLineSlice {
+            parsed: ParsedTagValue::TypeEnum(HlsPlaylistType::Vod),
+            remaining,
+        })
+    } else if char_count == 5 && &input[..=4] == "EVENT" {
+        let mut chars = input[4..].chars();
+        chars.next();
+        let remaining = validate_end_of_line(chars)?.remaining;
+        Ok(ParsedLineSlice {
+            parsed: ParsedTagValue::TypeEnum(HlsPlaylistType::Event),
+            remaining,
+        })
     } else {
         Err("Unexpected end of tag value")
     }
 }
 
-fn handle_float_with_title_on_end_of_line(
-    input: &str,
+fn handle_float_with_title_on_end_of_line<'a>(
+    input: &'a str,
     char_count: usize,
-) -> Result<ParsedTagValue, &'static str> {
+    mut input_chars: Chars<'a>,
+    eol_char: Option<char>,
+) -> Result<ParsedLineSlice<'a, ParsedTagValue<'a>>, &'static str> {
     let duration = match input[..char_count].parse::<f64>() {
         Ok(n) => n,
         Err(_) => {
             return Err("Could not parse decimal float (perhaps too large)");
         }
     };
-    Ok(ParsedTagValue::DecimalFloatingPointWithOptionalTitle(
-        duration, "",
-    ))
+    let parsed = ParsedTagValue::DecimalFloatingPointWithOptionalTitle(duration, "");
+    let remaining = match eol_char {
+        None => None,
+        Some('\n') => Some(input_chars.as_str()),
+        Some('\r') => {
+            validate_carriage_return(&mut input_chars)?;
+            Some(input_chars.as_str())
+        }
+        _ => return Err("Unexpected char on end of line"),
+    };
+    Ok(ParsedLineSlice { parsed, remaining })
 }
 
-fn handle_float_with_title_on_comma(
-    input: &str,
+fn handle_float_with_title_on_comma<'a>(
+    input: &'a str,
     char_count: usize,
-) -> Result<ParsedTagValue, &'static str> {
+    input_chars: Chars<'a>,
+) -> Result<ParsedLineSlice<'a, ParsedTagValue<'a>>, &'static str> {
     let duration = match input[..(char_count - 1)].parse::<f64>() {
         Ok(n) => n,
         Err(_) => {
             return Err("Could not parse decimal float (perhaps too large)");
         }
     };
-    Ok(ParsedTagValue::DecimalFloatingPointWithOptionalTitle(
-        duration,
-        &input[char_count..].trim_end(),
-    ))
+    let rest_of_line = take_until_end_of_line(input_chars)?;
+    Ok(ParsedLineSlice {
+        parsed: ParsedTagValue::DecimalFloatingPointWithOptionalTitle(
+            duration,
+            rest_of_line.parsed,
+        ),
+        remaining: rest_of_line.remaining,
+    })
 }
 
 fn handle_float_with_title_on_period<'a>(
     input: &'a str,
     mut char_count: usize,
-    mut input_chars: Chars<'_>,
-) -> Result<ParsedTagValue<'a>, &'static str> {
+    mut input_chars: Chars<'a>,
+) -> Result<ParsedLineSlice<'a, ParsedTagValue<'a>>, &'static str> {
     let break_char = 'comma_loop: loop {
         let Some(char) = input_chars.next() else {
             break 'comma_loop None;
@@ -656,17 +796,23 @@ fn handle_float_with_title_on_period<'a>(
             // for the duration str slice to capture the last character. This should
             // probably be done more clearly with a dedicated enum.
             char_count += 1;
-            ""
+            ParsedLineSlice {
+                parsed: "",
+                remaining: None,
+            }
         }
-        Some(',') => &input[char_count..].trim_end(),
+        Some(',') => take_until_end_of_line(input_chars)?,
         Some('\r') => {
             validate_carriage_return(&mut input_chars)?;
-            ""
+            ParsedLineSlice {
+                parsed: "",
+                remaining: Some(input_chars.as_str()),
+            }
         }
-        Some('\n') => {
-            validate_new_line(&mut input_chars)?;
-            ""
-        }
+        Some('\n') => ParsedLineSlice {
+            parsed: "",
+            remaining: Some(input_chars.as_str()),
+        },
         Some(_) => return Err("Invalid non-digit character in decimal floating point"),
     };
     let duration = match input[..(char_count - 1)].parse::<f64>() {
@@ -675,34 +821,32 @@ fn handle_float_with_title_on_period<'a>(
             return Err("Could not parse decimal float (perhaps too large)");
         }
     };
-    Ok(ParsedTagValue::DecimalFloatingPointWithOptionalTitle(
-        duration, title,
-    ))
+    Ok(ParsedLineSlice {
+        parsed: ParsedTagValue::DecimalFloatingPointWithOptionalTitle(duration, title.parsed),
+        remaining: title.remaining,
+    })
 }
 
-fn validate_end_of_line(input_chars: &mut Chars<'_>) -> Result<(), &'static str> {
+fn validate_end_of_line<'a>(
+    mut input_chars: Chars<'a>,
+) -> Result<ParsedLineSlice<'a, ()>, &'static str> {
     match input_chars.next() {
-        None => Ok(()),
-        Some('\r') => validate_carriage_return(input_chars),
-        Some('\n') => validate_new_line(input_chars),
+        None => Ok(ParsedLineSlice {
+            parsed: (),
+            remaining: None,
+        }),
+        Some('\r') => {
+            validate_carriage_return(&mut input_chars)?;
+            Ok(ParsedLineSlice {
+                parsed: (),
+                remaining: Some(input_chars.as_str()),
+            })
+        }
+        Some('\n') => Ok(ParsedLineSlice {
+            parsed: (),
+            remaining: Some(input_chars.as_str()),
+        }),
         _ => Err("Expected end of line"),
-    }
-}
-
-fn validate_carriage_return(input_chars: &mut Chars<'_>) -> Result<(), &'static str> {
-    let Some('\n') = input_chars.next() else {
-        return Err("Unexpected carriage return without following line feed");
-    };
-    let None = input_chars.next() else {
-        return Err("Unexpected char after line feed");
-    };
-    Ok(())
-}
-
-fn validate_new_line(input_chars: &mut Chars<'_>) -> Result<(), &'static str> {
-    match input_chars.next() {
-        Some(_) => Err("Unexpected carriage return without following line feed"),
-        None => Ok(()),
     }
 }
 
@@ -716,24 +860,27 @@ mod tests {
     fn type_enum() {
         assert_eq!(
             Ok(ParsedTagValue::TypeEnum(HlsPlaylistType::Event)),
-            parse("EVENT")
+            parse("EVENT").map(|p| p.parsed)
         );
         assert_eq!(
             Ok(ParsedTagValue::TypeEnum(HlsPlaylistType::Vod)),
-            parse("VOD")
+            parse("VOD").map(|p| p.parsed)
         );
     }
 
     #[test]
     fn decimal_integer() {
-        assert_eq!(Ok(ParsedTagValue::DecimalInteger(42)), parse("42"));
+        assert_eq!(
+            Ok(ParsedTagValue::DecimalInteger(42)),
+            parse("42").map(|p| p.parsed)
+        );
     }
 
     #[test]
     fn decimal_integer_range() {
         assert_eq!(
             Ok(ParsedTagValue::DecimalIntegerRange(42, 42)),
-            parse("42@42")
+            parse("42@42").map(|p| p.parsed)
         );
     }
 
@@ -744,52 +891,52 @@ mod tests {
             Ok(ParsedTagValue::DecimalFloatingPointWithOptionalTitle(
                 42.0, ""
             )),
-            parse("42.0")
+            parse("42.0").map(|p| p.parsed)
         );
         assert_eq!(
             Ok(ParsedTagValue::DecimalFloatingPointWithOptionalTitle(
                 42.42, ""
             )),
-            parse("42.42")
+            parse("42.42").map(|p| p.parsed)
         );
         assert_eq!(
             Ok(ParsedTagValue::DecimalFloatingPointWithOptionalTitle(
                 42.0, ""
             )),
-            parse("42,")
+            parse("42,").map(|p| p.parsed)
         );
         assert_eq!(
             Ok(ParsedTagValue::DecimalFloatingPointWithOptionalTitle(
                 42.0,
                 "=ATTRIBUTE-VALUE"
             )),
-            parse("42,=ATTRIBUTE-VALUE")
+            parse("42,=ATTRIBUTE-VALUE").map(|p| p.parsed)
         );
         // Negative tests
         assert_eq!(
             Ok(ParsedTagValue::DecimalFloatingPointWithOptionalTitle(
                 -42.0, ""
             )),
-            parse("-42.0")
+            parse("-42.0").map(|p| p.parsed)
         );
         assert_eq!(
             Ok(ParsedTagValue::DecimalFloatingPointWithOptionalTitle(
                 -42.42, ""
             )),
-            parse("-42.42")
+            parse("-42.42").map(|p| p.parsed)
         );
         assert_eq!(
             Ok(ParsedTagValue::DecimalFloatingPointWithOptionalTitle(
                 -42.0, ""
             )),
-            parse("-42,")
+            parse("-42,").map(|p| p.parsed)
         );
         assert_eq!(
             Ok(ParsedTagValue::DecimalFloatingPointWithOptionalTitle(
                 -42.0,
                 "=ATTRIBUTE-VALUE"
             )),
-            parse("-42,=ATTRIBUTE-VALUE")
+            parse("-42,=ATTRIBUTE-VALUE").map(|p| p.parsed)
         );
     }
 
@@ -808,7 +955,7 @@ mod tests {
                     time_minute: 0,
                 }
             })),
-            parse("2025-06-03T17:56:42.123Z")
+            parse("2025-06-03T17:56:42.123Z").map(|p| p.parsed)
         );
         assert_eq!(
             Ok(ParsedTagValue::DateTimeMsec(DateTime {
@@ -823,7 +970,7 @@ mod tests {
                     time_minute: 0,
                 }
             })),
-            parse("2025-06-03T17:56:42.123+01:00")
+            parse("2025-06-03T17:56:42.123+01:00").map(|p| p.parsed)
         );
         assert_eq!(
             Ok(ParsedTagValue::DateTimeMsec(DateTime {
@@ -838,7 +985,7 @@ mod tests {
                     time_minute: 0,
                 }
             })),
-            parse("2025-06-03T17:56:42.123-05:00")
+            parse("2025-06-03T17:56:42.123-05:00").map(|p| p.parsed)
         );
     }
 
@@ -856,7 +1003,7 @@ mod tests {
                         "NAME",
                         ParsedAttributeValue::DecimalInteger(123)
                     )]))),
-                    parse("NAME=123")
+                    parse("NAME=123").map(|p| p.parsed)
                 );
             }
 
@@ -867,7 +1014,7 @@ mod tests {
                         ("NAME", ParsedAttributeValue::DecimalInteger(123)),
                         ("NEXT-NAME", ParsedAttributeValue::DecimalInteger(456))
                     ]))),
-                    parse("NAME=123,NEXT-NAME=456")
+                    parse("NAME=123,NEXT-NAME=456").map(|p| p.parsed)
                 );
             }
         }
@@ -883,7 +1030,7 @@ mod tests {
                         "NAME",
                         ParsedAttributeValue::SignedDecimalFloatingPoint(42.42)
                     )]))),
-                    parse("NAME=42.42")
+                    parse("NAME=42.42").map(|p| p.parsed)
                 );
             }
 
@@ -894,7 +1041,7 @@ mod tests {
                         "NAME",
                         ParsedAttributeValue::SignedDecimalFloatingPoint(-42.0)
                     )]))),
-                    parse("NAME=-42")
+                    parse("NAME=-42").map(|p| p.parsed)
                 );
             }
 
@@ -905,7 +1052,7 @@ mod tests {
                         "NAME",
                         ParsedAttributeValue::SignedDecimalFloatingPoint(-42.42)
                     )]))),
-                    parse("NAME=-42.42")
+                    parse("NAME=-42.42").map(|p| p.parsed)
                 );
             }
 
@@ -922,7 +1069,7 @@ mod tests {
                             ParsedAttributeValue::SignedDecimalFloatingPoint(84.84)
                         )
                     ]))),
-                    parse("NAME=42.42,NEXT-NAME=84.84")
+                    parse("NAME=42.42,NEXT-NAME=84.84").map(|p| p.parsed)
                 );
             }
 
@@ -939,7 +1086,7 @@ mod tests {
                             ParsedAttributeValue::SignedDecimalFloatingPoint(-42.0)
                         )
                     ]))),
-                    parse("NAME=-42,NEXT-NAME=-42")
+                    parse("NAME=-42,NEXT-NAME=-42").map(|p| p.parsed)
                 );
             }
 
@@ -956,7 +1103,7 @@ mod tests {
                             ParsedAttributeValue::SignedDecimalFloatingPoint(-84.84)
                         )
                     ]))),
-                    parse("NAME=-42.42,NEXT-NAME=-84.84")
+                    parse("NAME=-42.42,NEXT-NAME=-84.84").map(|p| p.parsed)
                 );
             }
         }
@@ -972,7 +1119,7 @@ mod tests {
                         "NAME",
                         ParsedAttributeValue::QuotedString("Hello, World!")
                     )]))),
-                    parse("NAME=\"Hello, World!\"")
+                    parse("NAME=\"Hello, World!\"").map(|p| p.parsed)
                 );
             }
 
@@ -983,7 +1130,7 @@ mod tests {
                         ("NAME", ParsedAttributeValue::QuotedString("Hello,")),
                         ("NEXT-NAME", ParsedAttributeValue::QuotedString("World!"))
                     ]))),
-                    parse("NAME=\"Hello,\",NEXT-NAME=\"World!\"")
+                    parse("NAME=\"Hello,\",NEXT-NAME=\"World!\"").map(|p| p.parsed)
                 );
             }
         }
@@ -999,7 +1146,7 @@ mod tests {
                         "NAME",
                         ParsedAttributeValue::UnquotedString("PQ")
                     )]))),
-                    parse("NAME=PQ")
+                    parse("NAME=PQ").map(|p| p.parsed)
                 );
             }
 
@@ -1010,7 +1157,7 @@ mod tests {
                         ("NAME", ParsedAttributeValue::UnquotedString("PQ")),
                         ("NEXT-NAME", ParsedAttributeValue::UnquotedString("HLG"))
                     ]))),
-                    parse("NAME=PQ,NEXT-NAME=HLG")
+                    parse("NAME=PQ,NEXT-NAME=HLG").map(|p| p.parsed)
                 );
             }
         }

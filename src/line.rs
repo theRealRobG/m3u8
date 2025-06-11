@@ -5,6 +5,7 @@ use crate::{
         known::{self, IsKnownName, NoCustomTag, ParsedTag},
         unknown,
     },
+    utils::take_until_end_of_line,
 };
 use std::{cmp::PartialEq, fmt::Debug};
 
@@ -21,14 +22,26 @@ where
     Blank,
 }
 
-pub fn parse<'a>(input: &'a str, options: &ParsingOptions) -> Result<HlsLine<'a>, &'static str> {
+#[derive(Debug, PartialEq)]
+pub struct ParsedLineSlice<'a, T>
+where
+    T: Debug + PartialEq,
+{
+    pub parsed: T,
+    pub remaining: Option<&'a str>,
+}
+
+pub fn parse<'a>(
+    input: &'a str,
+    options: &ParsingOptions,
+) -> Result<ParsedLineSlice<'a, HlsLine<'a>>, &'static str> {
     parse_with_custom::<NoCustomTag>(input, options)
 }
 
 pub fn parse_with_custom<'a, 'b, CustomTag>(
     input: &'a str,
     options: &'b ParsingOptions,
-) -> Result<HlsLine<'a, CustomTag>, &'static str>
+) -> Result<ParsedLineSlice<'a, HlsLine<'a, CustomTag>>, &'static str>
 where
     CustomTag: TryFrom<ParsedTag<'a>, Error = &'static str> + IsKnownName + Debug + PartialEq,
 {
@@ -37,36 +50,62 @@ where
     match chars.next() {
         Some('#') => {
             let Some('E') = chars.next() else {
-                return Ok(HlsLine::Comment(&input[1..]));
+                let comment = take_until_end_of_line(input[1..].chars())?;
+                return Ok(ParsedLineSlice {
+                    parsed: HlsLine::Comment(comment.parsed),
+                    remaining: comment.remaining,
+                });
             };
             let Some('X') = chars.next() else {
-                return Ok(HlsLine::Comment(&input[1..]));
+                let comment = take_until_end_of_line(input[1..].chars())?;
+                return Ok(ParsedLineSlice {
+                    parsed: HlsLine::Comment(comment.parsed),
+                    remaining: comment.remaining,
+                });
             };
             let Some('T') = chars.next() else {
-                return Ok(HlsLine::Comment(&input[1..]));
+                let comment = take_until_end_of_line(input[1..].chars())?;
+                return Ok(ParsedLineSlice {
+                    parsed: HlsLine::Comment(comment.parsed),
+                    remaining: comment.remaining,
+                });
             };
             let input = chars.as_str();
             let tag = tag::unknown::parse(input)?;
-            if options.is_known_name(tag.name) || CustomTag::is_known_name(tag.name) {
-                let tag_value = tag::value::parse(tag.value)?;
-                let parsed_tag = ParsedTag {
-                    name: tag.name,
-                    value: tag_value,
+            if options.is_known_name(tag.parsed.name) || CustomTag::is_known_name(tag.parsed.name) {
+                let value_slice = match tag.remaining {
+                    None => ParsedLineSlice {
+                        parsed: tag::value::ParsedTagValue::Empty,
+                        remaining: None,
+                    },
+                    Some(remaining) => tag::value::parse(remaining)?,
                 };
-                Ok(HlsLine::KnownTag(known::Tag::try_from(parsed_tag)?))
+                let parsed_tag = ParsedTag {
+                    name: tag.parsed.name,
+                    value: value_slice.parsed,
+                };
+                Ok(ParsedLineSlice {
+                    parsed: HlsLine::KnownTag(known::Tag::try_from(parsed_tag)?),
+                    remaining: value_slice.remaining,
+                })
             } else {
-                Ok(HlsLine::UnknownTag(tag))
+                Ok(ParsedLineSlice {
+                    parsed: HlsLine::UnknownTag(tag.parsed),
+                    remaining: tag.remaining,
+                })
             }
         }
-        None => Ok(HlsLine::Blank),
-        Some('\r') | Some('\n') => {
-            if chars.all(|c| c.is_ascii_whitespace()) {
-                Ok(HlsLine::Blank)
-            } else {
-                Err("Unexpected whitespace in URI line")
-            }
+        None => Ok(ParsedLineSlice {
+            parsed: HlsLine::Blank,
+            remaining: None,
+        }),
+        _ => {
+            let rest_of_line = take_until_end_of_line(input.chars())?;
+            Ok(ParsedLineSlice {
+                parsed: HlsLine::Uri(rest_of_line.parsed),
+                remaining: rest_of_line.remaining,
+            })
         }
-        _ => Ok(HlsLine::Uri(input)),
     }
 }
 
@@ -83,20 +122,23 @@ mod tests {
     fn uri_line() {
         assert_eq!(
             Ok(HlsLine::Uri("hello/world.m3u8")),
-            parse("hello/world.m3u8", &ParsingOptions::default())
+            parse("hello/world.m3u8", &ParsingOptions::default()).map(|p| p.parsed)
         )
     }
 
     #[test]
     fn blank_line() {
-        assert_eq!(Ok(HlsLine::Blank), parse("", &ParsingOptions::default()));
+        assert_eq!(
+            Ok(HlsLine::Blank),
+            parse("", &ParsingOptions::default()).map(|p| p.parsed)
+        );
     }
 
     #[test]
     fn comment() {
         assert_eq!(
             Ok(HlsLine::Comment("Comment")),
-            parse("#Comment", &ParsingOptions::default())
+            parse("#Comment", &ParsingOptions::default()).map(|p| p.parsed)
         );
     }
 
@@ -106,7 +148,7 @@ mod tests {
             Ok(HlsLine::KnownTag(known::Tag::Hls(
                 draft_pantos_hls::Tag::M3u(M3u)
             ))),
-            parse("#EXTM3U", &ParsingOptions::default())
+            parse("#EXTM3U", &ParsingOptions::default()).map(|p| p.parsed)
         );
     }
 
@@ -173,6 +215,7 @@ mod tests {
                 "#EXT-X-TEST-TAG:TYPE=GREETING,MESSAGE=\"Hello, World!\",TIMES=42",
                 &ParsingOptions::default()
             )
+            .map(|p| p.parsed)
         );
     }
 
@@ -185,13 +228,13 @@ mod tests {
                     precise: false
                 })
             ))),
-            parse("#EXT-X-START:TIME-OFFSET=-18", &ParsingOptions::default())
+            parse("#EXT-X-START:TIME-OFFSET=-18", &ParsingOptions::default()).map(|p| p.parsed)
         );
         assert_eq!(
-            Ok(HlsLine::UnknownTag(unknown::Tag {
-                name: "-X-START",
-                value: "TIME-OFFSET=-18"
-            })),
+            Ok(HlsLine::UnknownTag(unknown::Tag::new(
+                "-X-START",
+                Some("TIME-OFFSET=-18"),
+            ))),
             parse(
                 "#EXT-X-START:TIME-OFFSET=-18",
                 &ParsingOptionsBuilder::new()
@@ -199,6 +242,7 @@ mod tests {
                     .without_parsing_for_start()
                     .build()
             )
+            .map(|p| p.parsed)
         );
     }
 }

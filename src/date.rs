@@ -37,8 +37,8 @@ pub fn parse(input: &str) -> Result<DateTime, &'static str> {
 ///
 /// The `input_chars` are expected to have reached either the lowercase `t` separator or the first
 /// `:` separator of the time (after the time_hour value).
-pub fn handle_partially_parsed_date_time<'a>(
-    input: &'a str,
+pub fn handle_partially_parsed_date_time(
+    input: &str,
     mut char_count: usize,
     mut input_chars: Chars<'_>,
 ) -> Result<DateTime, &'static str> {

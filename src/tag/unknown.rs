@@ -1,30 +1,94 @@
+use crate::line::ParsedLineSlice;
+use std::fmt::Debug;
+
 #[derive(Debug, PartialEq)]
 pub struct Tag<'a> {
     pub name: &'a str,
-    pub value: &'a str,
+    remaining: Option<&'a str>,
 }
 
-pub fn parse(input: &str) -> Result<Tag, &'static str> {
+impl<'a> Tag<'a> {
+    pub fn new(name: &'a str, remaining: Option<&'a str>) -> Self {
+        Self { name, remaining }
+    }
+
+    pub fn value(&self) -> Result<ParsedLineSlice<'a, Option<&'a str>>, &'static str> {
+        let Some(remaining) = self.remaining else {
+            return Ok(ParsedLineSlice {
+                parsed: None,
+                remaining: None,
+            });
+        };
+        let mut chars = remaining.chars();
+        let mut iterations = 0usize;
+        loop {
+            iterations += 1;
+            let Some(char) = chars.next() else {
+                return Ok(ParsedLineSlice {
+                    parsed: Some(&remaining[..(iterations - 1)]),
+                    remaining: None,
+                });
+            };
+            match char {
+                '\r' => {
+                    let Some('\n') = chars.next() else {
+                        return Err("Unsupported carriage return without line feed");
+                    };
+                    return Ok(ParsedLineSlice {
+                        parsed: Some(&remaining[..(iterations - 1)]),
+                        remaining: Some(chars.as_str()),
+                    });
+                }
+                '\n' => {
+                    return Ok(ParsedLineSlice {
+                        parsed: Some(&remaining[..(iterations - 1)]),
+                        remaining: Some(chars.as_str()),
+                    });
+                }
+                _ => (),
+            }
+        }
+    }
+}
+
+pub fn parse(input: &str) -> Result<ParsedLineSlice<Tag>, &'static str> {
+    if input.is_empty() {
+        return Err("Unexpected empty input for parsing tag name");
+    };
     let mut chars = input.chars();
     let mut iterations = 0usize;
-    let value_is_some = loop {
+    loop {
         iterations += 1;
         let Some(char) = chars.next() else {
-            break false;
+            let name = &input[..(iterations - 1)];
+            let remaining = None;
+            return Ok(ParsedLineSlice {
+                parsed: Tag { name, remaining },
+                remaining,
+            });
         };
         match char {
-            ':' => break true,
-            '\r' | '\n' => break false,
+            ':' | '\n' => {
+                let name = &input[..(iterations - 1)];
+                let remaining = Some(chars.as_str());
+                return Ok(ParsedLineSlice {
+                    parsed: Tag { name, remaining },
+                    remaining,
+                });
+            }
+            '\r' => {
+                let Some('\n') = chars.next() else {
+                    return Err("Unsupported carriage return without line feed");
+                };
+                let name = &input[..(iterations - 1)];
+                let remaining = Some(chars.as_str());
+                return Ok(ParsedLineSlice {
+                    parsed: Tag { name, remaining },
+                    remaining,
+                });
+            }
             _ => (),
         }
-    };
-    let name = &input[..(iterations - 1)];
-    if value_is_some {
-        let value = &input.trim_end()[iterations..];
-        Ok(Tag { name, value })
-    } else {
-        let value = "";
-        Ok(Tag { name, value })
     }
 }
 
@@ -34,25 +98,129 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     #[test]
+    fn tag_value_empty_when_remaining_none() {
+        let tag = Tag {
+            name: "-X-TEST",
+            remaining: None,
+        };
+        assert_eq!(
+            Ok(ParsedLineSlice {
+                parsed: None,
+                remaining: None
+            }),
+            tag.value()
+        );
+    }
+
+    #[test]
+    fn tag_value_empty_when_remaining_is_empty() {
+        let tag = Tag {
+            name: "-X-TEST",
+            remaining: Some(""),
+        };
+        assert_eq!(
+            Ok(ParsedLineSlice {
+                parsed: Some(""),
+                remaining: None
+            }),
+            tag.value()
+        );
+    }
+
+    #[test]
+    fn tag_value_some_when_remaining_is_some() {
+        let tag = Tag {
+            name: "-X-TEST",
+            remaining: Some("42"),
+        };
+        assert_eq!(
+            Ok(ParsedLineSlice {
+                parsed: Some("42"),
+                remaining: None
+            }),
+            tag.value()
+        );
+    }
+
+    #[test]
+    fn tag_value_err_when_cr_with_no_lf() {
+        let tag = Tag {
+            name: "-X-TEST",
+            remaining: Some("42\r"),
+        };
+        assert_eq!(
+            Err("Unsupported carriage return without line feed"),
+            tag.value()
+        );
+        let tag = Tag {
+            name: "-X-TEST",
+            remaining: Some("42\r#EXT-X-NEW-TEST"),
+        };
+        assert_eq!(
+            Err("Unsupported carriage return without line feed"),
+            tag.value()
+        );
+    }
+
+    #[test]
+    fn tag_value_remaining_is_some_when_split_by_crlf() {
+        let tag = Tag {
+            name: "-X-TEST",
+            remaining: Some("42\r\n#EXT-X-NEW-TEST\r\n"),
+        };
+        assert_eq!(
+            Ok(ParsedLineSlice {
+                parsed: Some("42"),
+                remaining: Some("#EXT-X-NEW-TEST\r\n")
+            }),
+            tag.value()
+        );
+    }
+
+    #[test]
+    fn tag_value_remaining_is_some_when_split_by_lf() {
+        let tag = Tag {
+            name: "-X-TEST",
+            remaining: Some("42\n#EXT-X-NEW-TEST\n"),
+        };
+        assert_eq!(
+            Ok(ParsedLineSlice {
+                parsed: Some("42"),
+                remaining: Some("#EXT-X-NEW-TEST\n")
+            }),
+            tag.value()
+        );
+    }
+
+    #[test]
     fn parses_tag_with_no_value() {
         assert_eq!(
-            Ok(Tag {
-                name: "-TEST-TAG",
-                value: ""
+            Ok(ParsedLineSlice {
+                parsed: Tag {
+                    name: "-TEST-TAG",
+                    remaining: None
+                },
+                remaining: None
             }),
             parse("-TEST-TAG")
         );
         assert_eq!(
-            Ok(Tag {
-                name: "-TEST-TAG",
-                value: ""
+            Ok(ParsedLineSlice {
+                parsed: Tag {
+                    name: "-TEST-TAG",
+                    remaining: Some("")
+                },
+                remaining: Some("")
             }),
             parse("-TEST-TAG\r\n")
         );
         assert_eq!(
-            Ok(Tag {
-                name: "-TEST-TAG",
-                value: ""
+            Ok(ParsedLineSlice {
+                parsed: Tag {
+                    name: "-TEST-TAG",
+                    remaining: Some("")
+                },
+                remaining: Some("")
             }),
             parse("-TEST-TAG\n")
         );
@@ -61,23 +229,32 @@ mod tests {
     #[test]
     fn parses_tag_with_value() {
         assert_eq!(
-            Ok(Tag {
-                name: "-TEST-TAG",
-                value: "42"
+            Ok(ParsedLineSlice {
+                parsed: Tag {
+                    name: "-TEST-TAG",
+                    remaining: Some("42")
+                },
+                remaining: Some("42")
             }),
             parse("-TEST-TAG:42")
         );
         assert_eq!(
-            Ok(Tag {
-                name: "-TEST-TAG",
-                value: "42"
+            Ok(ParsedLineSlice {
+                parsed: Tag {
+                    name: "-TEST-TAG",
+                    remaining: Some("42\r\n")
+                },
+                remaining: Some("42\r\n")
             }),
             parse("-TEST-TAG:42\r\n")
         );
         assert_eq!(
-            Ok(Tag {
-                name: "-TEST-TAG",
-                value: "42"
+            Ok(ParsedLineSlice {
+                parsed: Tag {
+                    name: "-TEST-TAG",
+                    remaining: Some("42\n")
+                },
+                remaining: Some("42\n")
             }),
             parse("-TEST-TAG:42\n")
         );
