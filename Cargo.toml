@@ -13,3 +13,6 @@ pretty_assertions = "1.4.1"
 [[bench]]
 name = "line_parse_bench"
 harness = false
+
+[profile.bench]
+debug = true

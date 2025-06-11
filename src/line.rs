@@ -22,6 +22,63 @@ where
     Blank,
 }
 
+pub fn another_thing() {
+    println!("Hello, World!");
+    println!("Hello, World!");
+    println!("Hello, World!");
+    println!("Hello, World!");
+    println!("Hello, World!");
+    println!("Hello, World!");
+    println!("Hello, World!");
+    println!("Hello, World!");
+    println!("Hello, World!");
+    println!("Hello, World!");
+    println!("Hello, World!");
+    println!("Hello, World!");
+    println!("Hello, World!");
+    println!("Hello, World!");
+    // println!("Hello, World!");
+    //
+    // Uncommenting the last println! results in a 20% (100µs) degradation in time with the
+    // line_parse_bench. If I remove the `[profile.bench]` section from Cargo.toml then it only
+    // requires 2 lines of println!.
+    //
+    // I've captured the difference in two flame graphs:
+    //   - flamegraph-500µs.svg
+    //   - flamegraph-600µs.svg
+    //
+    // The difference seems to be that in the faster time there are no calls to
+    // `<nom::bytes::Tag<T,Error> as nom::internal::Parser<I>>::process` nor
+    // `m3u8::tag::unknown::parse`, which suggests to me that those were being inlined, and are no
+    // longer being inlined after uncommenting the last println! above.
+    //
+    // Can someone confirm that my interpretation is correct? Is this the main reason for the slow
+    // down? And why is there this difference in inlining? And why does the setting of
+    // `profile.bench.debug = true` increase the number of necessary println! statements before the
+    // slow down?
+    //
+    // More info:
+    //   - I run the bench via `cargo bench`.
+    //   - I captured the flamegraph via `cargo flamegraph --bench line_parse_bench -- --bench`.
+    //   - `cargo install --list` shows
+    //     flamegraph v0.6.8:
+    //         cargo-flamegraph
+    //         flamegraph
+    //   - My hardware:
+    //       - Model Name: MacBook Pro
+    //       - Model Identifier: MacBookPro18,2
+    //       - Chip: Apple M1 Max
+    //       - Total Number of Cores: 10 (8 performance and 2 efficiency)
+    //       - Memory: 64 GB
+    //       - System Firmware Version: 11881.101.1
+    //       - OS Loader Version: 11881.101.1
+    //   - My software:
+    //       - System Version: macOS 15.4.1 (24E263)
+    //       - Kernel Version: Darwin 24.4.0
+    //   - Time taken with last println! commented consistently around 500µs.
+    //   - Time taken with last println! uncommented consistently around 600µs.
+}
+
 pub fn parse<'a>(input: &'a str, options: &ParsingOptions) -> IResult<&'a str, HlsLine<'a>> {
     parse_with_custom::<NoCustomTag>(input, options)
 }
