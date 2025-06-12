@@ -344,7 +344,7 @@ pub fn new_parse(input: &str) -> Result<ParsedLineSlice<ParsedTagValue>, &'stati
             remaining,
         })
     } else if parsing_enum {
-        match count {
+        match end_index {
             3 => {
                 if &input[..3] == "VOD" {
                     Ok(ParsedLineSlice {
@@ -478,7 +478,8 @@ fn parse_date_time_bytes<'a>(
                 return Err("Unexpected characteres after timezone in DateTimeMsec value");
             };
             let remaining = remaining.remaining;
-            let Ok(timeoffset_minute) = input[(byte_count + 3)..].parse::<u8>() else {
+            let Ok(timeoffset_minute) = input[(byte_count + 3)..(byte_count + 5)].parse::<u8>()
+            else {
                 return Err("Invalid time offset minute in DateTimeMsec value");
             };
             Ok(ParsedLineSlice {
@@ -647,135 +648,165 @@ mod bytes_tests {
 
     #[test]
     fn type_enum() {
-        assert_eq!(
-            Ok(ParsedTagValue::TypeEnum(HlsPlaylistType::Event)),
-            new_parse("EVENT").map(|p| p.parsed)
-        );
-        assert_eq!(
-            Ok(ParsedTagValue::TypeEnum(HlsPlaylistType::Vod)),
-            new_parse("VOD").map(|p| p.parsed)
-        );
+        test_str_and_with_crlf_and_with_lf("EVENT", |str| {
+            assert_eq!(
+                Ok(ParsedTagValue::TypeEnum(HlsPlaylistType::Event)),
+                new_parse(str).map(|p| p.parsed)
+            );
+        });
+        test_str_and_with_crlf_and_with_lf("VOD", |str| {
+            assert_eq!(
+                Ok(ParsedTagValue::TypeEnum(HlsPlaylistType::Vod)),
+                new_parse(str).map(|p| p.parsed)
+            );
+        });
     }
 
     #[test]
     fn decimal_integer() {
-        assert_eq!(
-            Ok(ParsedTagValue::DecimalInteger(42)),
-            new_parse("42").map(|p| p.parsed)
-        );
+        test_str_and_with_crlf_and_with_lf("42", |str| {
+            assert_eq!(
+                Ok(ParsedTagValue::DecimalInteger(42)),
+                new_parse(str).map(|p| p.parsed)
+            );
+        });
     }
 
     #[test]
     fn decimal_integer_range() {
-        assert_eq!(
-            Ok(ParsedTagValue::DecimalIntegerRange(42, 42)),
-            new_parse("42@42").map(|p| p.parsed)
-        );
+        test_str_and_with_crlf_and_with_lf("42@42", |str| {
+            assert_eq!(
+                Ok(ParsedTagValue::DecimalIntegerRange(42, 42)),
+                new_parse(str).map(|p| p.parsed)
+            );
+        });
     }
 
     #[test]
     fn decimal_floating_point_with_optional_title() {
         // Positive tests
-        assert_eq!(
-            Ok(ParsedTagValue::DecimalFloatingPointWithOptionalTitle(
-                42.0, ""
-            )),
-            new_parse("42.0").map(|p| p.parsed)
-        );
-        assert_eq!(
-            Ok(ParsedTagValue::DecimalFloatingPointWithOptionalTitle(
-                42.42, ""
-            )),
-            new_parse("42.42").map(|p| p.parsed)
-        );
-        assert_eq!(
-            Ok(ParsedTagValue::DecimalFloatingPointWithOptionalTitle(
-                42.0, ""
-            )),
-            new_parse("42,").map(|p| p.parsed)
-        );
-        assert_eq!(
-            Ok(ParsedTagValue::DecimalFloatingPointWithOptionalTitle(
-                42.0,
-                "=ATTRIBUTE-VALUE"
-            )),
-            new_parse("42,=ATTRIBUTE-VALUE").map(|p| p.parsed)
-        );
+        test_str_and_with_crlf_and_with_lf("42.0", |str| {
+            assert_eq!(
+                Ok(ParsedTagValue::DecimalFloatingPointWithOptionalTitle(
+                    42.0, ""
+                )),
+                new_parse(str).map(|p| p.parsed)
+            );
+        });
+        test_str_and_with_crlf_and_with_lf("42.42", |str| {
+            assert_eq!(
+                Ok(ParsedTagValue::DecimalFloatingPointWithOptionalTitle(
+                    42.42, ""
+                )),
+                new_parse(str).map(|p| p.parsed)
+            );
+        });
+        test_str_and_with_crlf_and_with_lf("42,", |str| {
+            assert_eq!(
+                Ok(ParsedTagValue::DecimalFloatingPointWithOptionalTitle(
+                    42.0, ""
+                )),
+                new_parse(str).map(|p| p.parsed)
+            );
+        });
+        test_str_and_with_crlf_and_with_lf("42,=ATTRIBUTE-VALUE", |str| {
+            assert_eq!(
+                Ok(ParsedTagValue::DecimalFloatingPointWithOptionalTitle(
+                    42.0,
+                    "=ATTRIBUTE-VALUE"
+                )),
+                new_parse(str).map(|p| p.parsed)
+            );
+        });
         // Negative tests
-        assert_eq!(
-            Ok(ParsedTagValue::DecimalFloatingPointWithOptionalTitle(
-                -42.0, ""
-            )),
-            new_parse("-42.0").map(|p| p.parsed)
-        );
-        assert_eq!(
-            Ok(ParsedTagValue::DecimalFloatingPointWithOptionalTitle(
-                -42.42, ""
-            )),
-            new_parse("-42.42").map(|p| p.parsed)
-        );
-        assert_eq!(
-            Ok(ParsedTagValue::DecimalFloatingPointWithOptionalTitle(
-                -42.0, ""
-            )),
-            new_parse("-42,").map(|p| p.parsed)
-        );
-        assert_eq!(
-            Ok(ParsedTagValue::DecimalFloatingPointWithOptionalTitle(
-                -42.0,
-                "=ATTRIBUTE-VALUE"
-            )),
-            new_parse("-42,=ATTRIBUTE-VALUE").map(|p| p.parsed)
-        );
+        test_str_and_with_crlf_and_with_lf("-42.0", |str| {
+            assert_eq!(
+                Ok(ParsedTagValue::DecimalFloatingPointWithOptionalTitle(
+                    -42.0, ""
+                )),
+                new_parse(str).map(|p| p.parsed)
+            );
+        });
+        test_str_and_with_crlf_and_with_lf("-42.42", |str| {
+            assert_eq!(
+                Ok(ParsedTagValue::DecimalFloatingPointWithOptionalTitle(
+                    -42.42, ""
+                )),
+                new_parse(str).map(|p| p.parsed)
+            );
+        });
+        test_str_and_with_crlf_and_with_lf("-42,", |str| {
+            assert_eq!(
+                Ok(ParsedTagValue::DecimalFloatingPointWithOptionalTitle(
+                    -42.0, ""
+                )),
+                new_parse(str).map(|p| p.parsed)
+            );
+        });
+        test_str_and_with_crlf_and_with_lf("-42,=ATTRIBUTE-VALUE", |str| {
+            assert_eq!(
+                Ok(ParsedTagValue::DecimalFloatingPointWithOptionalTitle(
+                    -42.0,
+                    "=ATTRIBUTE-VALUE"
+                )),
+                new_parse(str).map(|p| p.parsed)
+            );
+        });
     }
 
     #[test]
     fn date_time_msec() {
-        assert_eq!(
-            Ok(ParsedTagValue::DateTimeMsec(DateTime {
-                date_fullyear: 2025,
-                date_month: 6,
-                date_mday: 3,
-                time_hour: 17,
-                time_minute: 56,
-                time_second: 42.123,
-                timezone_offset: DateTimeTimezoneOffset {
-                    time_hour: 0,
-                    time_minute: 0,
-                }
-            })),
-            new_parse("2025-06-03T17:56:42.123Z").map(|p| p.parsed)
-        );
-        assert_eq!(
-            Ok(ParsedTagValue::DateTimeMsec(DateTime {
-                date_fullyear: 2025,
-                date_month: 6,
-                date_mday: 3,
-                time_hour: 17,
-                time_minute: 56,
-                time_second: 42.123,
-                timezone_offset: DateTimeTimezoneOffset {
-                    time_hour: 1,
-                    time_minute: 0,
-                }
-            })),
-            new_parse("2025-06-03T17:56:42.123+01:00").map(|p| p.parsed)
-        );
-        assert_eq!(
-            Ok(ParsedTagValue::DateTimeMsec(DateTime {
-                date_fullyear: 2025,
-                date_month: 6,
-                date_mday: 3,
-                time_hour: 17,
-                time_minute: 56,
-                time_second: 42.123,
-                timezone_offset: DateTimeTimezoneOffset {
-                    time_hour: -5,
-                    time_minute: 0,
-                }
-            })),
-            new_parse("2025-06-03T17:56:42.123-05:00").map(|p| p.parsed)
-        );
+        test_str_and_with_crlf_and_with_lf("2025-06-03T17:56:42.123Z", |str| {
+            assert_eq!(
+                Ok(ParsedTagValue::DateTimeMsec(DateTime {
+                    date_fullyear: 2025,
+                    date_month: 6,
+                    date_mday: 3,
+                    time_hour: 17,
+                    time_minute: 56,
+                    time_second: 42.123,
+                    timezone_offset: DateTimeTimezoneOffset {
+                        time_hour: 0,
+                        time_minute: 0,
+                    }
+                })),
+                new_parse(str).map(|p| p.parsed)
+            );
+        });
+        test_str_and_with_crlf_and_with_lf("2025-06-03T17:56:42.123+01:00", |str| {
+            assert_eq!(
+                Ok(ParsedTagValue::DateTimeMsec(DateTime {
+                    date_fullyear: 2025,
+                    date_month: 6,
+                    date_mday: 3,
+                    time_hour: 17,
+                    time_minute: 56,
+                    time_second: 42.123,
+                    timezone_offset: DateTimeTimezoneOffset {
+                        time_hour: 1,
+                        time_minute: 0,
+                    }
+                })),
+                new_parse(str).map(|p| p.parsed)
+            );
+        });
+        test_str_and_with_crlf_and_with_lf("2025-06-03T17:56:42.123-05:00", |str| {
+            assert_eq!(
+                Ok(ParsedTagValue::DateTimeMsec(DateTime {
+                    date_fullyear: 2025,
+                    date_month: 6,
+                    date_mday: 3,
+                    time_hour: 17,
+                    time_minute: 56,
+                    time_second: 42.123,
+                    timezone_offset: DateTimeTimezoneOffset {
+                        time_hour: -5,
+                        time_minute: 0,
+                    }
+                })),
+                new_parse(str).map(|p| p.parsed)
+            );
+        });
     }
 
     mod attribute_list {
@@ -787,24 +818,28 @@ mod bytes_tests {
 
             #[test]
             fn single_attribute() {
-                assert_eq!(
-                    Ok(ParsedTagValue::AttributeList(HashMap::from([(
-                        "NAME",
-                        ParsedAttributeValue::DecimalInteger(123)
-                    )]))),
-                    new_parse("NAME=123").map(|p| p.parsed)
-                );
+                test_str_and_with_crlf_and_with_lf("NAME=123", |str| {
+                    assert_eq!(
+                        Ok(ParsedTagValue::AttributeList(HashMap::from([(
+                            "NAME",
+                            ParsedAttributeValue::DecimalInteger(123)
+                        )]))),
+                        new_parse(str).map(|p| p.parsed)
+                    );
+                });
             }
 
             #[test]
             fn multi_attributes() {
-                assert_eq!(
-                    Ok(ParsedTagValue::AttributeList(HashMap::from([
-                        ("NAME", ParsedAttributeValue::DecimalInteger(123)),
-                        ("NEXT-NAME", ParsedAttributeValue::DecimalInteger(456))
-                    ]))),
-                    new_parse("NAME=123,NEXT-NAME=456").map(|p| p.parsed)
-                );
+                test_str_and_with_crlf_and_with_lf("NAME=123,NEXT-NAME=456", |str| {
+                    assert_eq!(
+                        Ok(ParsedTagValue::AttributeList(HashMap::from([
+                            ("NAME", ParsedAttributeValue::DecimalInteger(123)),
+                            ("NEXT-NAME", ParsedAttributeValue::DecimalInteger(456))
+                        ]))),
+                        new_parse(str).map(|p| p.parsed)
+                    );
+                });
             }
         }
 
@@ -814,86 +849,98 @@ mod bytes_tests {
 
             #[test]
             fn positive_float_single_attribute() {
-                assert_eq!(
-                    Ok(ParsedTagValue::AttributeList(HashMap::from([(
-                        "NAME",
-                        ParsedAttributeValue::SignedDecimalFloatingPoint(42.42)
-                    )]))),
-                    new_parse("NAME=42.42").map(|p| p.parsed)
-                );
+                test_str_and_with_crlf_and_with_lf("NAME=42.42", |str| {
+                    assert_eq!(
+                        Ok(ParsedTagValue::AttributeList(HashMap::from([(
+                            "NAME",
+                            ParsedAttributeValue::SignedDecimalFloatingPoint(42.42)
+                        )]))),
+                        new_parse(str).map(|p| p.parsed)
+                    );
+                });
             }
 
             #[test]
             fn negative_integer_single_attribute() {
-                assert_eq!(
-                    Ok(ParsedTagValue::AttributeList(HashMap::from([(
-                        "NAME",
-                        ParsedAttributeValue::SignedDecimalFloatingPoint(-42.0)
-                    )]))),
-                    new_parse("NAME=-42").map(|p| p.parsed)
-                );
+                test_str_and_with_crlf_and_with_lf("NAME=-42", |str| {
+                    assert_eq!(
+                        Ok(ParsedTagValue::AttributeList(HashMap::from([(
+                            "NAME",
+                            ParsedAttributeValue::SignedDecimalFloatingPoint(-42.0)
+                        )]))),
+                        new_parse(str).map(|p| p.parsed)
+                    );
+                });
             }
 
             #[test]
             fn negative_float_single_attribute() {
-                assert_eq!(
-                    Ok(ParsedTagValue::AttributeList(HashMap::from([(
-                        "NAME",
-                        ParsedAttributeValue::SignedDecimalFloatingPoint(-42.42)
-                    )]))),
-                    new_parse("NAME=-42.42").map(|p| p.parsed)
-                );
+                test_str_and_with_crlf_and_with_lf("NAME=-42.42", |str| {
+                    assert_eq!(
+                        Ok(ParsedTagValue::AttributeList(HashMap::from([(
+                            "NAME",
+                            ParsedAttributeValue::SignedDecimalFloatingPoint(-42.42)
+                        )]))),
+                        new_parse(str).map(|p| p.parsed)
+                    );
+                });
             }
 
             #[test]
             fn positive_float_multi_attributes() {
-                assert_eq!(
-                    Ok(ParsedTagValue::AttributeList(HashMap::from([
-                        (
-                            "NAME",
-                            ParsedAttributeValue::SignedDecimalFloatingPoint(42.42)
-                        ),
-                        (
-                            "NEXT-NAME",
-                            ParsedAttributeValue::SignedDecimalFloatingPoint(84.84)
-                        )
-                    ]))),
-                    new_parse("NAME=42.42,NEXT-NAME=84.84").map(|p| p.parsed)
-                );
+                test_str_and_with_crlf_and_with_lf("NAME=42.42,NEXT-NAME=84.84", |str| {
+                    assert_eq!(
+                        Ok(ParsedTagValue::AttributeList(HashMap::from([
+                            (
+                                "NAME",
+                                ParsedAttributeValue::SignedDecimalFloatingPoint(42.42)
+                            ),
+                            (
+                                "NEXT-NAME",
+                                ParsedAttributeValue::SignedDecimalFloatingPoint(84.84)
+                            )
+                        ]))),
+                        new_parse(str).map(|p| p.parsed)
+                    );
+                });
             }
 
             #[test]
             fn negative_integer_multi_attributes() {
-                assert_eq!(
-                    Ok(ParsedTagValue::AttributeList(HashMap::from([
-                        (
-                            "NAME",
-                            ParsedAttributeValue::SignedDecimalFloatingPoint(-42.0)
-                        ),
-                        (
-                            "NEXT-NAME",
-                            ParsedAttributeValue::SignedDecimalFloatingPoint(-42.0)
-                        )
-                    ]))),
-                    new_parse("NAME=-42,NEXT-NAME=-42").map(|p| p.parsed)
-                );
+                test_str_and_with_crlf_and_with_lf("NAME=-42,NEXT-NAME=-42", |str| {
+                    assert_eq!(
+                        Ok(ParsedTagValue::AttributeList(HashMap::from([
+                            (
+                                "NAME",
+                                ParsedAttributeValue::SignedDecimalFloatingPoint(-42.0)
+                            ),
+                            (
+                                "NEXT-NAME",
+                                ParsedAttributeValue::SignedDecimalFloatingPoint(-42.0)
+                            )
+                        ]))),
+                        new_parse(str).map(|p| p.parsed)
+                    );
+                });
             }
 
             #[test]
             fn negative_float_multi_attributes() {
-                assert_eq!(
-                    Ok(ParsedTagValue::AttributeList(HashMap::from([
-                        (
-                            "NAME",
-                            ParsedAttributeValue::SignedDecimalFloatingPoint(-42.42)
-                        ),
-                        (
-                            "NEXT-NAME",
-                            ParsedAttributeValue::SignedDecimalFloatingPoint(-84.84)
-                        )
-                    ]))),
-                    new_parse("NAME=-42.42,NEXT-NAME=-84.84").map(|p| p.parsed)
-                );
+                test_str_and_with_crlf_and_with_lf("NAME=-42.42,NEXT-NAME=-84.84", |str| {
+                    assert_eq!(
+                        Ok(ParsedTagValue::AttributeList(HashMap::from([
+                            (
+                                "NAME",
+                                ParsedAttributeValue::SignedDecimalFloatingPoint(-42.42)
+                            ),
+                            (
+                                "NEXT-NAME",
+                                ParsedAttributeValue::SignedDecimalFloatingPoint(-84.84)
+                            )
+                        ]))),
+                        new_parse(str).map(|p| p.parsed)
+                    );
+                });
             }
         }
 
@@ -903,24 +950,28 @@ mod bytes_tests {
 
             #[test]
             fn single_attribute() {
-                assert_eq!(
-                    Ok(ParsedTagValue::AttributeList(HashMap::from([(
-                        "NAME",
-                        ParsedAttributeValue::QuotedString("Hello, World!")
-                    )]))),
-                    new_parse("NAME=\"Hello, World!\"").map(|p| p.parsed)
-                );
+                test_str_and_with_crlf_and_with_lf("NAME=\"Hello, World!\"", |str| {
+                    assert_eq!(
+                        Ok(ParsedTagValue::AttributeList(HashMap::from([(
+                            "NAME",
+                            ParsedAttributeValue::QuotedString("Hello, World!")
+                        )]))),
+                        new_parse(str).map(|p| p.parsed)
+                    );
+                });
             }
 
             #[test]
             fn multi_attributes() {
-                assert_eq!(
-                    Ok(ParsedTagValue::AttributeList(HashMap::from([
-                        ("NAME", ParsedAttributeValue::QuotedString("Hello,")),
-                        ("NEXT-NAME", ParsedAttributeValue::QuotedString("World!"))
-                    ]))),
-                    new_parse("NAME=\"Hello,\",NEXT-NAME=\"World!\"").map(|p| p.parsed)
-                );
+                test_str_and_with_crlf_and_with_lf("NAME=\"Hello,\",NEXT-NAME=\"World!\"", |str| {
+                    assert_eq!(
+                        Ok(ParsedTagValue::AttributeList(HashMap::from([
+                            ("NAME", ParsedAttributeValue::QuotedString("Hello,")),
+                            ("NEXT-NAME", ParsedAttributeValue::QuotedString("World!"))
+                        ]))),
+                        new_parse(str).map(|p| p.parsed)
+                    );
+                });
             }
         }
 
@@ -930,25 +981,38 @@ mod bytes_tests {
 
             #[test]
             fn single_attribute() {
-                assert_eq!(
-                    Ok(ParsedTagValue::AttributeList(HashMap::from([(
-                        "NAME",
-                        ParsedAttributeValue::UnquotedString("PQ")
-                    )]))),
-                    new_parse("NAME=PQ").map(|p| p.parsed)
-                );
+                test_str_and_with_crlf_and_with_lf("NAME=PQ", |str| {
+                    assert_eq!(
+                        Ok(ParsedTagValue::AttributeList(HashMap::from([(
+                            "NAME",
+                            ParsedAttributeValue::UnquotedString("PQ")
+                        )]))),
+                        new_parse(str).map(|p| p.parsed)
+                    );
+                });
             }
 
             #[test]
             fn multi_attributes() {
-                assert_eq!(
-                    Ok(ParsedTagValue::AttributeList(HashMap::from([
-                        ("NAME", ParsedAttributeValue::UnquotedString("PQ")),
-                        ("NEXT-NAME", ParsedAttributeValue::UnquotedString("HLG"))
-                    ]))),
-                    new_parse("NAME=PQ,NEXT-NAME=HLG").map(|p| p.parsed)
-                );
+                test_str_and_with_crlf_and_with_lf("NAME=PQ,NEXT-NAME=HLG", |str| {
+                    assert_eq!(
+                        Ok(ParsedTagValue::AttributeList(HashMap::from([
+                            ("NAME", ParsedAttributeValue::UnquotedString("PQ")),
+                            ("NEXT-NAME", ParsedAttributeValue::UnquotedString("HLG"))
+                        ]))),
+                        new_parse(str).map(|p| p.parsed)
+                    );
+                });
             }
         }
+    }
+
+    fn test_str_and_with_crlf_and_with_lf<F>(str: &'static str, test: F)
+    where
+        F: Fn(&str) -> (),
+    {
+        test(str);
+        test(format!("{str}\r\n").as_str());
+        test(format!("{str}\n").as_str());
     }
 }
