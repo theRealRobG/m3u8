@@ -1,4 +1,4 @@
-use crate::line::ParsedLineSlice;
+use crate::{line::ParsedLineSlice, utils::str_from};
 use std::fmt::Debug;
 
 #[derive(Debug, PartialEq)]
@@ -19,30 +19,30 @@ impl<'a> Tag<'a> {
                 remaining: None,
             });
         };
-        let mut chars = remaining.chars();
+        let mut bytes = remaining.as_bytes().iter();
         let mut iterations = 0usize;
         loop {
             iterations += 1;
-            let Some(char) = chars.next() else {
+            let Some(char) = bytes.next() else {
                 return Ok(ParsedLineSlice {
                     parsed: Some(&remaining[..(iterations - 1)]),
                     remaining: None,
                 });
             };
             match char {
-                '\r' => {
-                    let Some('\n') = chars.next() else {
+                b'\r' => {
+                    let Some(b'\n') = bytes.next() else {
                         return Err("Unsupported carriage return without line feed");
                     };
                     return Ok(ParsedLineSlice {
                         parsed: Some(&remaining[..(iterations - 1)]),
-                        remaining: Some(chars.as_str()),
+                        remaining: Some(str_from(bytes.as_slice())),
                     });
                 }
-                '\n' => {
+                b'\n' => {
                     return Ok(ParsedLineSlice {
                         parsed: Some(&remaining[..(iterations - 1)]),
-                        remaining: Some(chars.as_str()),
+                        remaining: Some(str_from(bytes.as_slice())),
                     });
                 }
                 _ => (),

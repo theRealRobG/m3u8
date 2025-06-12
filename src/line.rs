@@ -5,7 +5,7 @@ use crate::{
         known::{self, IsKnownName, NoCustomTag, ParsedTag},
         unknown,
     },
-    utils::take_until_end_of_line,
+    utils::{str_from, take_until_end_of_bytes},
 };
 use std::{cmp::PartialEq, fmt::Debug};
 
@@ -46,31 +46,31 @@ where
     CustomTag: TryFrom<ParsedTag<'a>, Error = &'static str> + IsKnownName + Debug + PartialEq,
 {
     // Attempt to parse tag, and if failed, pass back input for further parsing.
-    let mut chars = input.chars();
-    match chars.next() {
-        Some('#') => {
-            let Some('E') = chars.next() else {
-                let comment = take_until_end_of_line(input[1..].chars())?;
+    let mut bytes = input.as_bytes().iter();
+    match bytes.next() {
+        Some(b'#') => {
+            let Some(b'E') = bytes.next() else {
+                let comment = take_until_end_of_bytes(input[1..].as_bytes().iter())?;
                 return Ok(ParsedLineSlice {
                     parsed: HlsLine::Comment(comment.parsed),
                     remaining: comment.remaining,
                 });
             };
-            let Some('X') = chars.next() else {
-                let comment = take_until_end_of_line(input[1..].chars())?;
+            let Some(b'X') = bytes.next() else {
+                let comment = take_until_end_of_bytes(input[1..].as_bytes().iter())?;
                 return Ok(ParsedLineSlice {
                     parsed: HlsLine::Comment(comment.parsed),
                     remaining: comment.remaining,
                 });
             };
-            let Some('T') = chars.next() else {
-                let comment = take_until_end_of_line(input[1..].chars())?;
+            let Some(b'T') = bytes.next() else {
+                let comment = take_until_end_of_bytes(input[1..].as_bytes().iter())?;
                 return Ok(ParsedLineSlice {
                     parsed: HlsLine::Comment(comment.parsed),
                     remaining: comment.remaining,
                 });
             };
-            let input = chars.as_str();
+            let input = str_from(bytes.as_slice());
             let tag = tag::unknown::parse(input)?;
             if options.is_known_name(tag.parsed.name) || CustomTag::is_known_name(tag.parsed.name) {
                 let value_slice = match tag.remaining {
@@ -78,7 +78,7 @@ where
                         parsed: tag::value::ParsedTagValue::Empty,
                         remaining: None,
                     },
-                    Some(remaining) => tag::value::parse(remaining)?,
+                    Some(remaining) => tag::value::new_parse(remaining)?,
                 };
                 let parsed_tag = ParsedTag {
                     name: tag.parsed.name,
@@ -100,7 +100,7 @@ where
             remaining: None,
         }),
         _ => {
-            let rest_of_line = take_until_end_of_line(input.chars())?;
+            let rest_of_line = take_until_end_of_bytes(input.as_bytes().iter())?;
             Ok(ParsedLineSlice {
                 parsed: HlsLine::Uri(rest_of_line.parsed),
                 remaining: rest_of_line.remaining,
