@@ -294,31 +294,24 @@ pub fn new_parse(input: &str) -> Result<ParsedLineSlice<ParsedTagValue>, &'stati
         }
         Some(b'=') => {
             let mut attribute_list = HashMap::new();
-            let initial_attribute_name = &input[..(count - 1)];
-            let (has_more, initial_attribute_value, new_count) =
-                handle_attribute_value_bytes(input, count, &mut bytes)?;
-            count = new_count;
-            attribute_list.insert(initial_attribute_name, initial_attribute_value.parsed);
-            let mut remaining = initial_attribute_value.remaining;
-            if has_more {
-                'attribute_loop: loop {
-                    let (attribute_name, new_count) =
-                        handle_attribute_name_bytes(input, count, &mut bytes)?;
-                    count = new_count;
-                    let (has_more, attribute_value, new_count) =
-                        handle_attribute_value_bytes(input, count, &mut bytes)?;
-                    count = new_count;
-                    attribute_list.insert(attribute_name, attribute_value.parsed);
-                    remaining = attribute_value.remaining;
-                    if !has_more {
-                        break 'attribute_loop;
-                    }
+            let first_name = &input[..(count - 1)];
+            let (mut has_more, first_parsed_attribute_slice) = handle_attribute_value(&mut bytes)?;
+            attribute_list.insert(first_name, first_parsed_attribute_slice.parsed);
+            let mut remaining = first_parsed_attribute_slice.remaining;
+            loop {
+                if has_more {
+                    let name = handle_attribute_name(&mut bytes)?;
+                    let (more, value_slice) = handle_attribute_value(&mut bytes)?;
+                    attribute_list.insert(name, value_slice.parsed);
+                    remaining = value_slice.remaining;
+                    has_more = more;
+                } else {
+                    return Ok(ParsedLineSlice {
+                        parsed: ParsedTagValue::AttributeList(attribute_list),
+                        remaining,
+                    });
                 }
             }
-            return Ok(ParsedLineSlice {
-                parsed: ParsedTagValue::AttributeList(attribute_list),
-                remaining,
-            });
         }
         _ => return Err("Unexpected character in tag value"),
     }
@@ -376,6 +369,273 @@ pub fn new_parse(input: &str) -> Result<ParsedLineSlice<ParsedTagValue>, &'stati
         }
     } else {
         Err("Invalid tag value")
+    }
+}
+
+fn parse_date_time_bytes<'a>(
+    input: &'a str,
+    mut bytes: Iter<'a, u8>,
+    break_byte: u8,
+) -> Result<ParsedLineSlice<'a, ParsedTagValue<'a>>, &'static str> {
+    let date_bytes = input.as_bytes();
+    let Ok(date_fullyear) = input[..4].parse::<u32>() else {
+        return Err("Invalid year in DateTimeMsec value");
+    };
+    let Some(b'-') = date_bytes.get(4) else {
+        return Err("Invalid DateTimeMsec value");
+    };
+    let Ok(date_month) = input[5..7].parse::<u8>() else {
+        return Err("Invalid month in DateTimeMsec value");
+    };
+    let Some(b'-') = date_bytes.get(7) else {
+        return Err("Invalid DateTimeMsec value");
+    };
+    let Ok(date_mday) = input[8..10].parse::<u8>() else {
+        return Err("Invalid day in DateTimeMsec value");
+    };
+    if break_byte == b't' {
+        let Some(b't') = date_bytes.get(10) else {
+            return Err("Invalid DateTimeMsec value");
+        };
+        bytes.next();
+        bytes.next();
+        let Some(b':') = bytes.next() else {
+            return Err("Invalid DateTimeMsec value");
+        };
+    } else {
+        let Some(b'T') = date_bytes.get(10) else {
+            return Err("Invalid DateTimeMsec value");
+        };
+    }
+    let Ok(time_hour) = input[11..13].parse::<u8>() else {
+        return Err("Invalid hour in DateTimeMsec value");
+    };
+    bytes.next();
+    bytes.next();
+    let Some(b':') = bytes.next() else {
+        return Err("Invalid DateTimeMsec value");
+    };
+    let mut byte_count = 17;
+    let Ok(time_minute) = input[14..16].parse::<u8>() else {
+        return Err("Invalid minute in DateTimeMsec value");
+    };
+    let time_offset_byte = 'time_offset_loop: loop {
+        let Some(&byte) = bytes.next() else {
+            break 'time_offset_loop None;
+        };
+        byte_count += 1;
+        match byte {
+            b'Z' | b'z' | b'+' | b'-' => break 'time_offset_loop Some(byte),
+            b'\r' | b'\n' => return Err("Unexpected end of line in DateTimeMsec value"),
+            b'0'..=b'9' | b'.' => (),
+            _ => return Err("Invalid second in DateTimeMsec value"),
+        }
+    };
+    let Some(time_offset_byte) = time_offset_byte else {
+        return Err("Unexpected end of line in DateTimeMsec value");
+    };
+    let Ok(time_second) = input[17..(byte_count - 1)].parse::<f64>() else {
+        return Err("Invalid second in DateTimeMsec value");
+    };
+    match time_offset_byte {
+        b'Z' | b'z' => {
+            let remaining = take_until_end_of_bytes(bytes)?;
+            if !remaining.parsed.is_empty() {
+                return Err("Unexpected characteres after timezone in DateTimeMsec value");
+            };
+            let remaining = remaining.remaining;
+            Ok(ParsedLineSlice {
+                parsed: ParsedTagValue::DateTimeMsec(DateTime {
+                    date_fullyear,
+                    date_month,
+                    date_mday,
+                    time_hour,
+                    time_minute,
+                    time_second,
+                    timezone_offset: DateTimeTimezoneOffset {
+                        time_hour: 0,
+                        time_minute: 0,
+                    },
+                }),
+                remaining,
+            })
+        }
+        _ => {
+            let multiplier = if time_offset_byte == b'-' { -1i8 } else { 1i8 };
+            bytes.next();
+            bytes.next();
+            let Some(b':') = bytes.next() else {
+                return Err("Invalid DateTimeMsec value");
+            };
+            let Ok(timeoffset_hour) = input[byte_count..(byte_count + 2)].parse::<i8>() else {
+                return Err("Invalid time offset hour in DateTimeMsec value");
+            };
+            let timeoffset_hour = multiplier * timeoffset_hour;
+            bytes.next();
+            bytes.next();
+            let remaining = take_until_end_of_bytes(bytes)?;
+            if !remaining.parsed.is_empty() {
+                return Err("Unexpected characteres after timezone in DateTimeMsec value");
+            };
+            let remaining = remaining.remaining;
+            let Ok(timeoffset_minute) = input[(byte_count + 3)..].parse::<u8>() else {
+                return Err("Invalid time offset minute in DateTimeMsec value");
+            };
+            Ok(ParsedLineSlice {
+                parsed: ParsedTagValue::DateTimeMsec(DateTime {
+                    date_fullyear,
+                    date_month,
+                    date_mday,
+                    time_hour,
+                    time_minute,
+                    time_second,
+                    timezone_offset: DateTimeTimezoneOffset {
+                        time_hour: timeoffset_hour,
+                        time_minute: timeoffset_minute,
+                    },
+                }),
+                remaining,
+            })
+        }
+    }
+}
+
+fn handle_attribute_name<'a>(bytes: &mut Iter<'a, u8>) -> Result<&'a str, &'static str> {
+    let input = str_from(bytes.as_slice());
+    let mut index = 0usize;
+    loop {
+        let Some(char) = bytes.next() else {
+            return Err("Unexpected end of line while reading attribute name");
+        };
+        match char {
+            b'=' => break,
+            b'A'..=b'Z' | b'0'..=b'9' | b'-' => (),
+            _ => return Err("Unexpected char while reading attribute name"),
+        }
+        index += 1;
+    }
+    Ok(&input[..index])
+}
+
+fn handle_attribute_value<'a>(
+    bytes: &mut Iter<'a, u8>,
+) -> Result<(bool, ParsedLineSlice<'a, ParsedAttributeValue<'a>>), &'static str> {
+    let input = str_from(bytes.as_slice());
+    match bytes.next() {
+        Some(b'"') => handle_quoted_string_attribute_value(input, bytes),
+        None | Some(b'\n') | Some(b'\r') => Err("Unexpected empty attribute value"),
+        Some(byte) => handle_not_quoted_string_attribute_value(input, bytes, byte),
+    }
+}
+
+fn handle_quoted_string_attribute_value<'a>(
+    input: &'a str,
+    bytes: &mut Iter<'a, u8>,
+) -> Result<(bool, ParsedLineSlice<'a, ParsedAttributeValue<'a>>), &'static str> {
+    let mut index = 0usize;
+    loop {
+        index += 1;
+        match bytes.next() {
+            Some(b'"') => break,
+            None | Some(b'\n') | Some(b'\r') => {
+                return Err("Unexpected end of line during quoted string value");
+            }
+            _ => (),
+        }
+    }
+    let str = &input[1..index];
+    let (has_more, remaining) = match bytes.next() {
+        None => (false, None),
+        Some(b',') => (true, Some(str_from(bytes.as_slice()))),
+        Some(b'\n') => (false, Some(str_from(bytes.as_slice()))),
+        Some(b'\r') => {
+            validate_carriage_return_bytes(bytes)?;
+            (false, Some(str_from(bytes.as_slice())))
+        }
+        _ => return Err("Unexpected characters after closing quote in attribute value"),
+    };
+    Ok((
+        has_more,
+        ParsedLineSlice {
+            parsed: ParsedAttributeValue::QuotedString(str),
+            remaining,
+        },
+    ))
+}
+
+fn handle_not_quoted_string_attribute_value<'a>(
+    input: &'a str,
+    bytes: &mut Iter<'a, u8>,
+    first_byte: &u8,
+) -> Result<(bool, ParsedLineSlice<'a, ParsedAttributeValue<'a>>), &'static str> {
+    // ParsedAttributeValue {
+    //     DecimalInteger             - b'0'..=b'9'
+    //     SignedDecimalFloatingPoint - b'0'..=b'9' | b'-' | b'.'
+    //     UnquotedString             - b'0'..=b'9' | b'-' | b'.' | ...
+    // }
+    let mut index = 0usize;
+    let (mut parsing_int, mut parsing_float) = match first_byte {
+        b'0'..=b'9' => (true, true),
+        b'-' => (false, true),
+        _ => (false, false),
+    };
+    let break_byte = loop {
+        let Some(byte) = bytes.next() else {
+            break None;
+        };
+        index += 1;
+        match byte {
+            b'0'..=b'9' => (),
+            b'-' | b'.' => parsing_int = false,
+            b',' | b'\n' | b'\r' => break Some(byte),
+            b if b.is_ascii_whitespace() => return Err("Unexpected whitespace in attribute value"),
+            _ => {
+                parsing_int = false;
+                parsing_float = false;
+            }
+        }
+    };
+    let (has_more, remaining, index) = match break_byte {
+        None => (false, None, index + 1),
+        Some(b',') => (true, Some(str_from(bytes.as_slice())), index),
+        Some(b'\n') => (false, Some(str_from(bytes.as_slice())), index),
+        Some(b'\r') => {
+            validate_carriage_return_bytes(bytes)?;
+            (false, Some(str_from(bytes.as_slice())), index)
+        }
+        _ => panic!("Should be impossible since we only break on None, CR, or LF"),
+    };
+    if parsing_int {
+        let n = input[..index]
+            .parse::<u64>()
+            .map_err(|_| "Unable to parse int in attribute value")?;
+        Ok((
+            has_more,
+            ParsedLineSlice {
+                parsed: ParsedAttributeValue::DecimalInteger(n),
+                remaining,
+            },
+        ))
+    } else if parsing_float {
+        let n = input[..index]
+            .parse::<f64>()
+            .map_err(|_| "Unable to parse float in attribute value")?;
+        Ok((
+            has_more,
+            ParsedLineSlice {
+                parsed: ParsedAttributeValue::SignedDecimalFloatingPoint(n),
+                remaining,
+            },
+        ))
+    } else {
+        let str = &input[..index];
+        Ok((
+            has_more,
+            ParsedLineSlice {
+                parsed: ParsedAttributeValue::UnquotedString(str),
+                remaining,
+            },
+        ))
     }
 }
 
@@ -690,296 +950,5 @@ mod bytes_tests {
                 );
             }
         }
-    }
-}
-
-fn parse_date_time_bytes<'a>(
-    input: &'a str,
-    mut bytes: Iter<'a, u8>,
-    break_byte: u8,
-) -> Result<ParsedLineSlice<'a, ParsedTagValue<'a>>, &'static str> {
-    let date_bytes = input.as_bytes();
-    let Ok(date_fullyear) = input[..4].parse::<u32>() else {
-        return Err("Invalid year in DateTimeMsec value");
-    };
-    let Some(b'-') = date_bytes.get(4) else {
-        return Err("Invalid DateTimeMsec value");
-    };
-    let Ok(date_month) = input[5..7].parse::<u8>() else {
-        return Err("Invalid month in DateTimeMsec value");
-    };
-    let Some(b'-') = date_bytes.get(7) else {
-        return Err("Invalid DateTimeMsec value");
-    };
-    let Ok(date_mday) = input[8..10].parse::<u8>() else {
-        return Err("Invalid day in DateTimeMsec value");
-    };
-    if break_byte == b't' {
-        let Some(b't') = date_bytes.get(10) else {
-            return Err("Invalid DateTimeMsec value");
-        };
-        bytes.next();
-        bytes.next();
-        let Some(b':') = bytes.next() else {
-            return Err("Invalid DateTimeMsec value");
-        };
-    } else {
-        let Some(b'T') = date_bytes.get(10) else {
-            return Err("Invalid DateTimeMsec value");
-        };
-    }
-    let Ok(time_hour) = input[11..13].parse::<u8>() else {
-        return Err("Invalid hour in DateTimeMsec value");
-    };
-    bytes.next();
-    bytes.next();
-    let Some(b':') = bytes.next() else {
-        return Err("Invalid DateTimeMsec value");
-    };
-    let mut byte_count = 17;
-    let Ok(time_minute) = input[14..16].parse::<u8>() else {
-        return Err("Invalid minute in DateTimeMsec value");
-    };
-    let time_offset_byte = 'time_offset_loop: loop {
-        let Some(&byte) = bytes.next() else {
-            break 'time_offset_loop None;
-        };
-        byte_count += 1;
-        match byte {
-            b'Z' | b'z' | b'+' | b'-' => break 'time_offset_loop Some(byte),
-            b'\r' | b'\n' => return Err("Unexpected end of line in DateTimeMsec value"),
-            b'0'..=b'9' | b'.' => (),
-            _ => return Err("Invalid second in DateTimeMsec value"),
-        }
-    };
-    let Some(time_offset_byte) = time_offset_byte else {
-        return Err("Unexpected end of line in DateTimeMsec value");
-    };
-    let Ok(time_second) = input[17..(byte_count - 1)].parse::<f64>() else {
-        return Err("Invalid second in DateTimeMsec value");
-    };
-    match time_offset_byte {
-        b'Z' | b'z' => {
-            let remaining = take_until_end_of_bytes(bytes)?;
-            if !remaining.parsed.is_empty() {
-                return Err("Unexpected characteres after timezone in DateTimeMsec value");
-            };
-            let remaining = remaining.remaining;
-            Ok(ParsedLineSlice {
-                parsed: ParsedTagValue::DateTimeMsec(DateTime {
-                    date_fullyear,
-                    date_month,
-                    date_mday,
-                    time_hour,
-                    time_minute,
-                    time_second,
-                    timezone_offset: DateTimeTimezoneOffset {
-                        time_hour: 0,
-                        time_minute: 0,
-                    },
-                }),
-                remaining,
-            })
-        }
-        _ => {
-            let multiplier = if time_offset_byte == b'-' { -1i8 } else { 1i8 };
-            bytes.next();
-            bytes.next();
-            let Some(b':') = bytes.next() else {
-                return Err("Invalid DateTimeMsec value");
-            };
-            let Ok(timeoffset_hour) = input[byte_count..(byte_count + 2)].parse::<i8>() else {
-                return Err("Invalid time offset hour in DateTimeMsec value");
-            };
-            let timeoffset_hour = multiplier * timeoffset_hour;
-            bytes.next();
-            bytes.next();
-            let remaining = take_until_end_of_bytes(bytes)?;
-            if !remaining.parsed.is_empty() {
-                return Err("Unexpected characteres after timezone in DateTimeMsec value");
-            };
-            let remaining = remaining.remaining;
-            let Ok(timeoffset_minute) = input[(byte_count + 3)..].parse::<u8>() else {
-                return Err("Invalid time offset minute in DateTimeMsec value");
-            };
-            Ok(ParsedLineSlice {
-                parsed: ParsedTagValue::DateTimeMsec(DateTime {
-                    date_fullyear,
-                    date_month,
-                    date_mday,
-                    time_hour,
-                    time_minute,
-                    time_second,
-                    timezone_offset: DateTimeTimezoneOffset {
-                        time_hour: timeoffset_hour,
-                        time_minute: timeoffset_minute,
-                    },
-                }),
-                remaining,
-            })
-        }
-    }
-}
-
-fn handle_attribute_name_bytes<'a>(
-    input: &'a str,
-    mut char_count: usize,
-    bytes: &mut Iter<'a, u8>,
-) -> Result<(&'a str, usize), &'static str> {
-    let name_start_index = char_count;
-    loop {
-        let Some(char) = bytes.next() else {
-            return Err("Unexpected end of line while reading attribute name");
-        };
-        char_count += 1;
-        match char {
-            b'=' => break,
-            b'A'..=b'Z' | b'0'..=b'9' | b'-' => (),
-            _ => return Err("Unexpected char while reading attribute name"),
-        }
-    }
-    Ok((&input[name_start_index..(char_count - 1)], char_count))
-}
-
-fn handle_attribute_value_bytes<'a>(
-    input: &'a str,
-    mut count: usize,
-    bytes: &mut Iter<'a, u8>,
-) -> Result<(bool, ParsedLineSlice<'a, ParsedAttributeValue<'a>>, usize), &'static str> {
-    let value_start_index = count;
-    let Some(initial_byte) = bytes.next() else {
-        return Err("Unexpected empty attribute value");
-    };
-    count += 1;
-    let (mut still_parsing_integer, mut still_parsing_float) = (true, true);
-    match initial_byte {
-        b'"' => {
-            'double_quotes_loop: loop {
-                let Some(char) = bytes.next() else {
-                    return Err("Unexpected end of line while reading attribute value");
-                };
-                count += 1;
-                match char {
-                    b'"' => break 'double_quotes_loop,
-                    b'\r' => return Err("Unexpected carriage return while reading quoted string"),
-                    b'\n' => return Err("Unexpected line feed while reading quoted string"),
-                    _ => (),
-                }
-            }
-            let value = &input[(value_start_index + 1)..(count - 1)];
-            count += 1;
-            return match bytes.next() {
-                Some(b',') => Ok((
-                    true,
-                    ParsedLineSlice {
-                        parsed: ParsedAttributeValue::QuotedString(value),
-                        remaining: Some(str_from(bytes.as_slice())),
-                    },
-                    count,
-                )),
-                Some(b'\n') => Ok((
-                    false,
-                    ParsedLineSlice {
-                        parsed: ParsedAttributeValue::QuotedString(value),
-                        remaining: Some(str_from(bytes.as_slice())),
-                    },
-                    count,
-                )),
-                None => Ok((
-                    false,
-                    ParsedLineSlice {
-                        parsed: ParsedAttributeValue::QuotedString(value),
-                        remaining: None,
-                    },
-                    count,
-                )),
-                Some(b'\r') => {
-                    validate_carriage_return_bytes(bytes)?;
-                    Ok((
-                        false,
-                        ParsedLineSlice {
-                            parsed: ParsedAttributeValue::QuotedString(value),
-                            remaining: Some(str_from(bytes.as_slice())),
-                        },
-                        count,
-                    ))
-                }
-                _ => Err("Unexpected char while reading value"),
-            };
-        }
-        b'-' => still_parsing_integer = false,
-        c if c.is_ascii_whitespace() => return Err("Unexpected whitespace in attribute value"),
-        b',' => return Err("Unexpected comma in attribute value"),
-        c if !c.is_ascii_digit() => {
-            still_parsing_integer = false;
-            still_parsing_float = false;
-        }
-        _ => (),
-    }
-    let mut is_remaining_none = false;
-    let more_attributes_exist = loop {
-        count += 1; // Before next to ensure if end of line we take whole value.
-        let Some(char) = bytes.next() else {
-            is_remaining_none = true;
-            break false;
-        };
-        match char {
-            b'.' => still_parsing_integer = false,
-            b',' => break true,
-            b'0'..=b'9' => (),
-            b'\r' => {
-                validate_carriage_return_bytes(bytes)?;
-                break false;
-            }
-            b'\n' => {
-                break false;
-            }
-            _ => {
-                still_parsing_integer = false;
-                still_parsing_float = false;
-            }
-        }
-    };
-    let number_value = if still_parsing_integer {
-        input[value_start_index..(count - 1)]
-            .parse::<u64>()
-            .ok()
-            .map(ParsedAttributeValue::DecimalInteger)
-    } else if still_parsing_float {
-        input[value_start_index..(count - 1)]
-            .parse::<f64>()
-            .ok()
-            .map(ParsedAttributeValue::SignedDecimalFloatingPoint)
-    } else {
-        None
-    };
-    if let Some(number_value) = number_value {
-        Ok((
-            more_attributes_exist,
-            ParsedLineSlice {
-                parsed: number_value,
-                remaining: if is_remaining_none {
-                    None
-                } else {
-                    Some(str_from(bytes.as_slice()))
-                },
-            },
-            count,
-        ))
-    } else {
-        Ok((
-            more_attributes_exist,
-            ParsedLineSlice {
-                parsed: ParsedAttributeValue::UnquotedString(
-                    &input[value_start_index..(count - 1)],
-                ),
-                remaining: if is_remaining_none {
-                    None
-                } else {
-                    Some(str_from(bytes.as_slice()))
-                },
-            },
-            count,
-        ))
     }
 }
