@@ -1,8 +1,7 @@
-use crate::{comparison_daterange_parser::parse, manifests::LONG_MEDIA_PLAYLIST};
+use crate::manifests::LONG_MEDIA_PLAYLIST;
 use criterion::{Criterion, criterion_group, criterion_main};
 use m3u8::{config::ParsingOptionsBuilder, line};
 
-mod comparison_daterange_parser;
 mod manifests;
 
 pub fn criterion_benchmark(c: &mut Criterion) {
@@ -15,15 +14,6 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     assert!(line::parse(daterange_str, &daterange_opt).is_ok());
     c.bench_function("Bench EXT-X-DATERANGE", |b| {
         b.iter(|| line::parse(daterange_str, &daterange_opt));
-    });
-
-    // In a separate project I needed to parse out SCTE35-OUT from a daterange tag. Back then I
-    // wrote a really ugly parser with very focused logic for parsing of just the information I
-    // needed from the EXT-X-DATERANGE tag. The parsing code is at least performant and so I'm going
-    // to try and beat it with the parser in this project (or at least equal it).
-    assert!(parse(daterange_str).is_some());
-    c.bench_function("Bench EXT-X-DATERANGE with dumb comparison parser", |b| {
-        b.iter(|| parse(daterange_str));
     });
 
     // Check some longer parsing of a whole manifest, once with all tags parsing bench, and once
