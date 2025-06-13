@@ -514,7 +514,7 @@ fn handle_not_quoted_string_attribute_value<'a>(
 }
 
 #[cfg(test)]
-mod bytes_tests {
+mod tests {
     use super::*;
     use crate::date::DateTimeTimezoneOffset;
     use pretty_assertions::assert_eq;

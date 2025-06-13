@@ -55,11 +55,11 @@ pub fn parse(input: &str) -> Result<ParsedLineSlice<Tag>, &'static str> {
     if input.is_empty() {
         return Err("Unexpected empty input for parsing tag name");
     };
-    let mut chars = input.chars();
+    let mut bytes = input.as_bytes().iter();
     let mut iterations = 0usize;
     loop {
         iterations += 1;
-        let Some(char) = chars.next() else {
+        let Some(byte) = bytes.next() else {
             let name = &input[..(iterations - 1)];
             let remaining = None;
             return Ok(ParsedLineSlice {
@@ -67,21 +67,21 @@ pub fn parse(input: &str) -> Result<ParsedLineSlice<Tag>, &'static str> {
                 remaining,
             });
         };
-        match char {
-            ':' | '\n' => {
+        match byte {
+            b':' | b'\n' => {
                 let name = &input[..(iterations - 1)];
-                let remaining = Some(chars.as_str());
+                let remaining = Some(str_from(bytes.as_slice()));
                 return Ok(ParsedLineSlice {
                     parsed: Tag { name, remaining },
                     remaining,
                 });
             }
-            '\r' => {
-                let Some('\n') = chars.next() else {
+            b'\r' => {
+                let Some(b'\n') = bytes.next() else {
                     return Err("Unsupported carriage return without line feed");
                 };
                 let name = &input[..(iterations - 1)];
-                let remaining = Some(chars.as_str());
+                let remaining = Some(str_from(bytes.as_slice()));
                 return Ok(ParsedLineSlice {
                     parsed: Tag { name, remaining },
                     remaining,
