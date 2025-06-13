@@ -3,8 +3,8 @@ use crate::tag::value::ParsedTagValue;
 /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.4.1
 #[derive(Debug, PartialEq)]
 pub struct Inf<'a> {
-    pub duration: f64,
-    pub title: &'a str,
+    duration: f64,
+    title: &'a str,
 }
 
 impl<'a> TryFrom<ParsedTagValue<'a>> for Inf<'a> {
@@ -21,5 +21,19 @@ impl<'a> TryFrom<ParsedTagValue<'a>> for Inf<'a> {
             }
             _ => Err(super::ValidationError::unexpected_value_type()),
         }
+    }
+}
+
+impl<'a> Inf<'a> {
+    pub fn new(duration: f64, title: &'a str) -> Self {
+        Self { duration, title }
+    }
+
+    pub fn duration(&self) -> f64 {
+        self.duration
+    }
+
+    pub fn title(&self) -> &'a str {
+        self.title
     }
 }

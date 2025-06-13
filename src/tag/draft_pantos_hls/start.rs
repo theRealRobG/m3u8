@@ -1,16 +1,18 @@
 use crate::tag::value::{ParsedAttributeValue, ParsedTagValue};
+use std::collections::HashMap;
 
 /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.2.2
 #[derive(Debug, PartialEq)]
-pub struct Start {
-    pub time_offset: f64,
-    pub precise: bool,
+pub struct Start<'a> {
+    time_offset: f64,
+    // Original attribute list
+    attribute_list: HashMap<&'a str, ParsedAttributeValue<'a>>,
 }
 
-impl TryFrom<ParsedTagValue<'_>> for Start {
+impl<'a> TryFrom<ParsedTagValue<'a>> for Start<'a> {
     type Error = &'static str;
 
-    fn try_from(value: ParsedTagValue<'_>) -> Result<Self, Self::Error> {
+    fn try_from(value: ParsedTagValue<'a>) -> Result<Self, Self::Error> {
         let ParsedTagValue::AttributeList(attribute_list) = value else {
             return Err(super::ValidationError::unexpected_value_type());
         };
@@ -20,13 +22,41 @@ impl TryFrom<ParsedTagValue<'_>> for Start {
         else {
             return Err(super::ValidationError::missing_required_attribute());
         };
-        let precise = attribute_list
-            .get("PRECISE")
-            .map(|v| v.as_option_unquoted_str() == Some("YES"))
-            .unwrap_or(false);
         Ok(Self {
             time_offset,
-            precise,
+            attribute_list,
         })
     }
 }
+
+impl<'a> Start<'a> {
+    pub fn new(time_offset: f64, precise: bool) -> Self {
+        let mut attribute_list = HashMap::new();
+        attribute_list.insert(
+            TIME_OFFSET,
+            ParsedAttributeValue::SignedDecimalFloatingPoint(time_offset),
+        );
+        if precise {
+            attribute_list.insert(PRECISE, ParsedAttributeValue::UnquotedString(YES));
+        }
+        Self {
+            time_offset,
+            attribute_list,
+        }
+    }
+
+    pub fn time_offset(&self) -> f64 {
+        self.time_offset
+    }
+
+    pub fn precise(&self) -> bool {
+        matches!(
+            self.attribute_list.get(PRECISE),
+            Some(ParsedAttributeValue::UnquotedString(YES))
+        )
+    }
+}
+
+const TIME_OFFSET: &'static str = "TIME-OFFSET";
+const PRECISE: &'static str = "PRECISE";
+const YES: &'static str = "YES";

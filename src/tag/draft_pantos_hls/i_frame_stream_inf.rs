@@ -1,116 +1,258 @@
 use crate::tag::value::{DecimalResolution, ParsedAttributeValue, ParsedTagValue};
+use std::collections::HashMap;
 
 /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.6.3
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub struct IFrameStreamInf<'a> {
-    pub uri: &'a str,
-    pub bandwidth: u64,
-    pub average_bandwidth: Option<u64>,
-    pub score: Option<f64>,
-    pub codecs: Option<&'a str>,
-    pub supplemental_codecs: Option<&'a str>,
-    pub resolution: Option<DecimalResolution>,
-    pub hdcp_level: Option<&'a str>,
-    pub allowed_cpc: Option<&'a str>,
-    pub video_range: Option<&'a str>,
-    pub req_video_layout: Option<&'a str>,
-    pub stable_variant_id: Option<&'a str>,
-    pub video: Option<&'a str>,
-    pub pathway_id: Option<&'a str>,
+    uri: &'a str,
+    bandwidth: u64,
+    // Original attribute list
+    attribute_list: HashMap<&'a str, ParsedAttributeValue<'a>>,
+    // This needs to exist because the user can construct an IFrameStreamInf with
+    // `IFrameStreamInf::new()`, but will pass a `DecimalResolution`, not a `&str`. I can't convert
+    // a `DecimalResolution` to a `&str` and so need to store it as is for later use.
+    stored_decimal_resolution: Option<DecimalResolution>,
+}
+
+impl<'a> PartialEq for IFrameStreamInf<'a> {
+    fn eq(&self, other: &Self) -> bool {
+        self.uri() == other.uri()
+            && self.bandwidth() == other.bandwidth()
+            && self.average_bandwidth() == other.average_bandwidth()
+            && self.score() == other.score()
+            && self.codecs() == other.codecs()
+            && self.supplemental_codecs() == other.supplemental_codecs()
+            && self.resolution() == other.resolution()
+            && self.hdcp_level() == other.hdcp_level()
+            && self.allowed_cpc() == other.allowed_cpc()
+            && self.video_range() == other.video_range()
+            && self.req_video_layout() == other.req_video_layout()
+            && self.stable_variant_id() == other.stable_variant_id()
+            && self.video() == other.video()
+            && self.pathway_id() == other.pathway_id()
+    }
 }
 
 impl<'a> TryFrom<ParsedTagValue<'a>> for IFrameStreamInf<'a> {
     type Error = &'static str;
 
     fn try_from(value: ParsedTagValue<'a>) -> Result<Self, Self::Error> {
-        let ParsedTagValue::AttributeList(mut attribute_list) = value else {
+        let ParsedTagValue::AttributeList(attribute_list) = value else {
             return Err(super::ValidationError::unexpected_value_type());
         };
-        let Some(ParsedAttributeValue::QuotedString(uri)) = attribute_list.remove("URI") else {
+        let Some(ParsedAttributeValue::QuotedString(uri)) = attribute_list.get(URI) else {
             return Err(super::ValidationError::missing_required_attribute());
         };
-        let Some(ParsedAttributeValue::DecimalInteger(bandwidth)) =
-            attribute_list.remove("BANDWIDTH")
+        let Some(ParsedAttributeValue::DecimalInteger(bandwidth)) = attribute_list.get(BANDWIDTH)
         else {
             return Err(super::ValidationError::missing_required_attribute());
         };
-        let average_bandwidth = match attribute_list.remove("AVERAGE-BANDWIDTH") {
-            Some(ParsedAttributeValue::DecimalInteger(b)) => Some(b),
+        Ok(Self {
+            uri,
+            bandwidth: *bandwidth,
+            attribute_list,
+            stored_decimal_resolution: None,
+        })
+    }
+}
+
+impl<'a> IFrameStreamInf<'a> {
+    pub fn new(
+        uri: &'a str,
+        bandwidth: u64,
+        average_bandwidth: Option<u64>,
+        score: Option<f64>,
+        codecs: Option<&'a str>,
+        supplemental_codecs: Option<&'a str>,
+        resolution: Option<DecimalResolution>,
+        hdcp_level: Option<&'a str>,
+        allowed_cpc: Option<&'a str>,
+        video_range: Option<&'a str>,
+        req_video_layout: Option<&'a str>,
+        stable_variant_id: Option<&'a str>,
+        video: Option<&'a str>,
+        pathway_id: Option<&'a str>,
+    ) -> Self {
+        let mut attribute_list = HashMap::new();
+        if let Some(average_bandwidth) = average_bandwidth {
+            attribute_list.insert(
+                AVERAGE_BANDWIDTH,
+                ParsedAttributeValue::DecimalInteger(average_bandwidth),
+            );
+        }
+        if let Some(score) = score {
+            attribute_list.insert(
+                SCORE,
+                ParsedAttributeValue::SignedDecimalFloatingPoint(score),
+            );
+        }
+        if let Some(codecs) = codecs {
+            attribute_list.insert(CODECS, ParsedAttributeValue::QuotedString(codecs));
+        }
+        if let Some(supplemental_codecs) = supplemental_codecs {
+            attribute_list.insert(
+                SUPPLEMENTAL_CODECS,
+                ParsedAttributeValue::QuotedString(supplemental_codecs),
+            );
+        }
+        if let Some(hdcp_level) = hdcp_level {
+            attribute_list.insert(HDCP_LEVEL, ParsedAttributeValue::UnquotedString(hdcp_level));
+        }
+        if let Some(allowed_cpc) = allowed_cpc {
+            attribute_list.insert(ALLOWED_CPC, ParsedAttributeValue::QuotedString(allowed_cpc));
+        }
+        if let Some(video_range) = video_range {
+            attribute_list.insert(
+                VIDEO_RANGE,
+                ParsedAttributeValue::UnquotedString(video_range),
+            );
+        }
+        if let Some(req_video_layout) = req_video_layout {
+            attribute_list.insert(
+                REQ_VIDEO_LAYOUT,
+                ParsedAttributeValue::QuotedString(req_video_layout),
+            );
+        }
+        if let Some(stable_variant_id) = stable_variant_id {
+            attribute_list.insert(
+                STABLE_VARIANT_ID,
+                ParsedAttributeValue::QuotedString(stable_variant_id),
+            );
+        }
+        if let Some(video) = video {
+            attribute_list.insert(VIDEO, ParsedAttributeValue::QuotedString(video));
+        }
+        if let Some(pathway_id) = pathway_id {
+            attribute_list.insert(PATHWAY_ID, ParsedAttributeValue::QuotedString(pathway_id));
+        }
+        Self {
+            uri,
+            bandwidth,
+            attribute_list,
+            stored_decimal_resolution: resolution,
+        }
+    }
+
+    pub fn uri(&self) -> &'a str {
+        self.uri
+    }
+
+    pub fn bandwidth(&self) -> u64 {
+        self.bandwidth
+    }
+
+    pub fn average_bandwidth(&self) -> Option<u64> {
+        match self.attribute_list.get(AVERAGE_BANDWIDTH) {
+            Some(ParsedAttributeValue::DecimalInteger(b)) => Some(*b),
             _ => None,
-        };
-        let score = match attribute_list.remove("SCORE") {
+        }
+    }
+
+    pub fn score(&self) -> Option<f64> {
+        match self.attribute_list.get(SCORE) {
             Some(value) => value.as_option_f64(),
             _ => None,
-        };
-        let codecs = match attribute_list.remove("CODECS") {
+        }
+    }
+
+    pub fn codecs(&self) -> Option<&'a str> {
+        match self.attribute_list.get(CODECS) {
             Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
             _ => None,
-        };
-        let supplemental_codecs = match attribute_list.remove("SUPPLEMENTAL-CODECS") {
+        }
+    }
+
+    pub fn supplemental_codecs(&self) -> Option<&'a str> {
+        match self.attribute_list.get(SUPPLEMENTAL_CODECS) {
             Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
             _ => None,
-        };
-        let resolution = 'resolution_match: {
-            match attribute_list.remove("RESOLUTION") {
+        }
+    }
+
+    pub fn resolution(&self) -> Option<DecimalResolution> {
+        if let Some(decimal_resolution) = self.stored_decimal_resolution {
+            Some(decimal_resolution)
+        } else {
+            match self.attribute_list.get(RESOLUTION) {
                 Some(ParsedAttributeValue::UnquotedString(r)) => {
                     let mut split = r.split('x');
                     let Some(Ok(width)) = split.next().map(str::parse::<u64>) else {
-                        break 'resolution_match None;
+                        return None;
                     };
                     let Some(Ok(height)) = split.next().map(str::parse::<u64>) else {
-                        break 'resolution_match None;
+                        return None;
                     };
                     if split.next().is_some() {
-                        break 'resolution_match None;
+                        return None;
                     };
                     Some(DecimalResolution { width, height })
                 }
                 _ => None,
             }
-        };
-        let hdcp_level = match attribute_list.remove("HDCP-LEVEL") {
+        }
+    }
+
+    pub fn hdcp_level(&self) -> Option<&'a str> {
+        match self.attribute_list.get(HDCP_LEVEL) {
             Some(ParsedAttributeValue::UnquotedString(s)) => Some(s),
             _ => None,
-        };
-        let allowed_cpc = match attribute_list.remove("ALLOWED-CPC") {
+        }
+    }
+
+    pub fn allowed_cpc(&self) -> Option<&'a str> {
+        match self.attribute_list.get(ALLOWED_CPC) {
             Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
             _ => None,
-        };
-        let video_range = match attribute_list.remove("VIDEO-RANGE") {
+        }
+    }
+
+    pub fn video_range(&self) -> Option<&'a str> {
+        match self.attribute_list.get(VIDEO_RANGE) {
             Some(ParsedAttributeValue::UnquotedString(s)) => Some(s),
             _ => None,
-        };
-        let req_video_layout = match attribute_list.remove("REQ-VIDEO-LAYOUT") {
+        }
+    }
+
+    pub fn req_video_layout(&self) -> Option<&'a str> {
+        match self.attribute_list.get(REQ_VIDEO_LAYOUT) {
             Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
             _ => None,
-        };
-        let stable_variant_id = match attribute_list.remove("STABLE-VARIANT-ID") {
+        }
+    }
+
+    pub fn stable_variant_id(&self) -> Option<&'a str> {
+        match self.attribute_list.get(STABLE_VARIANT_ID) {
             Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
             _ => None,
-        };
-        let video = match attribute_list.remove("VIDEO") {
+        }
+    }
+
+    pub fn video(&self) -> Option<&'a str> {
+        match self.attribute_list.get(VIDEO) {
             Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
             _ => None,
-        };
-        let pathway_id = match attribute_list.remove("PATHWAY-ID") {
+        }
+    }
+
+    pub fn pathway_id(&self) -> Option<&'a str> {
+        match self.attribute_list.get(PATHWAY_ID) {
             Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
             _ => None,
-        };
-        Ok(Self {
-            uri,
-            bandwidth,
-            average_bandwidth,
-            score,
-            codecs,
-            supplemental_codecs,
-            resolution,
-            hdcp_level,
-            allowed_cpc,
-            video_range,
-            req_video_layout,
-            stable_variant_id,
-            video,
-            pathway_id,
-        })
+        }
     }
 }
+
+const URI: &'static str = "URI";
+const BANDWIDTH: &'static str = "BANDWIDTH";
+const AVERAGE_BANDWIDTH: &'static str = "AVERAGE-BANDWIDTH";
+const SCORE: &'static str = "SCORE";
+const CODECS: &'static str = "CODECS";
+const SUPPLEMENTAL_CODECS: &'static str = "SUPPLEMENTAL-CODECS";
+const RESOLUTION: &'static str = "RESOLUTION";
+const HDCP_LEVEL: &'static str = "HDCP-LEVEL";
+const ALLOWED_CPC: &'static str = "ALLOWED-CPC";
+const VIDEO_RANGE: &'static str = "VIDEO-RANGE";
+const REQ_VIDEO_LAYOUT: &'static str = "REQ-VIDEO-LAYOUT";
+const STABLE_VARIANT_ID: &'static str = "STABLE-VARIANT-ID";
+const VIDEO: &'static str = "VIDEO";
+const PATHWAY_ID: &'static str = "PATHWAY-ID";

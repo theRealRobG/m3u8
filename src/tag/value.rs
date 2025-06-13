@@ -29,7 +29,7 @@ pub enum ParsedTagValue<'a> {
     AttributeList(HashMap<&'a str, ParsedAttributeValue<'a>>),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum HlsPlaylistType {
     Event,
     Vod,
@@ -137,7 +137,7 @@ impl<'a> ParsedAttributeValue<'a> {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub struct DecimalResolution {
     pub width: u64,
     pub height: u64,

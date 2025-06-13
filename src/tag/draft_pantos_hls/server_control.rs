@@ -1,47 +1,106 @@
-use crate::tag::value::ParsedTagValue;
+use crate::tag::value::{ParsedAttributeValue, ParsedTagValue};
+use std::collections::HashMap;
 
 /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.3.8
 #[derive(Debug, PartialEq)]
-pub struct ServerControl {
-    pub can_skip_until: Option<f64>,
-    pub can_skip_dateranges: bool,
-    pub hold_back: Option<f64>,
-    pub part_hold_back: Option<f64>,
-    pub can_block_reload: bool,
+pub struct ServerControl<'a> {
+    // Original attribute list
+    attribute_list: HashMap<&'a str, ParsedAttributeValue<'a>>,
 }
 
-impl TryFrom<ParsedTagValue<'_>> for ServerControl {
+impl<'a> TryFrom<ParsedTagValue<'a>> for ServerControl<'a> {
     type Error = &'static str;
 
-    fn try_from(value: ParsedTagValue<'_>) -> Result<Self, Self::Error> {
+    fn try_from(value: ParsedTagValue<'a>) -> Result<Self, Self::Error> {
         let ParsedTagValue::AttributeList(attribute_list) = value else {
             return Err(super::ValidationError::unexpected_value_type());
         };
-        let mut can_skip_until = None;
-        let mut can_skip_dateranges = false;
-        let mut hold_back = None;
-        let mut part_hold_back = None;
-        let mut can_block_reload = false;
-        for (key, value) in attribute_list {
-            match key {
-                "CAN-SKIP-UNTIL" => can_skip_until = value.as_option_f64(),
-                "CAN-SKIP-DATERANGES" => {
-                    can_skip_dateranges = value.as_option_unquoted_str() == Some("YES")
-                }
-                "HOLD-BACK" => hold_back = value.as_option_f64(),
-                "PART-HOLD-BACK" => part_hold_back = value.as_option_f64(),
-                "CAN-BLOCK-RELOAD" => {
-                    can_block_reload = value.as_option_unquoted_str() == Some("YES")
-                }
-                _ => (),
-            }
-        }
-        Ok(Self {
-            can_skip_until,
-            can_skip_dateranges,
-            hold_back,
-            part_hold_back,
-            can_block_reload,
-        })
+        Ok(Self { attribute_list })
     }
 }
+
+impl<'a> ServerControl<'a> {
+    pub fn new(
+        can_skip_until: Option<f64>,
+        can_skip_dateranges: bool,
+        hold_back: Option<f64>,
+        part_hold_back: Option<f64>,
+        can_block_reload: bool,
+    ) -> Self {
+        let mut attribute_list = HashMap::new();
+        if let Some(can_skip_until) = can_skip_until {
+            attribute_list.insert(
+                CAN_SKIP_UNTIL,
+                ParsedAttributeValue::SignedDecimalFloatingPoint(can_skip_until),
+            );
+        }
+        if can_skip_dateranges {
+            attribute_list.insert(
+                CAN_SKIP_DATERANGES,
+                ParsedAttributeValue::UnquotedString(YES),
+            );
+        }
+        if let Some(hold_back) = hold_back {
+            attribute_list.insert(
+                HOLD_BACK,
+                ParsedAttributeValue::SignedDecimalFloatingPoint(hold_back),
+            );
+        }
+        if let Some(part_hold_back) = part_hold_back {
+            attribute_list.insert(
+                PART_HOLD_BACK,
+                ParsedAttributeValue::SignedDecimalFloatingPoint(part_hold_back),
+            );
+        }
+        if can_block_reload {
+            attribute_list.insert(CAN_BLOCK_RELOAD, ParsedAttributeValue::UnquotedString(YES));
+        }
+        Self { attribute_list }
+    }
+
+    pub fn can_skip_until(&self) -> Option<f64> {
+        match self.attribute_list.get(CAN_SKIP_UNTIL) {
+            Some(ParsedAttributeValue::SignedDecimalFloatingPoint(can_skip_until)) => {
+                Some(*can_skip_until)
+            }
+            _ => None,
+        }
+    }
+
+    pub fn can_skip_dateranges(&self) -> bool {
+        matches!(
+            self.attribute_list.get(CAN_SKIP_DATERANGES),
+            Some(ParsedAttributeValue::UnquotedString(YES))
+        )
+    }
+
+    pub fn hold_back(&self) -> Option<f64> {
+        match self.attribute_list.get(HOLD_BACK) {
+            Some(ParsedAttributeValue::SignedDecimalFloatingPoint(hold_back)) => Some(*hold_back),
+            _ => None,
+        }
+    }
+
+    pub fn part_hold_back(&self) -> Option<f64> {
+        match self.attribute_list.get(PART_HOLD_BACK) {
+            Some(ParsedAttributeValue::SignedDecimalFloatingPoint(part_hold_back)) => {
+                Some(*part_hold_back)
+            }
+            _ => None,
+        }
+    }
+
+    pub fn can_block_reload(&self) -> bool {
+        matches!(
+            self.attribute_list.get(CAN_BLOCK_RELOAD),
+            Some(ParsedAttributeValue::UnquotedString(YES))
+        )
+    }
+}
+
+const CAN_SKIP_UNTIL: &'static str = "CAN-SKIP-UNTIL";
+const CAN_SKIP_DATERANGES: &'static str = "CAN-SKIP-DATERANGES";
+const HOLD_BACK: &'static str = "HOLD-BACK";
+const PART_HOLD_BACK: &'static str = "PART-HOLD-BACK";
+const CAN_BLOCK_RELOAD: &'static str = "CAN-BLOCK-RELOAD";
+const YES: &'static str = "YES";

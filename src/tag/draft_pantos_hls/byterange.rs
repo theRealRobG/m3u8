@@ -3,8 +3,8 @@ use crate::tag::value::ParsedTagValue;
 /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.4.2
 #[derive(Debug, PartialEq)]
 pub struct Byterange {
-    pub length: u64,
-    pub offset: Option<u64>,
+    length: u64,
+    offset: Option<u64>,
 }
 
 impl TryFrom<ParsedTagValue<'_>> for Byterange {
@@ -22,5 +22,19 @@ impl TryFrom<ParsedTagValue<'_>> for Byterange {
             }),
             _ => Err(super::ValidationError::unexpected_value_type()),
         }
+    }
+}
+
+impl Byterange {
+    pub fn new(length: u64, offset: Option<u64>) -> Self {
+        Self { length, offset }
+    }
+
+    pub fn length(&self) -> u64 {
+        self.length
+    }
+
+    pub fn offset(&self) -> Option<u64> {
+        self.offset
     }
 }

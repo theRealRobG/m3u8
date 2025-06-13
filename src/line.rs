@@ -223,10 +223,7 @@ mod tests {
     fn avoiding_parsing_known_tag_when_configured_to_avoid_via_parsing_options() {
         assert_eq!(
             Ok(HlsLine::KnownTag(known::Tag::Hls(
-                draft_pantos_hls::Tag::Start(Start {
-                    time_offset: -18.0,
-                    precise: false
-                })
+                draft_pantos_hls::Tag::Start(Start::new(-18.0, false))
             ))),
             parse("#EXT-X-START:TIME-OFFSET=-18", &ParsingOptions::default()).map(|p| p.parsed)
         );

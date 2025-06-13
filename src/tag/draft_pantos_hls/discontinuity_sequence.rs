@@ -2,7 +2,7 @@ use crate::tag::value::ParsedTagValue;
 
 /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.3.3
 #[derive(Debug, PartialEq)]
-pub struct DiscontinuitySequence(pub u64);
+pub struct DiscontinuitySequence(u64);
 
 impl TryFrom<ParsedTagValue<'_>> for DiscontinuitySequence {
     type Error = &'static str;
@@ -12,5 +12,15 @@ impl TryFrom<ParsedTagValue<'_>> for DiscontinuitySequence {
             return Err(super::ValidationError::unexpected_value_type());
         };
         Ok(Self(d))
+    }
+}
+
+impl DiscontinuitySequence {
+    pub fn new(discontinuity_sequence: u64) -> Self {
+        Self(discontinuity_sequence)
+    }
+
+    pub fn discontinuity_sequence(&self) -> u64 {
+        self.0
     }
 }

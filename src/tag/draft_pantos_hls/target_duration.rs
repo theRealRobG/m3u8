@@ -2,7 +2,7 @@ use crate::tag::value::ParsedTagValue;
 
 /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.3.1
 #[derive(Debug, PartialEq)]
-pub struct Targetduration(pub u64);
+pub struct Targetduration(u64);
 
 impl TryFrom<ParsedTagValue<'_>> for Targetduration {
     type Error = &'static str;
@@ -12,5 +12,15 @@ impl TryFrom<ParsedTagValue<'_>> for Targetduration {
             return Err(super::ValidationError::unexpected_value_type());
         };
         Ok(Self(d))
+    }
+}
+
+impl Targetduration {
+    pub fn new(target_duration: u64) -> Self {
+        Self(target_duration)
+    }
+
+    pub fn target_duration(&self) -> u64 {
+        self.0
     }
 }
