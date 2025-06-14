@@ -44,7 +44,7 @@ pub fn validate_carriage_return_bytes(bytes: &mut Iter<'_, u8>) -> Result<(), &'
     Ok(())
 }
 
-pub fn str_from(bytes: &[u8]) -> &str {
+pub(crate) fn str_from(bytes: &[u8]) -> &str {
     unsafe {
         // SAFETY: The input for bytes is always &str in this project, and I only break on single
         // byte characters, so this is safe to do unchecked.
