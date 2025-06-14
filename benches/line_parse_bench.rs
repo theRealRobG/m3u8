@@ -1,8 +1,7 @@
-use crate::manifests::LONG_MEDIA_PLAYLIST;
 use criterion::{Criterion, criterion_group, criterion_main};
 use m3u8::{config::ParsingOptionsBuilder, line};
 
-mod manifests;
+const LONG_MEDIA_PLAYLIST: &'static str = include_str!("long_media_playlist.m3u8");
 
 pub fn criterion_benchmark(c: &mut Criterion) {
     let daterange_str = r#"#EXT-X-DATERANGE:ID="0x30-5-1749409044",START-DATE="2025-06-08T18:57:25Z",PLANNED-DURATION=60.000,SCTE35-OUT=0xfc303e0000000000000000b00506fe2587ed930028022643554549000000057fff00005265c00e1270636b5f455030333638373336353030313230010c6ad0769a"#;
