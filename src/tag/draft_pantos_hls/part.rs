@@ -1,13 +1,19 @@
-use crate::tag::value::{ParsedAttributeValue, ParsedTagValue};
-use std::collections::HashMap;
+use crate::{
+    tag::{
+        known::ParsedTag,
+        value::{ParsedAttributeValue, ParsedTagValue},
+    },
+    utils::{split_by_first_lf, str_from},
+};
+use std::{borrow::Cow, collections::HashMap};
 
 /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.4.9
 #[derive(Debug)]
 pub struct Part<'a> {
     uri: &'a str,
     duration: f64,
-    // Original attribute list
-    attribute_list: HashMap<&'a str, ParsedAttributeValue<'a>>,
+    attribute_list: HashMap<&'a str, ParsedAttributeValue<'a>>, // Original attribute list
+    output_line: Cow<'a, [u8]>,                                 // Used with Writer
     // This needs to exist because the user can construct a Part with `Part::new()`, but will pass a
     // `PartByteRange`, not a `&str`. I can't convert a `PartByteRange` to a `&str` and so need to
     // store it as is for later use.
@@ -17,6 +23,15 @@ pub struct Part<'a> {
 pub struct PartByterange {
     pub length: u64,
     pub offset: Option<u64>,
+}
+impl PartByterange {
+    pub fn to_string(&self) -> String {
+        if let Some(offset) = self.offset {
+            format!("{}@{}", self.length, offset)
+        } else {
+            format!("{}", self.length)
+        }
+    }
 }
 
 impl<'a> PartialEq for Part<'a> {
@@ -29,11 +44,11 @@ impl<'a> PartialEq for Part<'a> {
     }
 }
 
-impl<'a> TryFrom<ParsedTagValue<'a>> for Part<'a> {
+impl<'a> TryFrom<ParsedTag<'a>> for Part<'a> {
     type Error = &'static str;
 
-    fn try_from(value: ParsedTagValue<'a>) -> Result<Self, Self::Error> {
-        let ParsedTagValue::AttributeList(attribute_list) = value else {
+    fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
+        let ParsedTagValue::AttributeList(attribute_list) = tag.value else {
             return Err(super::ValidationError::unexpected_value_type());
         };
         let Some(ParsedAttributeValue::QuotedString(uri)) = attribute_list.get(URI) else {
@@ -49,6 +64,7 @@ impl<'a> TryFrom<ParsedTagValue<'a>> for Part<'a> {
             uri,
             duration,
             attribute_list,
+            output_line: Cow::Borrowed(tag.original_input.as_bytes()),
             stored_byterange: None,
         })
     }
@@ -78,6 +94,9 @@ impl<'a> Part<'a> {
             uri,
             duration,
             attribute_list,
+            output_line: Cow::Owned(
+                calculate_line(uri, duration, independent, byterange, gap).into_bytes(),
+            ),
             stored_byterange: byterange,
         }
     }
@@ -128,6 +147,10 @@ impl<'a> Part<'a> {
             Some(ParsedAttributeValue::UnquotedString(YES))
         )
     }
+
+    pub fn as_str(&self) -> &str {
+        split_by_first_lf(str_from(&self.output_line)).parsed
+    }
 }
 
 const URI: &'static str = "URI";
@@ -136,3 +159,73 @@ const INDEPENDENT: &'static str = "INDEPENDENT";
 const BYTERANGE: &'static str = "BYTERANGE";
 const GAP: &'static str = "GAP";
 const YES: &'static str = "YES";
+
+fn calculate_line(
+    uri: &str,
+    duration: f64,
+    independent: bool,
+    byterange: Option<PartByterange>,
+    gap: bool,
+) -> String {
+    let mut line = format!("#EXT-X-PART:{URI}=\"{uri}\",{DURATION}={duration}");
+    if independent {
+        line.push_str(format!(",{INDEPENDENT}={YES}").as_str());
+    }
+    if let Some(byterange) = byterange {
+        line.push_str(format!(",{BYTERANGE}={}", byterange.to_string()).as_str());
+    }
+    if gap {
+        line.push_str(format!(",{GAP}={YES}").as_str());
+    }
+    line
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pretty_assertions::assert_eq;
+
+    #[test]
+    fn as_str_with_no_options_should_be_valid() {
+        assert_eq!(
+            "#EXT-X-PART:URI=\"part.1.0.mp4\",DURATION=0.5",
+            Part::new("part.1.0.mp4", 0.5, false, None, false).as_str()
+        );
+    }
+
+    #[test]
+    fn as_str_with_options_no_byterange_offset_should_be_valid() {
+        assert_eq!(
+            "#EXT-X-PART:URI=\"part.1.0.mp4\",DURATION=0.5,INDEPENDENT=YES,BYTERANGE=1024,GAP=YES",
+            Part::new(
+                "part.1.0.mp4",
+                0.5,
+                true,
+                Some(PartByterange {
+                    length: 1024,
+                    offset: None
+                }),
+                true
+            )
+            .as_str()
+        );
+    }
+
+    #[test]
+    fn as_str_with_options_with_byterange_offset_should_be_valid() {
+        assert_eq!(
+            "#EXT-X-PART:URI=\"part.1.0.mp4\",DURATION=0.5,INDEPENDENT=YES,BYTERANGE=1024@512,GAP=YES",
+            Part::new(
+                "part.1.0.mp4",
+                0.5,
+                true,
+                Some(PartByterange {
+                    length: 1024,
+                    offset: Some(512)
+                }),
+                true
+            )
+            .as_str()
+        );
+    }
+}

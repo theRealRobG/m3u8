@@ -1,14 +1,14 @@
-use crate::tag::value::ParsedTagValue;
+use crate::tag::{known::ParsedTag, value::ParsedTagValue};
 
 /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.3.1
 #[derive(Debug, PartialEq)]
 pub struct Targetduration(u64);
 
-impl TryFrom<ParsedTagValue<'_>> for Targetduration {
+impl TryFrom<ParsedTag<'_>> for Targetduration {
     type Error = &'static str;
 
-    fn try_from(value: ParsedTagValue<'_>) -> Result<Self, Self::Error> {
-        let ParsedTagValue::DecimalInteger(d) = value else {
+    fn try_from(tag: ParsedTag<'_>) -> Result<Self, Self::Error> {
+        let ParsedTagValue::DecimalInteger(d) = tag.value else {
             return Err(super::ValidationError::unexpected_value_type());
         };
         Ok(Self(d))

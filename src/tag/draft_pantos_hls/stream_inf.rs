@@ -1,4 +1,7 @@
-use crate::tag::value::{DecimalResolution, ParsedAttributeValue, ParsedTagValue};
+use crate::tag::{
+    known::ParsedTag,
+    value::{DecimalResolution, ParsedAttributeValue, ParsedTagValue},
+};
 use std::collections::HashMap;
 
 /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.6.2
@@ -35,11 +38,11 @@ impl<'a> PartialEq for StreamInf<'a> {
     }
 }
 
-impl<'a> TryFrom<ParsedTagValue<'a>> for StreamInf<'a> {
+impl<'a> TryFrom<ParsedTag<'a>> for StreamInf<'a> {
     type Error = &'static str;
 
-    fn try_from(value: ParsedTagValue<'a>) -> Result<Self, Self::Error> {
-        let ParsedTagValue::AttributeList(attribute_list) = value else {
+    fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
+        let ParsedTagValue::AttributeList(attribute_list) = tag.value else {
             return Err(super::ValidationError::unexpected_value_type());
         };
         let Some(ParsedAttributeValue::DecimalInteger(bandwidth)) = attribute_list.get(BANDWIDTH)

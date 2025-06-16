@@ -1,12 +1,18 @@
-use crate::tag::value::{ParsedAttributeValue, ParsedTagValue};
-use std::collections::HashMap;
+use crate::{
+    tag::{
+        known::ParsedTag,
+        value::{ParsedAttributeValue, ParsedTagValue},
+    },
+    utils::{split_by_first_lf, str_from},
+};
+use std::{borrow::Cow, collections::HashMap};
 
 /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.4.5
 #[derive(Debug)]
 pub struct Map<'a> {
     uri: &'a str,
-    // Original attribute list
-    attribute_list: HashMap<&'a str, ParsedAttributeValue<'a>>,
+    attribute_list: HashMap<&'a str, ParsedAttributeValue<'a>>, // Original attribute list
+    output_line: Cow<'a, [u8]>,                                 // Used with Writer
     // This needs to exist because the user can construct a Map with `Map::new()`, but will pass a
     // `MapByteRange`, not a `&str`. I can't convert a `MapByteRange` to a `&str` and so need to
     // store it as is for later use.
@@ -25,11 +31,17 @@ pub struct MapByterange {
     pub offset: u64,
 }
 
-impl<'a> TryFrom<ParsedTagValue<'a>> for Map<'a> {
+impl MapByterange {
+    pub fn to_string(&self) -> String {
+        format!("{}@{}", self.length, self.offset)
+    }
+}
+
+impl<'a> TryFrom<ParsedTag<'a>> for Map<'a> {
     type Error = &'static str;
 
-    fn try_from(value: ParsedTagValue<'a>) -> Result<Self, Self::Error> {
-        let ParsedTagValue::AttributeList(mut attribute_list) = value else {
+    fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
+        let ParsedTagValue::AttributeList(mut attribute_list) = tag.value else {
             return Err(super::ValidationError::unexpected_value_type());
         };
         let Some(ParsedAttributeValue::QuotedString(uri)) = attribute_list.remove(URI) else {
@@ -38,6 +50,7 @@ impl<'a> TryFrom<ParsedTagValue<'a>> for Map<'a> {
         Ok(Self {
             uri,
             attribute_list,
+            output_line: Cow::Borrowed(tag.original_input.as_bytes()),
             stored_byterange: None,
         })
     }
@@ -50,6 +63,7 @@ impl<'a> Map<'a> {
         Self {
             uri,
             attribute_list,
+            output_line: Cow::Owned(calculate_line(uri, byterange).into_bytes()),
             stored_byterange: byterange,
         }
     }
@@ -80,7 +94,48 @@ impl<'a> Map<'a> {
             }
         }
     }
+
+    pub fn as_str(&self) -> &str {
+        split_by_first_lf(str_from(&self.output_line)).parsed
+    }
 }
 
 const URI: &'static str = "URI";
 const BYTERANGE: &'static str = "BYTERANGE";
+
+fn calculate_line(uri: &str, byterange: Option<MapByterange>) -> String {
+    let mut line = format!("#EXT-X-MAP:{URI}=\"{uri}\"");
+    if let Some(byterange) = byterange {
+        line.push_str(format!(",{BYTERANGE}=\"{}\"", byterange.to_string()).as_str());
+    }
+    line
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pretty_assertions::assert_eq;
+
+    #[test]
+    fn as_str_no_byterange_should_be_valid() {
+        assert_eq!(
+            "#EXT-X-MAP:URI=\"example.mp4\"",
+            Map::new("example.mp4", None).as_str()
+        );
+    }
+
+    #[test]
+    fn as_str_with_byterange_should_be_valid() {
+        assert_eq!(
+            "#EXT-X-MAP:URI=\"example.mp4\",BYTERANGE=\"1024@512\"",
+            Map::new(
+                "example.mp4",
+                Some(MapByterange {
+                    length: 1024,
+                    offset: 512
+                })
+            )
+            .as_str()
+        );
+    }
+}

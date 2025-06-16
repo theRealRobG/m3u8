@@ -1,20 +1,25 @@
-use std::collections::HashMap;
-
-use crate::tag::value::{ParsedAttributeValue, ParsedTagValue};
+use crate::{
+    tag::{
+        known::ParsedTag,
+        value::{ParsedAttributeValue, ParsedTagValue},
+    },
+    utils::{split_by_first_lf, str_from},
+};
+use std::{borrow::Cow, collections::HashMap};
 
 /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.3.7
 #[derive(Debug, PartialEq)]
 pub struct PartInf<'a> {
     part_target: f64,
-    // Original attribute list
-    attribute_list: HashMap<&'a str, ParsedAttributeValue<'a>>,
+    attribute_list: HashMap<&'a str, ParsedAttributeValue<'a>>, // Original attribute list
+    output_line: Cow<'a, [u8]>,                                 // Used with Writer
 }
 
-impl<'a> TryFrom<ParsedTagValue<'a>> for PartInf<'a> {
+impl<'a> TryFrom<ParsedTag<'a>> for PartInf<'a> {
     type Error = &'static str;
 
-    fn try_from(value: ParsedTagValue<'a>) -> Result<Self, Self::Error> {
-        let ParsedTagValue::AttributeList(attribute_list) = value else {
+    fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
+        let ParsedTagValue::AttributeList(attribute_list) = tag.value else {
             return Err(super::ValidationError::unexpected_value_type());
         };
         let Some(Some(part_target)) = attribute_list
@@ -26,6 +31,7 @@ impl<'a> TryFrom<ParsedTagValue<'a>> for PartInf<'a> {
         Ok(Self {
             part_target,
             attribute_list,
+            output_line: Cow::Borrowed(tag.original_input.as_bytes()),
         })
     }
 }
@@ -40,12 +46,35 @@ impl<'a> PartInf<'a> {
         Self {
             part_target,
             attribute_list,
+            output_line: Cow::Owned(calculate_line(part_target).into_bytes()),
         }
     }
 
     pub fn part_target(&self) -> f64 {
         self.part_target
     }
+
+    pub fn as_str(&self) -> &str {
+        split_by_first_lf(str_from(&self.output_line)).parsed
+    }
 }
 
 const PART_TARGET: &'static str = "PART-TARGET";
+
+fn calculate_line(part_target: f64) -> String {
+    format!("#EXT-X-PART-INF:{PART_TARGET}={part_target}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pretty_assertions::assert_eq;
+
+    #[test]
+    fn as_str_should_be_valid() {
+        assert_eq!(
+            "#EXT-X-PART-INF:PART-TARGET=0.5",
+            PartInf::new(0.5).as_str()
+        );
+    }
+}

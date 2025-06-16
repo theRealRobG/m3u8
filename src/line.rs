@@ -2,7 +2,7 @@ use crate::{
     config::ParsingOptions,
     tag::{
         self,
-        known::{self, IsKnownName, NoCustomTag, ParsedTag},
+        known::{self, IsKnownName, NoCustomTag, ParsedTag, TagInformation},
         unknown,
     },
     utils::{str_from, take_until_end_of_bytes},
@@ -13,7 +13,11 @@ use std::{cmp::PartialEq, fmt::Debug};
 #[allow(clippy::large_enum_variant)] // See comment on crate::tag::known::Tag.
 pub enum HlsLine<'a, CustomTag = NoCustomTag>
 where
-    CustomTag: TryFrom<ParsedTag<'a>, Error = &'static str> + IsKnownName + Debug + PartialEq,
+    CustomTag: TryFrom<ParsedTag<'a>, Error = &'static str>
+        + IsKnownName
+        + TagInformation
+        + Debug
+        + PartialEq,
 {
     KnownTag(known::Tag<'a, CustomTag>),
     UnknownTag(unknown::Tag<'a>),
@@ -43,7 +47,11 @@ pub fn parse_with_custom<'a, 'b, CustomTag>(
     options: &'b ParsingOptions,
 ) -> Result<ParsedLineSlice<'a, HlsLine<'a, CustomTag>>, &'static str>
 where
-    CustomTag: TryFrom<ParsedTag<'a>, Error = &'static str> + IsKnownName + Debug + PartialEq,
+    CustomTag: TryFrom<ParsedTag<'a>, Error = &'static str>
+        + IsKnownName
+        + TagInformation
+        + Debug
+        + PartialEq,
 {
     // Attempt to parse tag, and if failed, pass back input for further parsing.
     let mut bytes = input.as_bytes().iter();
@@ -70,8 +78,9 @@ where
                     remaining: comment.remaining,
                 });
             };
+            let original_input = input;
             let input = str_from(bytes.as_slice());
-            let tag = tag::unknown::parse(input)?;
+            let tag = tag::unknown::parse_assuming_ext_taken(input, original_input)?;
             if options.is_known_name(tag.parsed.name) || CustomTag::is_known_name(tag.parsed.name) {
                 let value_slice = match tag.remaining {
                     None => ParsedLineSlice {
@@ -83,6 +92,7 @@ where
                 let parsed_tag = ParsedTag {
                     name: tag.parsed.name,
                     value: value_slice.parsed,
+                    original_input,
                 };
                 Ok(ParsedLineSlice {
                     parsed: HlsLine::KnownTag(known::Tag::try_from(parsed_tag)?),
@@ -111,10 +121,15 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use super::*;
     use crate::{
         config::ParsingOptionsBuilder,
-        tag::draft_pantos_hls::{self, m3u::M3u, start::Start},
+        tag::{
+            draft_pantos_hls::{self, m3u::M3u, start::Start},
+            value::{ParsedAttributeValue, ParsedTagValue},
+        },
     };
     use pretty_assertions::assert_eq;
 
@@ -203,6 +218,28 @@ mod tests {
                 name == "-X-TEST-TAG"
             }
         }
+        impl<'a> TagInformation for TestTag<'a> {
+            fn name(&self) -> &str {
+                "-X-TEST-TAG"
+            }
+
+            fn value(&self) -> tag::value::ParsedTagValue {
+                let mut attribute_list = HashMap::new();
+                attribute_list.insert(
+                    "TYPE",
+                    ParsedAttributeValue::UnquotedString(self.greeting_type),
+                );
+                attribute_list.insert("MESSAGE", ParsedAttributeValue::QuotedString(self.message));
+                attribute_list.insert("TIMES", ParsedAttributeValue::DecimalInteger(self.times));
+                if let Some(score) = self.score {
+                    attribute_list.insert(
+                        "SCORE",
+                        ParsedAttributeValue::SignedDecimalFloatingPoint(score),
+                    );
+                }
+                ParsedTagValue::AttributeList(attribute_list)
+            }
+        }
         // Test
         assert_eq!(
             Ok(HlsLine::KnownTag(known::Tag::Custom(TestTag {
@@ -228,10 +265,11 @@ mod tests {
             parse("#EXT-X-START:TIME-OFFSET=-18", &ParsingOptions::default()).map(|p| p.parsed)
         );
         assert_eq!(
-            Ok(HlsLine::UnknownTag(unknown::Tag::new(
-                "-X-START",
-                Some("TIME-OFFSET=-18"),
-            ))),
+            Ok(HlsLine::UnknownTag(unknown::Tag {
+                name: "-X-START",
+                remaining: Some("TIME-OFFSET=-18"),
+                original_input: "#EXT-X-START:TIME-OFFSET=-18",
+            })),
             parse(
                 "#EXT-X-START:TIME-OFFSET=-18",
                 &ParsingOptionsBuilder::new()

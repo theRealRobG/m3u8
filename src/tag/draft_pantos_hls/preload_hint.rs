@@ -1,20 +1,26 @@
-use crate::tag::value::{ParsedAttributeValue, ParsedTagValue};
-use std::collections::HashMap;
+use crate::{
+    tag::{
+        known::ParsedTag,
+        value::{ParsedAttributeValue, ParsedTagValue},
+    },
+    utils::{split_by_first_lf, str_from},
+};
+use std::{borrow::Cow, collections::HashMap};
 
 /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.5.3
 #[derive(Debug, PartialEq)]
 pub struct PreloadHint<'a> {
     hint_type: &'a str,
     uri: &'a str,
-    // Original attribute list
-    attribute_list: HashMap<&'a str, ParsedAttributeValue<'a>>,
+    attribute_list: HashMap<&'a str, ParsedAttributeValue<'a>>, // Original attribute list
+    output_line: Cow<'a, [u8]>,                                 // Used with Writer
 }
 
-impl<'a> TryFrom<ParsedTagValue<'a>> for PreloadHint<'a> {
+impl<'a> TryFrom<ParsedTag<'a>> for PreloadHint<'a> {
     type Error = &'static str;
 
-    fn try_from(value: ParsedTagValue<'a>) -> Result<Self, Self::Error> {
-        let ParsedTagValue::AttributeList(attribute_list) = value else {
+    fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
+        let ParsedTagValue::AttributeList(attribute_list) = tag.value else {
             return Err(super::ValidationError::unexpected_value_type());
         };
         let Some(ParsedAttributeValue::UnquotedString(hint_type)) = attribute_list.get(TYPE) else {
@@ -27,6 +33,7 @@ impl<'a> TryFrom<ParsedTagValue<'a>> for PreloadHint<'a> {
             hint_type,
             uri,
             attribute_list,
+            output_line: Cow::Borrowed(tag.original_input.as_bytes()),
         })
     }
 }
@@ -57,6 +64,9 @@ impl<'a> PreloadHint<'a> {
             hint_type,
             uri,
             attribute_list,
+            output_line: Cow::Owned(
+                calculate_line(hint_type, uri, byterange_start, byterange_length).into_bytes(),
+            ),
         }
     }
 
@@ -81,9 +91,51 @@ impl<'a> PreloadHint<'a> {
             _ => None,
         }
     }
+
+    pub fn as_str(&self) -> &str {
+        split_by_first_lf(str_from(&self.output_line)).parsed
+    }
 }
 
 const TYPE: &'static str = "TYPE";
 const URI: &'static str = "URI";
 const BYTERANGE_START: &'static str = "BYTERANGE-START";
 const BYTERANGE_LENGTH: &'static str = "BYTERANGE-LENGTH";
+
+fn calculate_line(
+    hint_type: &str,
+    uri: &str,
+    byterange_start: Option<u64>,
+    byterange_length: Option<u64>,
+) -> String {
+    let mut line = format!("#EXT-X-PRELOAD-HINT:{TYPE}={hint_type},URI=\"{uri}\"");
+    if let Some(byterange_start) = byterange_start {
+        line.push_str(format!(",{BYTERANGE_START}={byterange_start}").as_str());
+    }
+    if let Some(byterange_length) = byterange_length {
+        line.push_str(format!(",{BYTERANGE_LENGTH}={byterange_length}").as_str());
+    }
+    line
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pretty_assertions::assert_eq;
+
+    #[test]
+    fn as_str_with_no_options_should_be_valid() {
+        assert_eq!(
+            "#EXT-X-PRELOAD-HINT:TYPE=PART,URI=\"part.2.mp4\"",
+            PreloadHint::new("PART", "part.2.mp4", None, None).as_str()
+        )
+    }
+
+    #[test]
+    fn as_str_with_options_should_be_valid() {
+        assert_eq!(
+            "#EXT-X-PRELOAD-HINT:TYPE=PART,URI=\"part.2.mp4\",BYTERANGE-START=512,BYTERANGE-LENGTH=1024",
+            PreloadHint::new("PART", "part.2.mp4", Some(512), Some(1024)).as_str()
+        )
+    }
+}

@@ -1,6 +1,11 @@
-use std::collections::HashMap;
-
-use crate::tag::value::{ParsedAttributeValue, ParsedTagValue};
+use crate::{
+    tag::{
+        known::ParsedTag,
+        value::{ParsedAttributeValue, ParsedTagValue},
+    },
+    utils::{split_by_first_lf, str_from},
+};
+use std::{borrow::Cow, collections::HashMap};
 
 /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.6.1
 #[derive(Debug, PartialEq)]
@@ -8,15 +13,15 @@ pub struct Media<'a> {
     media_type: &'a str,
     group_id: &'a str,
     name: &'a str,
-    // Original attribute list
-    attribute_list: HashMap<&'a str, ParsedAttributeValue<'a>>,
+    attribute_list: HashMap<&'a str, ParsedAttributeValue<'a>>, // Original attribute list
+    output_line: Cow<'a, [u8]>,                                 // Used with Writer
 }
 
-impl<'a> TryFrom<ParsedTagValue<'a>> for Media<'a> {
+impl<'a> TryFrom<ParsedTag<'a>> for Media<'a> {
     type Error = &'static str;
 
-    fn try_from(value: ParsedTagValue<'a>) -> Result<Self, Self::Error> {
-        let ParsedTagValue::AttributeList(attribute_list) = value else {
+    fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
+        let ParsedTagValue::AttributeList(attribute_list) = tag.value else {
             return Err(super::ValidationError::unexpected_value_type());
         };
         let Some(ParsedAttributeValue::UnquotedString(media_type)) = attribute_list.get(TYPE)
@@ -35,6 +40,7 @@ impl<'a> TryFrom<ParsedTagValue<'a>> for Media<'a> {
             group_id,
             name,
             attribute_list,
+            output_line: Cow::Borrowed(tag.original_input.as_bytes()),
         })
     }
 }
@@ -114,6 +120,26 @@ impl<'a> Media<'a> {
             group_id,
             name,
             attribute_list,
+            output_line: Cow::Owned(
+                calculate_line(
+                    media_type,
+                    name,
+                    group_id,
+                    uri,
+                    language,
+                    assoc_language,
+                    stable_rendition_id,
+                    default,
+                    autoselect,
+                    forced,
+                    instream_id,
+                    bit_depth,
+                    sample_rate,
+                    characteristics,
+                    channels,
+                )
+                .into_bytes(),
+            ),
         }
     }
 
@@ -198,6 +224,10 @@ impl<'a> Media<'a> {
             _ => None,
         }
     }
+
+    pub fn as_str(&self) -> &str {
+        split_by_first_lf(str_from(&self.output_line)).parsed
+    }
 }
 
 const TYPE: &'static str = "TYPE";
@@ -216,3 +246,139 @@ const SAMPLE_RATE: &'static str = "SAMPLE-RATE";
 const CHARACTERISTICS: &'static str = "CHARACTERISTICS";
 const CHANNELS: &'static str = "CHANNELS";
 const YES: &'static str = "YES";
+
+fn calculate_line(
+    media_type: &str,
+    name: &str,
+    group_id: &str,
+    uri: Option<&str>,
+    language: Option<&str>,
+    assoc_language: Option<&str>,
+    stable_rendition_id: Option<&str>,
+    default: bool,
+    autoselect: bool,
+    forced: bool,
+    instream_id: Option<&str>,
+    bit_depth: Option<u64>,
+    sample_rate: Option<u64>,
+    characteristics: Option<&str>,
+    channels: Option<&str>,
+) -> String {
+    let mut line =
+        format!("#EXT-X-MEDIA:{TYPE}={media_type},{NAME}=\"{name}\",{GROUP_ID}=\"{group_id}\"");
+    if let Some(uri) = uri {
+        line.push_str(format!(",{URI}=\"{uri}\"").as_str());
+    }
+    if let Some(language) = language {
+        line.push_str(format!(",{LANGUAGE}=\"{language}\"").as_str());
+    }
+    if let Some(assoc_language) = assoc_language {
+        line.push_str(format!(",{ASSOC_LANGUAGE}=\"{assoc_language}\"").as_str());
+    }
+    if let Some(stable_rendition_id) = stable_rendition_id {
+        line.push_str(format!(",{STABLE_RENDITION_ID}=\"{stable_rendition_id}\"").as_str());
+    }
+    if default {
+        line.push_str(format!(",{DEFAULT}={YES}").as_str());
+    }
+    if autoselect {
+        line.push_str(format!(",{AUTOSELECT}={YES}").as_str());
+    }
+    if forced {
+        line.push_str(format!(",{FORCED}={YES}").as_str());
+    }
+    if let Some(instream_id) = instream_id {
+        line.push_str(format!(",{INSTREAM_ID}=\"{instream_id}\"").as_str());
+    }
+    if let Some(bit_depth) = bit_depth {
+        line.push_str(format!(",{BIT_DEPTH}={bit_depth}").as_str());
+    }
+    if let Some(sample_rate) = sample_rate {
+        line.push_str(format!(",{SAMPLE_RATE}={sample_rate}").as_str());
+    }
+    if let Some(characteristics) = characteristics {
+        line.push_str(format!(",{CHARACTERISTICS}=\"{characteristics}\"").as_str());
+    }
+    if let Some(channels) = channels {
+        line.push_str(format!(",{CHANNELS}=\"{channels}\"").as_str());
+    }
+    line
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pretty_assertions::assert_eq;
+
+    #[test]
+    fn as_str_with_no_options_should_be_valid() {
+        assert_eq!(
+            concat!(
+                "#EXT-X-MEDIA:",
+                "TYPE=CLOSED-CAPTIONS,",
+                "NAME=\"English\",",
+                "GROUP-ID=\"cc\",",
+                "INSTREAM-ID=\"CC1\""
+            ),
+            Media::new(
+                "CLOSED-CAPTIONS",
+                "English",
+                "cc",
+                None,
+                None,
+                None,
+                None,
+                false,
+                false,
+                false,
+                Some("CC1"),
+                None,
+                None,
+                None,
+                None,
+            )
+            .as_str()
+        );
+    }
+
+    #[test]
+    fn as_str_with_options_should_be_valid() {
+        assert_eq!(
+            concat!(
+                "#EXT-X-MEDIA:",
+                "TYPE=AUDIO,",
+                "NAME=\"English\",",
+                "GROUP-ID=\"stereo\",",
+                "URI=\"audio/en/stereo.m3u8\",",
+                "LANGUAGE=\"en\",",
+                "ASSOC-LANGUAGE=\"en\",",
+                "STABLE-RENDITION-ID=\"1234\",",
+                "DEFAULT=YES,",
+                "AUTOSELECT=YES,",
+                "FORCED=YES,",
+                "BIT-DEPTH=8,",
+                "SAMPLE-RATE=48000,",
+                "CHARACTERISTICS=\"public.accessibility.describes-video\",",
+                "CHANNELS=\"2\"",
+            ),
+            Media::new(
+                "AUDIO",
+                "English",
+                "stereo",
+                Some("audio/en/stereo.m3u8"),
+                Some("en"),
+                Some("en"),
+                Some("1234"),
+                true,
+                true,
+                true,
+                None,
+                Some(8),
+                Some(48000),
+                Some("public.accessibility.describes-video"),
+                Some("2"),
+            )
+            .as_str()
+        );
+    }
+}

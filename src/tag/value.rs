@@ -37,7 +37,7 @@ pub enum HlsPlaylistType {
 
 // Not exactly the same as `attribute-value`, because some of the types must be contextualized by
 // the `attribute-name`, but this list covers the possible raw values.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum ParsedAttributeValue<'a> {
     DecimalInteger(u64),
     SignedDecimalFloatingPoint(f64),
@@ -141,6 +141,12 @@ impl<'a> ParsedAttributeValue<'a> {
 pub struct DecimalResolution {
     pub width: u64,
     pub height: u64,
+}
+
+impl DecimalResolution {
+    pub fn to_string(&self) -> String {
+        format!("{}x{}", self.width, self.height)
+    }
 }
 
 pub fn new_parse(input: &str) -> Result<ParsedLineSlice<ParsedTagValue>, &'static str> {

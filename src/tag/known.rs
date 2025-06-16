@@ -5,7 +5,11 @@ use std::{cmp::PartialEq, fmt::Debug};
 #[allow(clippy::large_enum_variant)]
 pub enum Tag<'a, CustomTag = NoCustomTag>
 where
-    CustomTag: TryFrom<ParsedTag<'a>, Error = &'static str> + IsKnownName + Debug + PartialEq,
+    CustomTag: TryFrom<ParsedTag<'a>, Error = &'static str>
+        + IsKnownName
+        + TagInformation
+        + Debug
+        + PartialEq,
 {
     // Clippy suggests that the `Tag` within the `Hls` case should be put in a Box, based on
     // https://rust-lang.github.io/rust-clippy/master/index.html#large_enum_variant
@@ -35,9 +39,16 @@ pub trait IsKnownName {
     fn is_known_name(name: &str) -> bool;
 }
 
+pub trait TagInformation {
+    fn name(&self) -> &str;
+    fn value(&self) -> ParsedTagValue;
+}
+
+#[derive(Debug, PartialEq)]
 pub struct ParsedTag<'a> {
     pub name: &'a str,
     pub value: ParsedTagValue<'a>,
+    pub(crate) original_input: &'a str,
 }
 
 #[derive(Debug, PartialEq)]
@@ -54,10 +65,23 @@ impl IsKnownName for NoCustomTag {
         false
     }
 }
+impl TagInformation for NoCustomTag {
+    fn name(&self) -> &str {
+        "-NO-TAG"
+    }
+
+    fn value(&self) -> ParsedTagValue {
+        ParsedTagValue::Empty
+    }
+}
 
 impl<'a, CustomTag> TryFrom<ParsedTag<'a>> for Tag<'a, CustomTag>
 where
-    CustomTag: TryFrom<ParsedTag<'a>, Error = &'static str> + IsKnownName + Debug + PartialEq,
+    CustomTag: TryFrom<ParsedTag<'a>, Error = &'static str>
+        + IsKnownName
+        + TagInformation
+        + Debug
+        + PartialEq,
 {
     type Error = &'static str;
 

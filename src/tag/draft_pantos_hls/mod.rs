@@ -62,9 +62,9 @@ pub enum Tag<'a> {
     /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.3.1
     Targetduration(Targetduration),
     /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.3.2
-    MediaSequence(MediaSequence),
+    MediaSequence(MediaSequence<'a>),
     /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.3.3
-    DiscontinuitySequence(DiscontinuitySequence),
+    DiscontinuitySequence(DiscontinuitySequence<'a>),
     /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.3.4
     Endlist(Endlist),
     /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.3.5
@@ -78,7 +78,7 @@ pub enum Tag<'a> {
     /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.4.1
     Inf(Inf<'a>),
     /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.4.2
-    Byterange(Byterange),
+    Byterange(Byterange<'a>),
     /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.4.3
     Discontinuity(Discontinuity),
     /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.4.4
@@ -90,7 +90,7 @@ pub enum Tag<'a> {
     /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.4.7
     Gap(Gap),
     /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.4.8
-    Bitrate(Bitrate),
+    Bitrate(Bitrate<'a>),
     /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.4.9
     Part(Part<'a>),
     /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.5.1
@@ -121,52 +121,42 @@ impl<'a> TryFrom<ParsedTag<'a>> for Tag<'a> {
     fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
         let tag_name = TagName::try_from(tag.name)?;
         match tag_name {
-            TagName::M3u => Ok(Self::M3u(M3u::try_from(tag.value)?)),
-            TagName::Version => Ok(Self::Version(Version::try_from(tag.value)?)),
+            TagName::M3u => Ok(Self::M3u(M3u::try_from(tag)?)),
+            TagName::Version => Ok(Self::Version(Version::try_from(tag)?)),
             TagName::IndependentSegments => Ok(Self::IndependentSegments(
-                IndependentSegments::try_from(tag.value)?,
+                IndependentSegments::try_from(tag)?,
             )),
-            TagName::Start => Ok(Self::Start(Start::try_from(tag.value)?)),
-            TagName::Define => Ok(Self::Define(Define::try_from(tag.value)?)),
-            TagName::Targetduration => {
-                Ok(Self::Targetduration(Targetduration::try_from(tag.value)?))
-            }
-            TagName::MediaSequence => Ok(Self::MediaSequence(MediaSequence::try_from(tag.value)?)),
+            TagName::Start => Ok(Self::Start(Start::try_from(tag)?)),
+            TagName::Define => Ok(Self::Define(Define::try_from(tag)?)),
+            TagName::Targetduration => Ok(Self::Targetduration(Targetduration::try_from(tag)?)),
+            TagName::MediaSequence => Ok(Self::MediaSequence(MediaSequence::try_from(tag)?)),
             TagName::DiscontinuitySequence => Ok(Self::DiscontinuitySequence(
-                DiscontinuitySequence::try_from(tag.value)?,
+                DiscontinuitySequence::try_from(tag)?,
             )),
-            TagName::Endlist => Ok(Self::Endlist(Endlist::try_from(tag.value)?)),
-            TagName::PlaylistType => Ok(Self::PlaylistType(PlaylistType::try_from(tag.value)?)),
-            TagName::IFramesOnly => Ok(Self::IFramesOnly(IFramesOnly::try_from(tag.value)?)),
-            TagName::PartInf => Ok(Self::PartInf(PartInf::try_from(tag.value)?)),
-            TagName::ServerControl => Ok(Self::ServerControl(ServerControl::try_from(tag.value)?)),
-            TagName::Inf => Ok(Self::Inf(Inf::try_from(tag.value)?)),
-            TagName::Byterange => Ok(Self::Byterange(Byterange::try_from(tag.value)?)),
-            TagName::Discontinuity => Ok(Self::Discontinuity(Discontinuity::try_from(tag.value)?)),
-            TagName::Key => Ok(Self::Key(Key::try_from(tag.value)?)),
-            TagName::Map => Ok(Self::Map(Map::try_from(tag.value)?)),
-            TagName::ProgramDateTime => {
-                Ok(Self::ProgramDateTime(ProgramDateTime::try_from(tag.value)?))
-            }
-            TagName::Gap => Ok(Self::Gap(Gap::try_from(tag.value)?)),
-            TagName::Bitrate => Ok(Self::Bitrate(Bitrate::try_from(tag.value)?)),
-            TagName::Part => Ok(Self::Part(Part::try_from(tag.value)?)),
-            TagName::Daterange => Ok(Self::Daterange(Daterange::try_from(tag.value)?)),
-            TagName::Skip => Ok(Self::Skip(Skip::try_from(tag.value)?)),
-            TagName::PreloadHint => Ok(Self::PreloadHint(PreloadHint::try_from(tag.value)?)),
-            TagName::RenditionReport => {
-                Ok(Self::RenditionReport(RenditionReport::try_from(tag.value)?))
-            }
-            TagName::Media => Ok(Self::Media(Media::try_from(tag.value)?)),
-            TagName::StreamInf => Ok(Self::StreamInf(StreamInf::try_from(tag.value)?)),
-            TagName::IFrameStreamInf => {
-                Ok(Self::IFrameStreamInf(IFrameStreamInf::try_from(tag.value)?))
-            }
-            TagName::SessionData => Ok(Self::SessionData(SessionData::try_from(tag.value)?)),
-            TagName::SessionKey => Ok(Self::SessionKey(SessionKey::try_from(tag.value)?)),
-            TagName::ContentSteering => {
-                Ok(Self::ContentSteering(ContentSteering::try_from(tag.value)?))
-            }
+            TagName::Endlist => Ok(Self::Endlist(Endlist::try_from(tag)?)),
+            TagName::PlaylistType => Ok(Self::PlaylistType(PlaylistType::try_from(tag)?)),
+            TagName::IFramesOnly => Ok(Self::IFramesOnly(IFramesOnly::try_from(tag)?)),
+            TagName::PartInf => Ok(Self::PartInf(PartInf::try_from(tag)?)),
+            TagName::ServerControl => Ok(Self::ServerControl(ServerControl::try_from(tag)?)),
+            TagName::Inf => Ok(Self::Inf(Inf::try_from(tag)?)),
+            TagName::Byterange => Ok(Self::Byterange(Byterange::try_from(tag)?)),
+            TagName::Discontinuity => Ok(Self::Discontinuity(Discontinuity::try_from(tag)?)),
+            TagName::Key => Ok(Self::Key(Key::try_from(tag)?)),
+            TagName::Map => Ok(Self::Map(Map::try_from(tag)?)),
+            TagName::ProgramDateTime => Ok(Self::ProgramDateTime(ProgramDateTime::try_from(tag)?)),
+            TagName::Gap => Ok(Self::Gap(Gap::try_from(tag)?)),
+            TagName::Bitrate => Ok(Self::Bitrate(Bitrate::try_from(tag)?)),
+            TagName::Part => Ok(Self::Part(Part::try_from(tag)?)),
+            TagName::Daterange => Ok(Self::Daterange(Daterange::try_from(tag)?)),
+            TagName::Skip => Ok(Self::Skip(Skip::try_from(tag)?)),
+            TagName::PreloadHint => Ok(Self::PreloadHint(PreloadHint::try_from(tag)?)),
+            TagName::RenditionReport => Ok(Self::RenditionReport(RenditionReport::try_from(tag)?)),
+            TagName::Media => Ok(Self::Media(Media::try_from(tag)?)),
+            TagName::StreamInf => Ok(Self::StreamInf(StreamInf::try_from(tag)?)),
+            TagName::IFrameStreamInf => Ok(Self::IFrameStreamInf(IFrameStreamInf::try_from(tag)?)),
+            TagName::SessionData => Ok(Self::SessionData(SessionData::try_from(tag)?)),
+            TagName::SessionKey => Ok(Self::SessionKey(SessionKey::try_from(tag)?)),
+            TagName::ContentSteering => Ok(Self::ContentSteering(ContentSteering::try_from(tag)?)),
         }
     }
 }
@@ -208,6 +198,43 @@ impl Tag<'_> {
             Tag::ContentSteering(_) => TagName::ContentSteering,
         }
     }
+
+    // pub fn as_str(&self) -> &str {
+    //     match self {
+    //         Tag::M3u(t) => t.as_str(),
+    //         Tag::Version(t) => t.as_str(),
+    //         Tag::IndependentSegments(t) => t.as_str(),
+    //         Tag::Start(t) => t.as_str(),
+    //         Tag::Define(t) => t.as_str(),
+    //         Tag::Targetduration(t) => t.as_str(),
+    //         Tag::MediaSequence(t) => t.as_str(),
+    //         Tag::DiscontinuitySequence(t) => t.as_str(),
+    //         Tag::Endlist(t) => t.as_str(),
+    //         Tag::PlaylistType(t) => t.as_str(),
+    //         Tag::IFramesOnly(t) => t.as_str(),
+    //         Tag::PartInf(t) => t.as_str(),
+    //         Tag::ServerControl(t) => t.as_str(),
+    //         Tag::Inf(t) => t.as_str(),
+    //         Tag::Byterange(t) => t.as_str(),
+    //         Tag::Discontinuity(t) => t.as_str(),
+    //         Tag::Key(t) => t.as_str(),
+    //         Tag::Map(t) => t.as_str(),
+    //         Tag::ProgramDateTime(t) => t.as_str(),
+    //         Tag::Gap(t) => t.as_str(),
+    //         Tag::Bitrate(t) => t.as_str(),
+    //         Tag::Part(t) => t.as_str(),
+    //         Tag::Daterange(t) => t.as_str(),
+    //         Tag::Skip(t) => t.as_str(),
+    //         Tag::PreloadHint(t) => t.as_str(),
+    //         Tag::RenditionReport(t) => t.as_str(),
+    //         Tag::Media(t) => t.as_str(),
+    //         Tag::StreamInf(t) => t.as_str(),
+    //         Tag::IFrameStreamInf(t) => t.as_str(),
+    //         Tag::SessionData(t) => t.as_str(),
+    //         Tag::SessionKey(t) => t.as_str(),
+    //         Tag::ContentSteering(t) => t.as_str(),
+    //     }
+    // }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
@@ -409,7 +436,8 @@ mod tests {
             Ok(Tag::M3u(M3u)),
             Tag::try_from(ParsedTag {
                 name: "M3U",
-                value: ParsedTagValue::Empty
+                value: ParsedTagValue::Empty,
+                original_input: "#EXTM3U"
             })
         )
     }
@@ -420,7 +448,8 @@ mod tests {
             Ok(Tag::Version(Version::new(9))),
             Tag::try_from(ParsedTag {
                 name: "-X-VERSION",
-                value: ParsedTagValue::DecimalInteger(9)
+                value: ParsedTagValue::DecimalInteger(9),
+                original_input: "#EXT-X-VERSION:9"
             })
         )
     }
@@ -431,7 +460,8 @@ mod tests {
             Ok(Tag::IndependentSegments(IndependentSegments)),
             Tag::try_from(ParsedTag {
                 name: "-X-INDEPENDENT-SEGMENTS",
-                value: ParsedTagValue::Empty
+                value: ParsedTagValue::Empty,
+                original_input: "#EXT-X-INDEPENDENT-SEGMENTS"
             })
         )
     }
@@ -445,7 +475,8 @@ mod tests {
                 value: ParsedTagValue::AttributeList(HashMap::from([(
                     "TIME-OFFSET",
                     ParsedAttributeValue::SignedDecimalFloatingPoint(10.5)
-                )]))
+                )])),
+                original_input: "#EXT-X-START:TIME-OFFSET=10.5"
             })
         );
         let expected = Tag::Start(Start::new(10.0, true));
@@ -455,6 +486,7 @@ mod tests {
                 ("TIME-OFFSET", ParsedAttributeValue::DecimalInteger(10)),
                 ("PRECISE", ParsedAttributeValue::UnquotedString("YES")),
             ])),
+            original_input: "#EXT-X-START:TIME-OFFSET=10.5,PRECISE=YES",
         })
         .unwrap();
         match (expected, actual) {
@@ -469,36 +501,36 @@ mod tests {
     #[test]
     fn define() {
         assert_eq!(
-            Ok(Tag::Define(Define::Name {
-                name: "TEST",
-                value: "GOOD"
-            })),
+            Ok(Tag::Define(Define::new_name("TEST", "GOOD"))),
             Tag::try_from(ParsedTag {
                 name: "-X-DEFINE",
                 value: ParsedTagValue::AttributeList(HashMap::from([
                     ("NAME", ParsedAttributeValue::QuotedString("TEST")),
                     ("VALUE", ParsedAttributeValue::QuotedString("GOOD"))
-                ]))
+                ])),
+                original_input: "#EXT-X-DEFINE:NAME=\"TEST\",VALUE=\"GOOD\""
             })
         );
         assert_eq!(
-            Ok(Tag::Define(Define::Import("TEST"))),
+            Ok(Tag::Define(Define::new_import("TEST"))),
             Tag::try_from(ParsedTag {
                 name: "-X-DEFINE",
                 value: ParsedTagValue::AttributeList(HashMap::from([(
                     "IMPORT",
                     ParsedAttributeValue::QuotedString("TEST")
-                )]))
+                )])),
+                original_input: "#EXT-X-DEFINE:IMPORT=\"TEST\""
             })
         );
         assert_eq!(
-            Ok(Tag::Define(Define::Queryparam("testQueryParam"))),
+            Ok(Tag::Define(Define::new_queryparam("testQueryParam"))),
             Tag::try_from(ParsedTag {
                 name: "-X-DEFINE",
                 value: ParsedTagValue::AttributeList(HashMap::from([(
                     "QUERYPARAM",
                     ParsedAttributeValue::QuotedString("testQueryParam")
-                )]))
+                )])),
+                original_input: "#EXT-X-DEFINE:QUERYPARAM=\"testQueryParam\""
             })
         );
     }
@@ -509,8 +541,9 @@ mod tests {
             Ok(Tag::Targetduration(Targetduration::new(6))),
             Tag::try_from(ParsedTag {
                 name: "-X-TARGETDURATION",
-                value: ParsedTagValue::DecimalInteger(6)
-            })
+                value: ParsedTagValue::DecimalInteger(6),
+                original_input: "#EXT-X-TARGETDURATION:6"
+            }),
         );
     }
 
@@ -520,7 +553,8 @@ mod tests {
             Ok(Tag::MediaSequence(MediaSequence::new(100))),
             Tag::try_from(ParsedTag {
                 name: "-X-MEDIA-SEQUENCE",
-                value: ParsedTagValue::DecimalInteger(100)
+                value: ParsedTagValue::DecimalInteger(100),
+                original_input: "#EXT-X-MEDIA-SEQUENCE:100"
             })
         );
     }
@@ -531,7 +565,8 @@ mod tests {
             Ok(Tag::DiscontinuitySequence(DiscontinuitySequence::new(100))),
             Tag::try_from(ParsedTag {
                 name: "-X-DISCONTINUITY-SEQUENCE",
-                value: ParsedTagValue::DecimalInteger(100)
+                value: ParsedTagValue::DecimalInteger(100),
+                original_input: "#EXT-X-DISCONTINUITY-SEQUENCE:100"
             })
         );
     }
@@ -542,7 +577,8 @@ mod tests {
             Ok(Tag::Endlist(Endlist)),
             Tag::try_from(ParsedTag {
                 name: "-X-ENDLIST",
-                value: ParsedTagValue::Empty
+                value: ParsedTagValue::Empty,
+                original_input: "#EXT-X-ENDLIST"
             })
         )
     }
@@ -553,14 +589,16 @@ mod tests {
             Ok(Tag::PlaylistType(PlaylistType::new(HlsPlaylistType::Event))),
             Tag::try_from(ParsedTag {
                 name: "-X-PLAYLIST-TYPE",
-                value: ParsedTagValue::TypeEnum(HlsPlaylistType::Event)
+                value: ParsedTagValue::TypeEnum(HlsPlaylistType::Event),
+                original_input: "#EXT-X-PLAYLIST-TYPE:EVENT"
             })
         );
         assert_eq!(
             Ok(Tag::PlaylistType(PlaylistType::new(HlsPlaylistType::Vod))),
             Tag::try_from(ParsedTag {
                 name: "-X-PLAYLIST-TYPE",
-                value: ParsedTagValue::TypeEnum(HlsPlaylistType::Vod)
+                value: ParsedTagValue::TypeEnum(HlsPlaylistType::Vod),
+                original_input: "#EXT-X-PLAYLIST-TYPE:VOD"
             })
         );
     }
@@ -571,7 +609,8 @@ mod tests {
             Ok(Tag::IFramesOnly(IFramesOnly)),
             Tag::try_from(ParsedTag {
                 name: "-X-I-FRAMES-ONLY",
-                value: ParsedTagValue::Empty
+                value: ParsedTagValue::Empty,
+                original_input: "#EXT-X-I-FRAMES-ONLY"
             })
         )
     }
@@ -585,7 +624,8 @@ mod tests {
                 value: ParsedTagValue::AttributeList(HashMap::from([(
                     "PART-TARGET",
                     ParsedAttributeValue::SignedDecimalFloatingPoint(0.5)
-                )]))
+                )])),
+                original_input: "#EXT-X-PART-INF:PART-TARGET=0.5"
             })
         )
     }
@@ -623,7 +663,8 @@ mod tests {
                         "CAN-BLOCK-RELOAD",
                         ParsedAttributeValue::UnquotedString("YES")
                     ),
-                ]))
+                ])),
+                original_input: "#EXT-X-SERVER-CONTROL:CAN-SKIP-UNTIL=36,CAN-SKIP-DATERANGES=YES,HOLD-BACK=12,PART-HOLD-BACK=1.5,CAN-BLOCK-RELOAD=YES"
             })
         );
         // In reality this is not possible within regular parsing, as this would be considered empty
@@ -635,7 +676,8 @@ mod tests {
             ))),
             Tag::try_from(ParsedTag {
                 name: "-X-SERVER-CONTROL",
-                value: ParsedTagValue::AttributeList(HashMap::new())
+                value: ParsedTagValue::AttributeList(HashMap::new()),
+                original_input: "#EXT-X-SERVER-CONTROL:"
             })
         );
     }
@@ -646,14 +688,16 @@ mod tests {
             Ok(Tag::Inf(Inf::new(6.0, ""))),
             Tag::try_from(ParsedTag {
                 name: "INF",
-                value: ParsedTagValue::DecimalInteger(6)
+                value: ParsedTagValue::DecimalInteger(6),
+                original_input: "#EXTINF:6"
             })
         );
         assert_eq!(
             Ok(Tag::Inf(Inf::new(6.006, ""))),
             Tag::try_from(ParsedTag {
                 name: "INF",
-                value: ParsedTagValue::DecimalFloatingPointWithOptionalTitle(6.006, "")
+                value: ParsedTagValue::DecimalFloatingPointWithOptionalTitle(6.006, ""),
+                original_input: "#EXTINF:6.006,"
             })
         );
         assert_eq!(
@@ -663,7 +707,8 @@ mod tests {
                 value: ParsedTagValue::DecimalFloatingPointWithOptionalTitle(
                     6.006,
                     "A useful title"
-                )
+                ),
+                original_input: "#EXTINF:6.006,A useful title"
             })
         );
     }
@@ -674,14 +719,16 @@ mod tests {
             Ok(Tag::Byterange(Byterange::new(1024, Some(512)))),
             Tag::try_from(ParsedTag {
                 name: "-X-BYTERANGE",
-                value: ParsedTagValue::DecimalIntegerRange(1024, 512)
+                value: ParsedTagValue::DecimalIntegerRange(1024, 512),
+                original_input: "#EXT-X-BYTERANGE:1024@512"
             })
         );
         assert_eq!(
             Ok(Tag::Byterange(Byterange::new(1024, None))),
             Tag::try_from(ParsedTag {
                 name: "-X-BYTERANGE",
-                value: ParsedTagValue::DecimalInteger(1024)
+                value: ParsedTagValue::DecimalInteger(1024),
+                original_input: "#EXT-X-BYTERANGE:1024"
             })
         );
     }
@@ -692,7 +739,8 @@ mod tests {
             Ok(Tag::Discontinuity(Discontinuity)),
             Tag::try_from(ParsedTag {
                 name: "-X-DISCONTINUITY",
-                value: ParsedTagValue::Empty
+                value: ParsedTagValue::Empty,
+                original_input: "#EXT-X-DISCONTINUITY"
             })
         );
     }
@@ -721,7 +769,8 @@ mod tests {
                         ParsedAttributeValue::QuotedString("com.apple.streamingkeydelivery")
                     ),
                     ("KEYFORMATVERSIONS", ParsedAttributeValue::QuotedString("1")),
-                ]))
+                ])),
+                original_input: "#EXT-X-KEY:METHOD=SAMPLE-AES,URI=\"skd://some-key-id\",IV=0xABCD,KEYFORMAT=\"com.apple.streamingkeydelivery\",KEYFORMATVERSIONS=\"1\""
             })
         );
         assert_eq!(
@@ -731,7 +780,8 @@ mod tests {
                 value: ParsedTagValue::AttributeList(HashMap::from([(
                     "METHOD",
                     ParsedAttributeValue::UnquotedString("NONE")
-                )]))
+                )])),
+                original_input: "#EXT-X-KEY:METHOD=NONE"
             })
         );
     }
@@ -751,7 +801,8 @@ mod tests {
                 value: ParsedTagValue::AttributeList(HashMap::from([
                     ("URI", ParsedAttributeValue::QuotedString("init.mp4")),
                     ("BYTERANGE", ParsedAttributeValue::QuotedString("1024@0")),
-                ]))
+                ])),
+                original_input: "#EXT-X-MAP:URI=\"init.mp4\",BYTERANGE=\"1024@0\""
             })
         );
         assert_eq!(
@@ -761,7 +812,8 @@ mod tests {
                 value: ParsedTagValue::AttributeList(HashMap::from([(
                     "URI",
                     ParsedAttributeValue::QuotedString("init.mp4")
-                ),]))
+                )])),
+                original_input: "#EXT-X-MAP:URI=\"init.mp4\""
             })
         );
     }
@@ -784,7 +836,8 @@ mod tests {
             Ok(Tag::ProgramDateTime(ProgramDateTime::new(date_time))),
             Tag::try_from(ParsedTag {
                 name: "-X-PROGRAM-DATE-TIME",
-                value: ParsedTagValue::DateTimeMsec(date_time)
+                value: ParsedTagValue::DateTimeMsec(date_time),
+                original_input: "#EXT-X-PROGRAM-DATE-TIME:2025-06-05T16:46:42.123-05:00"
             })
         );
     }
@@ -795,7 +848,8 @@ mod tests {
             Ok(Tag::Gap(Gap)),
             Tag::try_from(ParsedTag {
                 name: "-X-GAP",
-                value: ParsedTagValue::Empty
+                value: ParsedTagValue::Empty,
+                original_input: "#EXT-X-GAP"
             })
         );
     }
@@ -806,7 +860,8 @@ mod tests {
             Ok(Tag::Bitrate(Bitrate::new(10000000))),
             Tag::try_from(ParsedTag {
                 name: "-X-BITRATE",
-                value: ParsedTagValue::DecimalInteger(10000000)
+                value: ParsedTagValue::DecimalInteger(10000000),
+                original_input: "#EXT-X-BITRATE:10000000"
             })
         );
     }
@@ -835,7 +890,8 @@ mod tests {
                     ("INDEPENDENT", ParsedAttributeValue::UnquotedString("YES")),
                     ("BYTERANGE", ParsedAttributeValue::QuotedString("1024@512")),
                     ("GAP", ParsedAttributeValue::UnquotedString("YES"))
-                ]))
+                ])),
+                original_input: "#EXT-X-PART:URI=\"part.1.mp4\",DURATION=0.5,INDEPENDENT=YES,BYTERANGE=1024@512,GAP=YES"
             })
         );
         assert_eq!(
@@ -858,7 +914,8 @@ mod tests {
                         ParsedAttributeValue::SignedDecimalFloatingPoint(0.5)
                     ),
                     ("BYTERANGE", ParsedAttributeValue::QuotedString("1024")),
-                ]))
+                ])),
+                original_input: "#EXT-X-PART:URI=\"part.1.mp4\",DURATION=0.5,BYTERANGE=1024"
             })
         );
         assert_eq!(
@@ -871,7 +928,8 @@ mod tests {
                         "DURATION",
                         ParsedAttributeValue::SignedDecimalFloatingPoint(0.5)
                     ),
-                ]))
+                ])),
+                original_input: "#EXT-X-PART:URI=\"part.1.mp4\",DURATION=0.5"
             })
         );
     }
@@ -942,7 +1000,22 @@ mod tests {
                     ("SCTE35-OUT", ParsedAttributeValue::UnquotedString("0xABCD")),
                     ("SCTE35-IN", ParsedAttributeValue::UnquotedString("0xABCD")),
                     ("END-ON-NEXT", ParsedAttributeValue::UnquotedString("YES")),
-                ]))
+                ])),
+                original_input: concat!(
+                    "#EXT-X-DATERANGE:",
+                    "ID=\"test\",",
+                    "CLASS=\"com.m3u8.test\",",
+                    "START-DATE=\"2025-06-05T20:38:42.149-05:00\",",
+                    "CUE=\"ONCE\",",
+                    "END-DATE=\"2025-06-05T20:40:42.149-05:00\",",
+                    "DURATION=120,",
+                    "PLANNED-DURATION=180,",
+                    "X-COM-M3U8-TEST=\"YES\",",
+                    "SCTE35-CMD=0xABCD,",
+                    "SCTE35-OUT=0xABCD,",
+                    "SCTE35-IN=0xABCD,",
+                    "END-ON-NEXT=YES",
+                )
             })
         );
         assert_eq!(
@@ -979,7 +1052,8 @@ mod tests {
                         "START-DATE",
                         ParsedAttributeValue::QuotedString("2025-06-05T20:38:42.149-05:00")
                     ),
-                ]))
+                ])),
+                original_input: "#EXT-X-DATERANGE:ID=\"test\",START-DATE=\"2025-06-05T20:38:42.149-05:00\""
             })
         );
     }
@@ -999,7 +1073,8 @@ mod tests {
                         "RECENTLY-REMOVED-DATERANGES",
                         ParsedAttributeValue::QuotedString("1234\tabcd")
                     ),
-                ]))
+                ])),
+                original_input: "#EXT-X-SKIP:SKIPPED-SEGMENTS=100,RECENTLY-REMOVED-DATERANGES=\"1234\tabcd\""
             })
         );
         assert_eq!(
@@ -1009,7 +1084,8 @@ mod tests {
                 value: ParsedTagValue::AttributeList(HashMap::from([(
                     "SKIPPED-SEGMENTS",
                     ParsedAttributeValue::DecimalInteger(100)
-                ),]))
+                )])),
+                original_input: "#EXT-X-SKIP:SKIPPED-SEGMENTS=100"
             })
         );
     }
@@ -1033,7 +1109,8 @@ mod tests {
                         "BYTERANGE-LENGTH",
                         ParsedAttributeValue::DecimalInteger(1024)
                     ),
-                ]))
+                ])),
+                original_input: "#EXT-X-PRELOAD-HINT:TYPE=PART,URI=\"part.2.mp4\",BYTERANGE-START=512,BYTERANGE-LENGTH=1024"
             })
         );
         assert_eq!(
@@ -1048,7 +1125,8 @@ mod tests {
                 value: ParsedTagValue::AttributeList(HashMap::from([
                     ("TYPE", ParsedAttributeValue::UnquotedString("PART")),
                     ("URI", ParsedAttributeValue::QuotedString("part.2.mp4")),
-                ]))
+                ])),
+                original_input: "#EXT-X-PRELOAD-HINT:TYPE=PART,URI=\"part.2.mp4\""
             })
         );
     }
@@ -1067,7 +1145,8 @@ mod tests {
                     ("URI", ParsedAttributeValue::QuotedString("high.m3u8")),
                     ("LAST-MSN", ParsedAttributeValue::DecimalInteger(1000)),
                     ("LAST-PART", ParsedAttributeValue::DecimalInteger(2)),
-                ]))
+                ])),
+                original_input: "#EXT-X-RENDITION-REPORT:URI=\"high.m3u8\",LAST-MSN=1000,LAST-PART=2"
             })
         );
         assert_eq!(
@@ -1081,7 +1160,8 @@ mod tests {
                 value: ParsedTagValue::AttributeList(HashMap::from([
                     ("URI", ParsedAttributeValue::QuotedString("high.m3u8")),
                     ("LAST-MSN", ParsedAttributeValue::DecimalInteger(1000)),
-                ]))
+                ])),
+                original_input: "#EXT-X-RENDITION-REPORT:URI=\"high.m3u8\",LAST-MSN=1000"
             })
         );
     }
@@ -1132,7 +1212,24 @@ mod tests {
                         ParsedAttributeValue::QuotedString("public.accessibility.describes-video")
                     ),
                     ("CHANNELS", ParsedAttributeValue::QuotedString("2")),
-                ]))
+                ])),
+                original_input: concat!(
+                    "#EXT-X-MEDIA:",
+                    "TYPE=AUDIO,",
+                    "NAME=\"English\",",
+                    "GROUP-ID=\"stereo\",",
+                    "URI=\"audio/en/stereo.m3u8\",",
+                    "LANGUAGE=\"en\",",
+                    "ASSOC-LANGUAGE=\"en\",",
+                    "STABLE-RENDITION-ID=\"1234\",",
+                    "DEFAULT=YES,",
+                    "AUTOSELECT=YES,",
+                    "FORCED=YES,",
+                    "BIT-DEPTH=8,",
+                    "SAMPLE-RATE=48000,",
+                    "CHARACTERISTICS=\"public.accessibility.describes-video\",",
+                    "CHANNELS=\"2\"",
+                )
             })
         );
         assert_eq!(
@@ -1163,7 +1260,14 @@ mod tests {
                     ("GROUP-ID", ParsedAttributeValue::QuotedString("cc")),
                     ("NAME", ParsedAttributeValue::QuotedString("English")),
                     ("INSTREAM-ID", ParsedAttributeValue::QuotedString("CC1")),
-                ]))
+                ])),
+                original_input: concat!(
+                    "#EXT-X-MEDIA:",
+                    "TYPE=CLOSED-CAPTIONS,",
+                    "NAME=\"English\",",
+                    "GROUP-ID=\"cc\",",
+                    "INSTREAM-ID=\"CC1\""
+                )
             })
         );
     }
@@ -1243,7 +1347,27 @@ mod tests {
                     ("SUBTITLES", ParsedAttributeValue::QuotedString("subs")),
                     ("CLOSED-CAPTIONS", ParsedAttributeValue::QuotedString("cc")),
                     ("PATHWAY-ID", ParsedAttributeValue::QuotedString("1234")),
-                ]))
+                ])),
+                original_input: concat!(
+                    "#EXT-X-STREAM-INF:",
+                    "BANDWIDTH=10000000,",
+                    "AVERAGE-BANDWIDTH=9000000,",
+                    "SCORE=2.0,",
+                    "CODECS=\"hvc1.2.4.L153.b0,ec-3\",",
+                    "SUPPLEMENTAL-CODECS=\"dvh1.08.07/db4h\",",
+                    "RESOLUTION=3840x2160,",
+                    "FRAME-RATE=23.976",
+                    "HDCP-LEVEL=TYPE-1",
+                    "ALLOWED-CPC=\"com.example.drm1:SMART-TV/PC\",",
+                    "VIDEO-RANGE=PQ,",
+                    "REQ-VIDEO-LAYOUT=\"CH-STEREO,CH-MONO\",",
+                    "STABLE-VARIANT-ID=\"1234\",",
+                    "AUDIO=\"surround\",",
+                    "VIDEO=\"alternate-view\",",
+                    "SUBTITLES=\"subs\",",
+                    "CLOSED-CAPTIONS=\"cc\",",
+                    "PATHWAY-ID=\"1234\"",
+                )
             })
         );
         // One more test to check that integer frame rate parses well
@@ -1272,7 +1396,8 @@ mod tests {
                 value: ParsedTagValue::AttributeList(HashMap::from([
                     ("BANDWIDTH", ParsedAttributeValue::DecimalInteger(10000000)),
                     ("FRAME-RATE", ParsedAttributeValue::DecimalInteger(25)),
-                ]))
+                ])),
+                original_input: "#EXT-X-STREAM-INF:BANDWIDTH=10000000,FRAME-RATE=25"
             })
         );
         // Final check with all options unset
@@ -1286,7 +1411,8 @@ mod tests {
                 value: ParsedTagValue::AttributeList(HashMap::from([(
                     "BANDWIDTH",
                     ParsedAttributeValue::DecimalInteger(10000000)
-                )]))
+                )])),
+                original_input: "#EXT-X-STREAM-INF:BANDWIDTH=10000000"
             })
         );
     }
@@ -1360,7 +1486,24 @@ mod tests {
                         ParsedAttributeValue::QuotedString("alternate-view")
                     ),
                     ("PATHWAY-ID", ParsedAttributeValue::QuotedString("1234")),
-                ]))
+                ])),
+                original_input: concat!(
+                    "#EXT-X-I-FRAME-STREAM-INF:",
+                    "URI=\"iframe.high.m3u8\",",
+                    "BANDWIDTH=10000000,",
+                    "AVERAGE-BANDWIDTH=9000000,",
+                    "SCORE=2.0,",
+                    "CODECS=\"hvc1.2.4.L153.b0,ec-3\",",
+                    "SUPPLEMENTAL-CODECS=\"dvh1.08.07/db4h\",",
+                    "RESOLUTION=3840x2160,",
+                    "HDCP-LEVEL=TYPE-1",
+                    "ALLOWED-CPC=\"com.example.drm1:SMART-TV/PC\",",
+                    "VIDEO-RANGE=PQ,",
+                    "REQ-VIDEO-LAYOUT=\"CH-STEREO,CH-MONO\",",
+                    "STABLE-VARIANT-ID=\"1234\",",
+                    "VIDEO=\"alternate-view\",",
+                    "PATHWAY-ID=\"1234\"",
+                )
             })
         );
         assert_eq!(
@@ -1388,7 +1531,12 @@ mod tests {
                         ParsedAttributeValue::QuotedString("iframe.high.m3u8")
                     ),
                     ("BANDWIDTH", ParsedAttributeValue::DecimalInteger(10000000))
-                ]))
+                ])),
+                original_input: concat!(
+                    "#EXT-X-I-FRAME-STREAM-INF:",
+                    "URI=\"iframe.high.m3u8\",",
+                    "BANDWIDTH=10000000",
+                )
             })
         );
     }
@@ -1409,7 +1557,8 @@ mod tests {
                     ("DATA-ID", ParsedAttributeValue::QuotedString("1234")),
                     ("VALUE", ParsedAttributeValue::QuotedString("test")),
                     ("LANGUAGE", ParsedAttributeValue::QuotedString("en")),
-                ]))
+                ])),
+                original_input: "#EXT-X-SESSION-DATA:DATA-ID=\"1234\",VALUE=\"test\",LANGUAGE=\"en\""
             })
         );
         assert_eq!(
@@ -1426,7 +1575,8 @@ mod tests {
                     ("DATA-ID", ParsedAttributeValue::QuotedString("1234")),
                     ("URI", ParsedAttributeValue::QuotedString("test.bin")),
                     ("FORMAT", ParsedAttributeValue::UnquotedString("RAW")),
-                ]))
+                ])),
+                original_input: "#EXT-X-SESSION-DATA:DATA-ID=\"1234\",URI=\"test.bin\",FORMAT=RAW"
             })
         );
     }
@@ -1455,7 +1605,8 @@ mod tests {
                         ParsedAttributeValue::QuotedString("com.apple.streamingkeydelivery")
                     ),
                     ("KEYFORMATVERSIONS", ParsedAttributeValue::QuotedString("1")),
-                ]))
+                ])),
+                original_input: "#EXT-X-SESSION-KEY:METHOD=SAMPLE-AES,URI=\"skd://some-key-id\",IV=0xABCD,KEYFORMAT=\"com.apple.streamingkeydelivery\",KEYFORMATVERSIONS=\"1\""
             })
         );
         assert_eq!(
@@ -1474,7 +1625,8 @@ mod tests {
                         "URI",
                         ParsedAttributeValue::QuotedString("skd://some-key-id")
                     ),
-                ]))
+                ])),
+                original_input: "#EXT-X-SESSION-KEY:METHOD=AES-128,URI=\"skd://some-key-id\""
             })
         );
     }
@@ -1494,7 +1646,8 @@ mod tests {
                         ParsedAttributeValue::QuotedString("content-steering.json")
                     ),
                     ("PATHWAY-ID", ParsedAttributeValue::QuotedString("1234")),
-                ]))
+                ])),
+                original_input: "#EXT-X-CONTENT-STEERING:SERVER-URI=\"content-steering.json\",PATHWAY-ID=\"1234\""
             })
         );
         assert_eq!(
@@ -1507,7 +1660,8 @@ mod tests {
                 value: ParsedTagValue::AttributeList(HashMap::from([(
                     "SERVER-URI",
                     ParsedAttributeValue::QuotedString("content-steering.json")
-                ),]))
+                )])),
+                original_input: "#EXT-X-CONTENT-STEERING:SERVER-URI=\"content-steering.json\""
             })
         );
     }

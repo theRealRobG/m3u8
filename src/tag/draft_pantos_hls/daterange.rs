@@ -1,16 +1,24 @@
 use crate::{
     date::{self, DateTime},
-    tag::value::{ParsedAttributeValue, ParsedTagValue},
+    tag::{
+        draft_pantos_hls::TagName,
+        known::ParsedTag,
+        value::{ParsedAttributeValue, ParsedTagValue},
+    },
+    utils::{split_by_first_lf, str_from},
 };
-use std::collections::{HashMap, HashSet};
+use std::{
+    borrow::Cow,
+    collections::{HashMap, HashSet},
+};
 
 /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.5.1
 #[derive(Debug)]
 pub struct Daterange<'a> {
     id: &'a str,
     start_date: DateTime,
-    // Original attribute list
-    attribute_list: HashMap<&'a str, ParsedAttributeValue<'a>>,
+    attribute_list: HashMap<&'a str, ParsedAttributeValue<'a>>, // Original attribute list
+    output_line: Cow<'a, [u8]>,                                 // Used with Writer
     // This needs to exist because the user can construct a Daterange with `Daterange::new()`, but
     // will pass a `DateTime`, not a `&str`. I can't convert a `DateTime` to a `&str` and so need to
     // store it as is for later use.
@@ -38,11 +46,11 @@ impl<'a> PartialEq for Daterange<'a> {
     }
 }
 
-impl<'a> TryFrom<ParsedTagValue<'a>> for Daterange<'a> {
+impl<'a> TryFrom<ParsedTag<'a>> for Daterange<'a> {
     type Error = &'static str;
 
-    fn try_from(value: ParsedTagValue<'a>) -> Result<Self, Self::Error> {
-        let ParsedTagValue::AttributeList(attribute_list) = value else {
+    fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
+        let ParsedTagValue::AttributeList(attribute_list) = tag.value else {
             return Err(super::ValidationError::unexpected_value_type());
         };
         let Some(ParsedAttributeValue::QuotedString(id)) = attribute_list.get(ID) else {
@@ -58,6 +66,7 @@ impl<'a> TryFrom<ParsedTagValue<'a>> for Daterange<'a> {
             id,
             start_date,
             attribute_list,
+            output_line: Cow::Borrowed(tag.original_input.as_bytes()),
             stored_end_date: None,
         })
     }
@@ -97,7 +106,7 @@ impl<'a> Daterange<'a> {
                 ParsedAttributeValue::SignedDecimalFloatingPoint(planned_duration),
             );
         }
-        for (key, value) in client_attributes {
+        for (key, value) in client_attributes.clone() {
             attribute_list.insert(key, value);
         }
         if let Some(scte35_cmd) = scte35_cmd {
@@ -116,6 +125,23 @@ impl<'a> Daterange<'a> {
             id,
             start_date,
             attribute_list,
+            output_line: Cow::Owned(
+                calculate_line(
+                    id,
+                    class,
+                    start_date,
+                    cue,
+                    end_date,
+                    duration,
+                    planned_duration,
+                    client_attributes,
+                    scte35_cmd,
+                    scte35_out,
+                    scte35_in,
+                    end_on_next,
+                )
+                .into_bytes(),
+            ),
             stored_end_date: end_date,
         }
     }
@@ -222,6 +248,10 @@ impl<'a> Daterange<'a> {
             _ => None,
         }
     }
+
+    pub fn as_str(&self) -> &str {
+        split_by_first_lf(str_from(&self.output_line)).parsed
+    }
 }
 
 const ID: &'static str = "ID";
@@ -236,3 +266,235 @@ const SCTE35_OUT: &'static str = "SCTE35-OUT";
 const SCTE35_IN: &'static str = "SCTE35-IN";
 const END_ON_NEXT: &'static str = "END-ON-NEXT";
 const YES: &'static str = "YES";
+
+fn calculate_line(
+    id: &str,
+    class: Option<&str>,
+    start_date: DateTime,
+    cue: Option<&str>,
+    end_date: Option<DateTime>,
+    duration: Option<f64>,
+    planned_duration: Option<f64>,
+    client_attributes: HashMap<&str, ParsedAttributeValue>,
+    scte35_cmd: Option<&str>,
+    scte35_out: Option<&str>,
+    scte35_in: Option<&str>,
+    end_on_next: bool,
+) -> String {
+    let mut line = format!(
+        "#EXT{}:{}=\"{}\",{}=\"{}\"",
+        TagName::Daterange.as_str(),
+        ID,
+        id,
+        START_DATE,
+        String::from(start_date),
+    );
+    if let Some(class) = class {
+        line.push_str(format!(",{}=\"{}\"", CLASS, class).as_str());
+    }
+    if let Some(cue) = cue {
+        line.push_str(format!(",{}=\"{}\"", CUE, cue).as_str());
+    }
+    if let Some(end_date) = end_date {
+        line.push_str(format!(",{}=\"{}\"", END_DATE, String::from(end_date)).as_str());
+    }
+    if let Some(duration) = duration {
+        line.push_str(format!(",{}={}", DURATION, duration).as_str());
+    }
+    if let Some(planned_duration) = planned_duration {
+        line.push_str(format!(",{}={}", PLANNED_DURATION, planned_duration).as_str());
+    }
+    for (key, value) in client_attributes {
+        let value = match value {
+            ParsedAttributeValue::DecimalInteger(n) => format!("{}", n),
+            ParsedAttributeValue::SignedDecimalFloatingPoint(n) => format!("{:?}", n),
+            ParsedAttributeValue::QuotedString(s) => format!("\"{}\"", s),
+            ParsedAttributeValue::UnquotedString(s) => s.to_string(),
+        };
+        line.push_str(format!(",{}={}", key, value).as_str());
+    }
+    if let Some(scte35_cmd) = scte35_cmd {
+        line.push_str(format!(",{}={}", SCTE35_CMD, scte35_cmd).as_str());
+    }
+    if let Some(scte35_out) = scte35_out {
+        line.push_str(format!(",{}={}", SCTE35_OUT, scte35_out).as_str());
+    }
+    if let Some(scte35_in) = scte35_in {
+        line.push_str(format!(",{}={}", SCTE35_IN, scte35_in).as_str());
+    }
+    if end_on_next {
+        line.push_str(",END-ON-NEXT=YES");
+    }
+    line
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::date::DateTimeTimezoneOffset;
+
+    use super::*;
+    use pretty_assertions::assert_eq;
+
+    #[test]
+    fn new_with_no_optionals_should_be_valid() {
+        let tag = Daterange::new(
+            "some-id",
+            None,
+            DateTime {
+                date_fullyear: 2025,
+                date_month: 6,
+                date_mday: 14,
+                time_hour: 23,
+                time_minute: 41,
+                time_second: 42.0,
+                timezone_offset: DateTimeTimezoneOffset {
+                    time_hour: -5,
+                    time_minute: 0,
+                },
+            },
+            None,
+            None,
+            None,
+            None,
+            HashMap::new(),
+            None,
+            None,
+            None,
+            false,
+        );
+        assert_eq!(
+            "#EXT-X-DATERANGE:ID=\"some-id\",START-DATE=\"2025-06-14T23:41:42.000-05:00\"",
+            tag.as_str()
+        );
+    }
+
+    #[test]
+    fn new_with_optionals_should_be_valid() {
+        let tag = Daterange::new(
+            "some-id",
+            Some("com.example.class"),
+            DateTime {
+                date_fullyear: 2025,
+                date_month: 6,
+                date_mday: 14,
+                time_hour: 23,
+                time_minute: 41,
+                time_second: 42.0,
+                timezone_offset: DateTimeTimezoneOffset {
+                    time_hour: -5,
+                    time_minute: 0,
+                },
+            },
+            Some("ONCE"),
+            Some(DateTime {
+                date_fullyear: 2025,
+                date_month: 6,
+                date_mday: 14,
+                time_hour: 23,
+                time_minute: 43,
+                time_second: 42.0,
+                timezone_offset: DateTimeTimezoneOffset {
+                    time_hour: -5,
+                    time_minute: 0,
+                },
+            }),
+            Some(120.0),
+            Some(180.0),
+            HashMap::new(),
+            Some("0xABCD"),
+            Some("0xABCD"),
+            Some("0xABCD"),
+            true,
+        );
+        assert_eq!(
+            concat!(
+                "#EXT-X-DATERANGE:ID=\"some-id\",START-DATE=\"2025-06-14T23:41:42.000-05:00\",",
+                "CLASS=\"com.example.class\",CUE=\"ONCE\",",
+                "END-DATE=\"2025-06-14T23:43:42.000-05:00\",DURATION=120,PLANNED-DURATION=180,",
+                "SCTE35-CMD=0xABCD,SCTE35-OUT=0xABCD,SCTE35-IN=0xABCD,END-ON-NEXT=YES"
+            ),
+            tag.as_str()
+        );
+    }
+
+    #[test]
+    fn new_with_optionals_and_some_client_attributes_should_be_valid() {
+        let tag = Daterange::new(
+            "some-id",
+            None,
+            DateTime {
+                date_fullyear: 2025,
+                date_month: 6,
+                date_mday: 14,
+                time_hour: 23,
+                time_minute: 41,
+                time_second: 42.0,
+                timezone_offset: DateTimeTimezoneOffset {
+                    time_hour: -5,
+                    time_minute: 0,
+                },
+            },
+            None,
+            None,
+            None,
+            None,
+            HashMap::from([
+                (
+                    "X-COM-EXAMPLE-A",
+                    ParsedAttributeValue::QuotedString("Example A"),
+                ),
+                (
+                    "X-COM-EXAMPLE-B",
+                    ParsedAttributeValue::SignedDecimalFloatingPoint(42.0),
+                ),
+                (
+                    "X-COM-EXAMPLE-C",
+                    ParsedAttributeValue::UnquotedString("0xABCD"),
+                ),
+            ]),
+            None,
+            None,
+            None,
+            false,
+        );
+        // Client attributes can come in any order (due to it being a HashMap) so we need to be a
+        // little more creative in validating the tag format.
+        let tag_as_str = tag.as_str();
+        let mut found_a = false;
+        let mut found_b = false;
+        let mut found_c = false;
+        for (index, split) in tag_as_str.split(',').enumerate() {
+            match index {
+                0 => assert_eq!("#EXT-X-DATERANGE:ID=\"some-id\"", split),
+                1 => assert_eq!("START-DATE=\"2025-06-14T23:41:42.000-05:00\"", split),
+                2 | 3 | 4 => {
+                    if split.starts_with("X-COM-EXAMPLE-A") {
+                        if found_a {
+                            panic!("Already found A")
+                        }
+                        found_a = true;
+                        assert_eq!("X-COM-EXAMPLE-A=\"Example A\"", split);
+                    } else if split.starts_with("X-COM-EXAMPLE-B") {
+                        if found_b {
+                            panic!("Already found B")
+                        }
+                        found_b = true;
+                        assert_eq!("X-COM-EXAMPLE-B=42.0", split);
+                    } else if split.starts_with("X-COM-EXAMPLE-C") {
+                        if found_c {
+                            panic!("Already found C")
+                        }
+                        found_c = true;
+                        assert_eq!("X-COM-EXAMPLE-C=0xABCD", split);
+                    } else {
+                        panic!("Unexpected attribute at index {}", index);
+                    }
+                }
+                _ => panic!("Too many attributes"),
+            }
+        }
+        assert!(found_a);
+        assert!(found_b);
+        assert!(found_c);
+    }
+}

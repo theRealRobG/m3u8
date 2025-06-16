@@ -1,4 +1,7 @@
-use crate::tag::value::{ParsedAttributeValue, ParsedTagValue};
+use crate::tag::{
+    known::ParsedTag,
+    value::{ParsedAttributeValue, ParsedTagValue},
+};
 use std::collections::HashMap;
 
 /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.3.8
@@ -8,11 +11,11 @@ pub struct ServerControl<'a> {
     attribute_list: HashMap<&'a str, ParsedAttributeValue<'a>>,
 }
 
-impl<'a> TryFrom<ParsedTagValue<'a>> for ServerControl<'a> {
+impl<'a> TryFrom<ParsedTag<'a>> for ServerControl<'a> {
     type Error = &'static str;
 
-    fn try_from(value: ParsedTagValue<'a>) -> Result<Self, Self::Error> {
-        let ParsedTagValue::AttributeList(attribute_list) = value else {
+    fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
+        let ParsedTagValue::AttributeList(attribute_list) = tag.value else {
             return Err(super::ValidationError::unexpected_value_type());
         };
         Ok(Self { attribute_list })

@@ -52,6 +52,38 @@ pub(crate) fn str_from(bytes: &[u8]) -> &str {
     }
 }
 
+pub fn split_by_first_lf(str: &str) -> ParsedLineSlice<&str> {
+    let mut cr_index = None;
+    let next_new_line_index = str.as_bytes().iter().enumerate().find_map(|(i, b)| {
+        if *b == b'\n' {
+            Some(i)
+        } else if *b == b'\r' {
+            cr_index = Some(i);
+            None
+        } else {
+            None
+        }
+    });
+    match next_new_line_index {
+        Some(index) => {
+            if cr_index == Some(index - 1) {
+                let parsed = &str[..cr_index.unwrap()];
+                let remaining = Some(&str[(index + 1)..]);
+                ParsedLineSlice { parsed, remaining }
+            } else {
+                let parsed = &str[..index];
+                let remaining = Some(&str[(index + 1)..]);
+                ParsedLineSlice { parsed, remaining }
+            }
+        }
+        None => {
+            let parsed = str;
+            let remaining = None;
+            ParsedLineSlice { parsed, remaining }
+        }
+    }
+}
+
 /// Expectation is that bytes has already been iterated through until either `b't'` or `b':'`.
 /// Calling this from the beginning of a DateTime will fail. Iterate partially through first and
 /// then use this method for the rest.
