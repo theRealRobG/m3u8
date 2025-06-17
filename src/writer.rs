@@ -35,7 +35,7 @@ where
     }
 
     pub fn write_line<'a, Line: Into<HlsLine<'a>>>(&mut self, line: Line) -> io::Result<()> {
-        let result = match line.into() {
+        match line.into() {
             HlsLine::Blank => self.writer.write_all(b"\n"),
             HlsLine::Comment(c) => {
                 self.writer.write_all(b"#")?;
@@ -44,7 +44,6 @@ where
             HlsLine::Uri(u) => self.writer.write_all(u.as_bytes()),
             HlsLine::UnknownTag(t) => self.writer.write_all(t.as_str().as_bytes()),
             HlsLine::KnownTag(t) => todo!(),
-        };
-        result
+        }
     }
 }

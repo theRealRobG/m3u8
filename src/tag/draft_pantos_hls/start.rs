@@ -69,9 +69,9 @@ impl<'a> Start<'a> {
     }
 }
 
-const TIME_OFFSET: &'static str = "TIME-OFFSET";
-const PRECISE: &'static str = "PRECISE";
-const YES: &'static str = "YES";
+const TIME_OFFSET: &str = "TIME-OFFSET";
+const PRECISE: &str = "PRECISE";
+const YES: &str = "YES";
 
 fn calculate_line(time_offset: f64, precise: bool) -> String {
     if precise {

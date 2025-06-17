@@ -97,10 +97,10 @@ impl<'a> PreloadHint<'a> {
     }
 }
 
-const TYPE: &'static str = "TYPE";
-const URI: &'static str = "URI";
-const BYTERANGE_START: &'static str = "BYTERANGE-START";
-const BYTERANGE_LENGTH: &'static str = "BYTERANGE-LENGTH";
+const TYPE: &str = "TYPE";
+const URI: &str = "URI";
+const BYTERANGE_START: &str = "BYTERANGE-START";
+const BYTERANGE_LENGTH: &str = "BYTERANGE-LENGTH";
 
 fn calculate_line(
     hint_type: &str,

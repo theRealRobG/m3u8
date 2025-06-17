@@ -58,21 +58,21 @@ where
     match bytes.next() {
         Some(b'#') => {
             let Some(b'E') = bytes.next() else {
-                let comment = take_until_end_of_bytes(input[1..].as_bytes().iter())?;
+                let comment = take_until_end_of_bytes(input.as_bytes()[1..].iter())?;
                 return Ok(ParsedLineSlice {
                     parsed: HlsLine::Comment(comment.parsed),
                     remaining: comment.remaining,
                 });
             };
             let Some(b'X') = bytes.next() else {
-                let comment = take_until_end_of_bytes(input[1..].as_bytes().iter())?;
+                let comment = take_until_end_of_bytes(input.as_bytes()[1..].iter())?;
                 return Ok(ParsedLineSlice {
                     parsed: HlsLine::Comment(comment.parsed),
                     remaining: comment.remaining,
                 });
             };
             let Some(b'T') = bytes.next() else {
-                let comment = take_until_end_of_bytes(input[1..].as_bytes().iter())?;
+                let comment = take_until_end_of_bytes(input.as_bytes()[1..].iter())?;
                 return Ok(ParsedLineSlice {
                     parsed: HlsLine::Comment(comment.parsed),
                     remaining: comment.remaining,

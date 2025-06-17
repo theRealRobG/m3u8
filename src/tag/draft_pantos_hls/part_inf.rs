@@ -59,7 +59,7 @@ impl<'a> PartInf<'a> {
     }
 }
 
-const PART_TARGET: &'static str = "PART-TARGET";
+const PART_TARGET: &str = "PART-TARGET";
 
 fn calculate_line(part_target: f64) -> String {
     format!("#EXT-X-PART-INF:{PART_TARGET}={part_target}")

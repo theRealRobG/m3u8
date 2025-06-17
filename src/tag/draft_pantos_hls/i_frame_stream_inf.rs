@@ -272,20 +272,20 @@ impl<'a> IFrameStreamInf<'a> {
     }
 }
 
-const URI: &'static str = "URI";
-const BANDWIDTH: &'static str = "BANDWIDTH";
-const AVERAGE_BANDWIDTH: &'static str = "AVERAGE-BANDWIDTH";
-const SCORE: &'static str = "SCORE";
-const CODECS: &'static str = "CODECS";
-const SUPPLEMENTAL_CODECS: &'static str = "SUPPLEMENTAL-CODECS";
-const RESOLUTION: &'static str = "RESOLUTION";
-const HDCP_LEVEL: &'static str = "HDCP-LEVEL";
-const ALLOWED_CPC: &'static str = "ALLOWED-CPC";
-const VIDEO_RANGE: &'static str = "VIDEO-RANGE";
-const REQ_VIDEO_LAYOUT: &'static str = "REQ-VIDEO-LAYOUT";
-const STABLE_VARIANT_ID: &'static str = "STABLE-VARIANT-ID";
-const VIDEO: &'static str = "VIDEO";
-const PATHWAY_ID: &'static str = "PATHWAY-ID";
+const URI: &str = "URI";
+const BANDWIDTH: &str = "BANDWIDTH";
+const AVERAGE_BANDWIDTH: &str = "AVERAGE-BANDWIDTH";
+const SCORE: &str = "SCORE";
+const CODECS: &str = "CODECS";
+const SUPPLEMENTAL_CODECS: &str = "SUPPLEMENTAL-CODECS";
+const RESOLUTION: &str = "RESOLUTION";
+const HDCP_LEVEL: &str = "HDCP-LEVEL";
+const ALLOWED_CPC: &str = "ALLOWED-CPC";
+const VIDEO_RANGE: &str = "VIDEO-RANGE";
+const REQ_VIDEO_LAYOUT: &str = "REQ-VIDEO-LAYOUT";
+const STABLE_VARIANT_ID: &str = "STABLE-VARIANT-ID";
+const VIDEO: &str = "VIDEO";
+const PATHWAY_ID: &str = "PATHWAY-ID";
 
 fn calculate_line(
     uri: &str,
@@ -317,7 +317,7 @@ fn calculate_line(
         line.push_str(format!(",{SUPPLEMENTAL_CODECS}=\"{supplemental_codecs}\"").as_str());
     }
     if let Some(resolution) = resolution {
-        line.push_str(format!(",{RESOLUTION}={}", resolution.to_string()).as_str());
+        line.push_str(format!(",{RESOLUTION}={resolution}").as_str());
     }
     if let Some(hdcp_level) = hdcp_level {
         line.push_str(format!(",{HDCP_LEVEL}={hdcp_level}").as_str());

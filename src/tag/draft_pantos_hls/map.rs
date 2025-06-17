@@ -5,7 +5,7 @@ use crate::{
     },
     utils::{split_by_first_lf, str_from},
 };
-use std::{borrow::Cow, collections::HashMap};
+use std::{borrow::Cow, collections::HashMap, fmt::Display};
 
 /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.4.5
 #[derive(Debug)]
@@ -30,10 +30,9 @@ pub struct MapByterange {
     pub length: u64,
     pub offset: u64,
 }
-
-impl MapByterange {
-    pub fn to_string(&self) -> String {
-        format!("{}@{}", self.length, self.offset)
+impl Display for MapByterange {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}@{}", self.length, self.offset)
     }
 }
 
@@ -100,13 +99,13 @@ impl<'a> Map<'a> {
     }
 }
 
-const URI: &'static str = "URI";
-const BYTERANGE: &'static str = "BYTERANGE";
+const URI: &str = "URI";
+const BYTERANGE: &str = "BYTERANGE";
 
 fn calculate_line(uri: &str, byterange: Option<MapByterange>) -> String {
     let mut line = format!("#EXT-X-MAP:{URI}=\"{uri}\"");
     if let Some(byterange) = byterange {
-        line.push_str(format!(",{BYTERANGE}=\"{}\"", byterange.to_string()).as_str());
+        line.push_str(format!(",{BYTERANGE}=\"{byterange}\"").as_str());
     }
     line
 }

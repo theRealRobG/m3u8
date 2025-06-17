@@ -123,12 +123,12 @@ impl<'a> ServerControl<'a> {
     }
 }
 
-const CAN_SKIP_UNTIL: &'static str = "CAN-SKIP-UNTIL";
-const CAN_SKIP_DATERANGES: &'static str = "CAN-SKIP-DATERANGES";
-const HOLD_BACK: &'static str = "HOLD-BACK";
-const PART_HOLD_BACK: &'static str = "PART-HOLD-BACK";
-const CAN_BLOCK_RELOAD: &'static str = "CAN-BLOCK-RELOAD";
-const YES: &'static str = "YES";
+const CAN_SKIP_UNTIL: &str = "CAN-SKIP-UNTIL";
+const CAN_SKIP_DATERANGES: &str = "CAN-SKIP-DATERANGES";
+const HOLD_BACK: &str = "HOLD-BACK";
+const PART_HOLD_BACK: &str = "PART-HOLD-BACK";
+const CAN_BLOCK_RELOAD: &str = "CAN-BLOCK-RELOAD";
+const YES: &str = "YES";
 
 fn calculate_line(
     can_skip_until: Option<f64>,
@@ -157,7 +157,6 @@ fn calculate_line(
     }
     if can_block_reload {
         line.push_str(format!("{separator}{CAN_BLOCK_RELOAD}={YES}").as_str());
-        separator = ",";
     }
     line
 }

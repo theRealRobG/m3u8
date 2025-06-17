@@ -189,7 +189,7 @@ impl<'a> Define<'a> {
     }
 }
 
-const NAME: &'static str = "NAME";
-const VALUE: &'static str = "VALUE";
-const IMPORT: &'static str = "IMPORT";
-const QUERYPARAM: &'static str = "QUERYPARAM";
+const NAME: &str = "NAME";
+const VALUE: &str = "VALUE";
+const IMPORT: &str = "IMPORT";
+const QUERYPARAM: &str = "QUERYPARAM";

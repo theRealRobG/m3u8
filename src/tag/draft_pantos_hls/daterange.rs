@@ -202,7 +202,7 @@ impl<'a> Daterange<'a> {
 
     pub fn client_attribute_keys(&self) -> HashSet<&str> {
         let mut set = HashSet::new();
-        for (&key, _) in &self.attribute_list {
+        for &key in self.attribute_list.keys() {
             if key.starts_with("X-") {
                 set.insert(key);
             }
@@ -254,18 +254,18 @@ impl<'a> Daterange<'a> {
     }
 }
 
-const ID: &'static str = "ID";
-const CLASS: &'static str = "CLASS";
-const START_DATE: &'static str = "START-DATE";
-const CUE: &'static str = "CUE";
-const END_DATE: &'static str = "END-DATE";
-const DURATION: &'static str = "DURATION";
-const PLANNED_DURATION: &'static str = "PLANNED-DURATION";
-const SCTE35_CMD: &'static str = "SCTE35-CMD";
-const SCTE35_OUT: &'static str = "SCTE35-OUT";
-const SCTE35_IN: &'static str = "SCTE35-IN";
-const END_ON_NEXT: &'static str = "END-ON-NEXT";
-const YES: &'static str = "YES";
+const ID: &str = "ID";
+const CLASS: &str = "CLASS";
+const START_DATE: &str = "START-DATE";
+const CUE: &str = "CUE";
+const END_DATE: &str = "END-DATE";
+const DURATION: &str = "DURATION";
+const PLANNED_DURATION: &str = "PLANNED-DURATION";
+const SCTE35_CMD: &str = "SCTE35-CMD";
+const SCTE35_OUT: &str = "SCTE35-OUT";
+const SCTE35_IN: &str = "SCTE35-IN";
+const END_ON_NEXT: &str = "END-ON-NEXT";
+const YES: &str = "YES";
 
 fn calculate_line(
     id: &str,

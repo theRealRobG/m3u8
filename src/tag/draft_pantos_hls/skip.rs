@@ -73,8 +73,8 @@ impl<'a> Skip<'a> {
     }
 }
 
-const SKIPPED_SEGMENTS: &'static str = "SKIPPED-SEGMENTS";
-const RECENTLY_REMOVED_DATERANGES: &'static str = "RECENTLY-REMOVED-DATERANGES";
+const SKIPPED_SEGMENTS: &str = "SKIPPED-SEGMENTS";
+const RECENTLY_REMOVED_DATERANGES: &str = "RECENTLY-REMOVED-DATERANGES";
 
 fn calculate_line(skipped_segments: u64, recently_removed_dateranges: Option<&str>) -> String {
     let mut line = format!("#EXT-X-SKIP:{SKIPPED_SEGMENTS}={skipped_segments}");

@@ -5,7 +5,7 @@ use crate::{
     },
     utils::{split_by_first_lf, str_from},
 };
-use std::{borrow::Cow, collections::HashMap};
+use std::{borrow::Cow, collections::HashMap, fmt::Display};
 
 /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.4.9
 #[derive(Debug)]
@@ -24,12 +24,12 @@ pub struct PartByterange {
     pub length: u64,
     pub offset: Option<u64>,
 }
-impl PartByterange {
-    pub fn to_string(&self) -> String {
+impl Display for PartByterange {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if let Some(offset) = self.offset {
-            format!("{}@{}", self.length, offset)
+            write!(f, "{}@{}", self.length, offset)
         } else {
-            format!("{}", self.length)
+            write!(f, "{}", self.length)
         }
     }
 }
@@ -153,12 +153,12 @@ impl<'a> Part<'a> {
     }
 }
 
-const URI: &'static str = "URI";
-const DURATION: &'static str = "DURATION";
-const INDEPENDENT: &'static str = "INDEPENDENT";
-const BYTERANGE: &'static str = "BYTERANGE";
-const GAP: &'static str = "GAP";
-const YES: &'static str = "YES";
+const URI: &str = "URI";
+const DURATION: &str = "DURATION";
+const INDEPENDENT: &str = "INDEPENDENT";
+const BYTERANGE: &str = "BYTERANGE";
+const GAP: &str = "GAP";
+const YES: &str = "YES";
 
 fn calculate_line(
     uri: &str,
@@ -172,7 +172,7 @@ fn calculate_line(
         line.push_str(format!(",{INDEPENDENT}={YES}").as_str());
     }
     if let Some(byterange) = byterange {
-        line.push_str(format!(",{BYTERANGE}={}", byterange.to_string()).as_str());
+        line.push_str(format!(",{BYTERANGE}={byterange}").as_str());
     }
     if gap {
         line.push_str(format!(",{GAP}={YES}").as_str());

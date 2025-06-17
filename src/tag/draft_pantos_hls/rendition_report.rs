@@ -75,9 +75,9 @@ impl<'a> RenditionReport<'a> {
     }
 }
 
-const URI: &'static str = "URI";
-const LAST_MSN: &'static str = "LAST-MSN";
-const LAST_PART: &'static str = "LAST-PART";
+const URI: &str = "URI";
+const LAST_MSN: &str = "LAST-MSN";
+const LAST_PART: &str = "LAST-PART";
 
 fn calculate_line(uri: &str, last_msn: u64, last_part: Option<u64>) -> String {
     let mut line = format!("#EXT-X-RENDITION-REPORT:{URI}=\"{uri}\",{LAST_MSN}={last_msn}");

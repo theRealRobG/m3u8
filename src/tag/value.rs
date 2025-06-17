@@ -5,7 +5,7 @@ use crate::{
         parse_date_time_bytes, str_from, take_until_end_of_bytes, validate_carriage_return_bytes,
     },
 };
-use std::{collections::HashMap, slice::Iter};
+use std::{collections::HashMap, fmt::Display, slice::Iter};
 
 // Not exactly the same as `tag-value`, because some of the types must be contextualized by the
 // `tag-name`, but this list covers the possible raw values.
@@ -143,9 +143,9 @@ pub struct DecimalResolution {
     pub height: u64,
 }
 
-impl DecimalResolution {
-    pub fn to_string(&self) -> String {
-        format!("{}x{}", self.width, self.height)
+impl Display for DecimalResolution {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}x{}", self.width, self.height)
     }
 }
 

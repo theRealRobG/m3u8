@@ -68,8 +68,8 @@ impl<'a> ContentSteering<'a> {
     }
 }
 
-const SERVER_URI: &'static str = "SERVER-URI";
-const PATHWAY_ID: &'static str = "PATHWAY-ID";
+const SERVER_URI: &str = "SERVER-URI";
+const PATHWAY_ID: &str = "PATHWAY-ID";
 
 fn calculate_line(server_uri: &str, pathway_id: Option<&str>) -> String {
     let mut line = format!(

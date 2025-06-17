@@ -102,11 +102,11 @@ impl<'a> SessionData<'a> {
     }
 }
 
-const DATA_ID: &'static str = "DATA-ID";
-const VALUE: &'static str = "VALUE";
-const URI: &'static str = "URI";
-const FORMAT: &'static str = "FORMAT";
-const LANGUAGE: &'static str = "LANGUAGE";
+const DATA_ID: &str = "DATA-ID";
+const VALUE: &str = "VALUE";
+const URI: &str = "URI";
+const FORMAT: &str = "FORMAT";
+const LANGUAGE: &str = "LANGUAGE";
 
 fn calculate_line(
     data_id: &str,

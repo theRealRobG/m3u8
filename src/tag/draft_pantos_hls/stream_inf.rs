@@ -318,23 +318,23 @@ impl<'a> StreamInf<'a> {
     }
 }
 
-const BANDWIDTH: &'static str = "BANDWIDTH";
-const AVERAGE_BANDWIDTH: &'static str = "AVERAGE-BANDWIDTH";
-const SCORE: &'static str = "SCORE";
-const CODECS: &'static str = "CODECS";
-const SUPPLEMENTAL_CODECS: &'static str = "SUPPLEMENTAL-CODECS";
-const RESOLUTION: &'static str = "RESOLUTION";
-const FRAME_RATE: &'static str = "FRAME-RATE";
-const HDCP_LEVEL: &'static str = "HDCP-LEVEL";
-const ALLOWED_CPC: &'static str = "ALLOWED-CPC";
-const VIDEO_RANGE: &'static str = "VIDEO-RANGE";
-const REQ_VIDEO_LAYOUT: &'static str = "REQ-VIDEO-LAYOUT";
-const STABLE_VARIANT_ID: &'static str = "STABLE-VARIANT-ID";
-const AUDIO: &'static str = "AUDIO";
-const VIDEO: &'static str = "VIDEO";
-const SUBTITLES: &'static str = "SUBTITLES";
-const CLOSED_CAPTIONS: &'static str = "CLOSED-CAPTIONS";
-const PATHWAY_ID: &'static str = "PATHWAY-ID";
+const BANDWIDTH: &str = "BANDWIDTH";
+const AVERAGE_BANDWIDTH: &str = "AVERAGE-BANDWIDTH";
+const SCORE: &str = "SCORE";
+const CODECS: &str = "CODECS";
+const SUPPLEMENTAL_CODECS: &str = "SUPPLEMENTAL-CODECS";
+const RESOLUTION: &str = "RESOLUTION";
+const FRAME_RATE: &str = "FRAME-RATE";
+const HDCP_LEVEL: &str = "HDCP-LEVEL";
+const ALLOWED_CPC: &str = "ALLOWED-CPC";
+const VIDEO_RANGE: &str = "VIDEO-RANGE";
+const REQ_VIDEO_LAYOUT: &str = "REQ-VIDEO-LAYOUT";
+const STABLE_VARIANT_ID: &str = "STABLE-VARIANT-ID";
+const AUDIO: &str = "AUDIO";
+const VIDEO: &str = "VIDEO";
+const SUBTITLES: &str = "SUBTITLES";
+const CLOSED_CAPTIONS: &str = "CLOSED-CAPTIONS";
+const PATHWAY_ID: &str = "PATHWAY-ID";
 
 fn calculate_line(
     bandwidth: u64,
@@ -369,7 +369,7 @@ fn calculate_line(
         line.push_str(format!(",{SUPPLEMENTAL_CODECS}=\"{supplemental_codecs}\"").as_str());
     }
     if let Some(resolution) = resolution {
-        line.push_str(format!(",{RESOLUTION}={}", resolution.to_string()).as_str());
+        line.push_str(format!(",{RESOLUTION}={resolution}").as_str());
     }
     if let Some(frame_rate) = frame_rate {
         line.push_str(format!(",{FRAME_RATE}={frame_rate}").as_str());

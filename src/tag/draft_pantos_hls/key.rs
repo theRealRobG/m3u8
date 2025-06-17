@@ -104,11 +104,11 @@ impl<'a> Key<'a> {
     }
 }
 
-const METHOD: &'static str = "METHOD";
-const URI: &'static str = "URI";
-const IV: &'static str = "IV";
-const KEYFORMAT: &'static str = "KEYFORMAT";
-const KEYFORMATVERSIONS: &'static str = "KEYFORMATVERSIONS";
+const METHOD: &str = "METHOD";
+const URI: &str = "URI";
+const IV: &str = "IV";
+const KEYFORMAT: &str = "KEYFORMAT";
+const KEYFORMATVERSIONS: &str = "KEYFORMATVERSIONS";
 
 fn calculate_line(
     method: &str,

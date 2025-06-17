@@ -230,22 +230,22 @@ impl<'a> Media<'a> {
     }
 }
 
-const TYPE: &'static str = "TYPE";
-const URI: &'static str = "URI";
-const GROUP_ID: &'static str = "GROUP-ID";
-const LANGUAGE: &'static str = "LANGUAGE";
-const ASSOC_LANGUAGE: &'static str = "ASSOC-LANGUAGE";
-const NAME: &'static str = "NAME";
-const STABLE_RENDITION_ID: &'static str = "STABLE-RENDITION-ID";
-const DEFAULT: &'static str = "DEFAULT";
-const AUTOSELECT: &'static str = "AUTOSELECT";
-const FORCED: &'static str = "FORCED";
-const INSTREAM_ID: &'static str = "INSTREAM-ID";
-const BIT_DEPTH: &'static str = "BIT-DEPTH";
-const SAMPLE_RATE: &'static str = "SAMPLE-RATE";
-const CHARACTERISTICS: &'static str = "CHARACTERISTICS";
-const CHANNELS: &'static str = "CHANNELS";
-const YES: &'static str = "YES";
+const TYPE: &str = "TYPE";
+const URI: &str = "URI";
+const GROUP_ID: &str = "GROUP-ID";
+const LANGUAGE: &str = "LANGUAGE";
+const ASSOC_LANGUAGE: &str = "ASSOC-LANGUAGE";
+const NAME: &str = "NAME";
+const STABLE_RENDITION_ID: &str = "STABLE-RENDITION-ID";
+const DEFAULT: &str = "DEFAULT";
+const AUTOSELECT: &str = "AUTOSELECT";
+const FORCED: &str = "FORCED";
+const INSTREAM_ID: &str = "INSTREAM-ID";
+const BIT_DEPTH: &str = "BIT-DEPTH";
+const SAMPLE_RATE: &str = "SAMPLE-RATE";
+const CHARACTERISTICS: &str = "CHARACTERISTICS";
+const CHANNELS: &str = "CHANNELS";
+const YES: &str = "YES";
 
 fn calculate_line(
     media_type: &str,
