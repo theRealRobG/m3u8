@@ -1,15 +1,18 @@
-use crate::tag::{
-    known::ParsedTag,
-    value::{DecimalResolution, ParsedAttributeValue, ParsedTagValue},
+use crate::{
+    tag::{
+        known::ParsedTag,
+        value::{DecimalResolution, ParsedAttributeValue, ParsedTagValue},
+    },
+    utils::{split_by_first_lf, str_from},
 };
-use std::collections::HashMap;
+use std::{borrow::Cow, collections::HashMap};
 
 /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.6.2
 #[derive(Debug)]
 pub struct StreamInf<'a> {
     bandwidth: u64,
-    // Original attribute list
-    attribute_list: HashMap<&'a str, ParsedAttributeValue<'a>>,
+    attribute_list: HashMap<&'a str, ParsedAttributeValue<'a>>, // Original attribute list
+    output_line: Cow<'a, [u8]>,                                 // Used with Writer
     // This needs to exist because the user can construct an IFrameStreamInf with
     // `IFrameStreamInf::new()`, but will pass a `DecimalResolution`, not a `&str`. I can't convert
     // a `DecimalResolution` to a `&str` and so need to store it as is for later use.
@@ -52,6 +55,7 @@ impl<'a> TryFrom<ParsedTag<'a>> for StreamInf<'a> {
         Ok(Self {
             bandwidth: *bandwidth,
             attribute_list,
+            output_line: Cow::Borrowed(tag.original_input.as_bytes()),
             stored_decimal_resolution: None,
         })
     }
@@ -151,6 +155,28 @@ impl<'a> StreamInf<'a> {
         Self {
             bandwidth,
             attribute_list,
+            output_line: Cow::Owned(
+                calculate_line(
+                    bandwidth,
+                    average_bandwidth,
+                    score,
+                    codecs,
+                    supplemental_codecs,
+                    resolution,
+                    frame_rate,
+                    hdcp_level,
+                    allowed_cpc,
+                    video_range,
+                    req_video_layout,
+                    stable_variant_id,
+                    audio,
+                    video,
+                    subtitles,
+                    closed_captions,
+                    pathway_id,
+                )
+                .into_bytes(),
+            ),
             stored_decimal_resolution: resolution,
         }
     }
@@ -286,6 +312,10 @@ impl<'a> StreamInf<'a> {
             _ => None,
         }
     }
+
+    pub fn as_str(&self) -> &str {
+        split_by_first_lf(str_from(&self.output_line)).parsed
+    }
 }
 
 const BANDWIDTH: &'static str = "BANDWIDTH";
@@ -305,3 +335,141 @@ const VIDEO: &'static str = "VIDEO";
 const SUBTITLES: &'static str = "SUBTITLES";
 const CLOSED_CAPTIONS: &'static str = "CLOSED-CAPTIONS";
 const PATHWAY_ID: &'static str = "PATHWAY-ID";
+
+fn calculate_line(
+    bandwidth: u64,
+    average_bandwidth: Option<u64>,
+    score: Option<f64>,
+    codecs: Option<&str>,
+    supplemental_codecs: Option<&str>,
+    resolution: Option<DecimalResolution>,
+    frame_rate: Option<f64>,
+    hdcp_level: Option<&str>,
+    allowed_cpc: Option<&str>,
+    video_range: Option<&str>,
+    req_video_layout: Option<&str>,
+    stable_variant_id: Option<&str>,
+    audio: Option<&str>,
+    video: Option<&str>,
+    subtitles: Option<&str>,
+    closed_captions: Option<&str>,
+    pathway_id: Option<&str>,
+) -> String {
+    let mut line = format!("#EXT-X-STREAM-INF:{BANDWIDTH}={bandwidth}");
+    if let Some(average_bandwidth) = average_bandwidth {
+        line.push_str(format!(",{AVERAGE_BANDWIDTH}={average_bandwidth}").as_str());
+    }
+    if let Some(score) = score {
+        line.push_str(format!(",{SCORE}={score:?}").as_str());
+    }
+    if let Some(codecs) = codecs {
+        line.push_str(format!(",{CODECS}=\"{codecs}\"").as_str());
+    }
+    if let Some(supplemental_codecs) = supplemental_codecs {
+        line.push_str(format!(",{SUPPLEMENTAL_CODECS}=\"{supplemental_codecs}\"").as_str());
+    }
+    if let Some(resolution) = resolution {
+        line.push_str(format!(",{RESOLUTION}={}", resolution.to_string()).as_str());
+    }
+    if let Some(frame_rate) = frame_rate {
+        line.push_str(format!(",{FRAME_RATE}={frame_rate}").as_str());
+    }
+    if let Some(hdcp_level) = hdcp_level {
+        line.push_str(format!(",{HDCP_LEVEL}={hdcp_level}").as_str());
+    }
+    if let Some(allowed_cpc) = allowed_cpc {
+        line.push_str(format!(",{ALLOWED_CPC}=\"{allowed_cpc}\"").as_str());
+    }
+    if let Some(video_range) = video_range {
+        line.push_str(format!(",{VIDEO_RANGE}={video_range}").as_str());
+    }
+    if let Some(req_video_layout) = req_video_layout {
+        line.push_str(format!(",{REQ_VIDEO_LAYOUT}=\"{req_video_layout}\"").as_str());
+    }
+    if let Some(stable_variant_id) = stable_variant_id {
+        line.push_str(format!(",{STABLE_VARIANT_ID}=\"{stable_variant_id}\"").as_str());
+    }
+    if let Some(audio) = audio {
+        line.push_str(format!(",{AUDIO}=\"{audio}\"").as_str());
+    }
+    if let Some(video) = video {
+        line.push_str(format!(",{VIDEO}=\"{video}\"").as_str());
+    }
+    if let Some(subtitles) = subtitles {
+        line.push_str(format!(",{SUBTITLES}=\"{subtitles}\"").as_str());
+    }
+    if let Some(closed_captions) = closed_captions {
+        line.push_str(format!(",{CLOSED_CAPTIONS}=\"{closed_captions}\"").as_str());
+    }
+    if let Some(pathway_id) = pathway_id {
+        line.push_str(format!(",{PATHWAY_ID}=\"{pathway_id}\"").as_str());
+    }
+    line
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pretty_assertions::assert_eq;
+
+    #[test]
+    fn as_str_with_no_options_should_be_valid() {
+        assert_eq!(
+            "#EXT-X-STREAM-INF:BANDWIDTH=10000000",
+            StreamInf::new(
+                10000000, None, None, None, None, None, None, None, None, None, None, None, None,
+                None, None, None, None,
+            )
+            .as_str()
+        );
+    }
+
+    #[test]
+    fn as_str_with_options_should_be_valid() {
+        assert_eq!(
+            concat!(
+                "#EXT-X-STREAM-INF:",
+                "BANDWIDTH=10000000,",
+                "AVERAGE-BANDWIDTH=9000000,",
+                "SCORE=2.0,",
+                "CODECS=\"hvc1.2.4.L153.b0,ec-3\",",
+                "SUPPLEMENTAL-CODECS=\"dvh1.08.07/db4h\",",
+                "RESOLUTION=3840x2160,",
+                "FRAME-RATE=23.976,",
+                "HDCP-LEVEL=TYPE-1,",
+                "ALLOWED-CPC=\"com.example.drm1:SMART-TV/PC\",",
+                "VIDEO-RANGE=PQ,",
+                "REQ-VIDEO-LAYOUT=\"CH-STEREO,CH-MONO\",",
+                "STABLE-VARIANT-ID=\"1234\",",
+                "AUDIO=\"surround\",",
+                "VIDEO=\"alternate-view\",",
+                "SUBTITLES=\"subs\",",
+                "CLOSED-CAPTIONS=\"cc\",",
+                "PATHWAY-ID=\"1234\"",
+            ),
+            StreamInf::new(
+                10000000,
+                Some(9000000),
+                Some(2.0),
+                Some("hvc1.2.4.L153.b0,ec-3"),
+                Some("dvh1.08.07/db4h"),
+                Some(DecimalResolution {
+                    width: 3840,
+                    height: 2160
+                }),
+                Some(23.976),
+                Some("TYPE-1"),
+                Some("com.example.drm1:SMART-TV/PC"),
+                Some("PQ"),
+                Some("CH-STEREO,CH-MONO"),
+                Some("1234"),
+                Some("surround"),
+                Some("alternate-view"),
+                Some("subs"),
+                Some("cc"),
+                Some("1234"),
+            )
+            .as_str()
+        )
+    }
+}

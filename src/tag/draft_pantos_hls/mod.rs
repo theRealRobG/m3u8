@@ -52,7 +52,7 @@ pub enum Tag<'a> {
     /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.1.1
     M3u(M3u),
     /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.1.2
-    Version(Version),
+    Version(Version<'a>),
     /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.2.1
     IndependentSegments(IndependentSegments),
     /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.2.2
@@ -60,7 +60,7 @@ pub enum Tag<'a> {
     /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.2.3
     Define(Define<'a>),
     /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.3.1
-    Targetduration(Targetduration),
+    Targetduration(Targetduration<'a>),
     /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.3.2
     MediaSequence(MediaSequence<'a>),
     /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.3.3
@@ -86,7 +86,7 @@ pub enum Tag<'a> {
     /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.4.5
     Map(Map<'a>),
     /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.4.6
-    ProgramDateTime(ProgramDateTime),
+    ProgramDateTime(ProgramDateTime<'a>),
     /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.4.7
     Gap(Gap),
     /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.4.8
@@ -199,42 +199,42 @@ impl Tag<'_> {
         }
     }
 
-    // pub fn as_str(&self) -> &str {
-    //     match self {
-    //         Tag::M3u(t) => t.as_str(),
-    //         Tag::Version(t) => t.as_str(),
-    //         Tag::IndependentSegments(t) => t.as_str(),
-    //         Tag::Start(t) => t.as_str(),
-    //         Tag::Define(t) => t.as_str(),
-    //         Tag::Targetduration(t) => t.as_str(),
-    //         Tag::MediaSequence(t) => t.as_str(),
-    //         Tag::DiscontinuitySequence(t) => t.as_str(),
-    //         Tag::Endlist(t) => t.as_str(),
-    //         Tag::PlaylistType(t) => t.as_str(),
-    //         Tag::IFramesOnly(t) => t.as_str(),
-    //         Tag::PartInf(t) => t.as_str(),
-    //         Tag::ServerControl(t) => t.as_str(),
-    //         Tag::Inf(t) => t.as_str(),
-    //         Tag::Byterange(t) => t.as_str(),
-    //         Tag::Discontinuity(t) => t.as_str(),
-    //         Tag::Key(t) => t.as_str(),
-    //         Tag::Map(t) => t.as_str(),
-    //         Tag::ProgramDateTime(t) => t.as_str(),
-    //         Tag::Gap(t) => t.as_str(),
-    //         Tag::Bitrate(t) => t.as_str(),
-    //         Tag::Part(t) => t.as_str(),
-    //         Tag::Daterange(t) => t.as_str(),
-    //         Tag::Skip(t) => t.as_str(),
-    //         Tag::PreloadHint(t) => t.as_str(),
-    //         Tag::RenditionReport(t) => t.as_str(),
-    //         Tag::Media(t) => t.as_str(),
-    //         Tag::StreamInf(t) => t.as_str(),
-    //         Tag::IFrameStreamInf(t) => t.as_str(),
-    //         Tag::SessionData(t) => t.as_str(),
-    //         Tag::SessionKey(t) => t.as_str(),
-    //         Tag::ContentSteering(t) => t.as_str(),
-    //     }
-    // }
+    pub fn as_str(&self) -> &str {
+        match self {
+            Tag::M3u(_) => M3u::as_str(),
+            Tag::Version(t) => t.as_str(),
+            Tag::IndependentSegments(_) => IndependentSegments::as_str(),
+            Tag::Start(t) => t.as_str(),
+            Tag::Define(t) => t.as_str(),
+            Tag::Targetduration(t) => t.as_str(),
+            Tag::MediaSequence(t) => t.as_str(),
+            Tag::DiscontinuitySequence(t) => t.as_str(),
+            Tag::Endlist(_) => Endlist::as_str(),
+            Tag::PlaylistType(t) => t.as_str(),
+            Tag::IFramesOnly(_) => IFramesOnly::as_str(),
+            Tag::PartInf(t) => t.as_str(),
+            Tag::ServerControl(t) => t.as_str(),
+            Tag::Inf(t) => t.as_str(),
+            Tag::Byterange(t) => t.as_str(),
+            Tag::Discontinuity(_) => Discontinuity::as_str(),
+            Tag::Key(t) => t.as_str(),
+            Tag::Map(t) => t.as_str(),
+            Tag::ProgramDateTime(t) => t.as_str(),
+            Tag::Gap(_) => Gap::as_str(),
+            Tag::Bitrate(t) => t.as_str(),
+            Tag::Part(t) => t.as_str(),
+            Tag::Daterange(t) => t.as_str(),
+            Tag::Skip(t) => t.as_str(),
+            Tag::PreloadHint(t) => t.as_str(),
+            Tag::RenditionReport(t) => t.as_str(),
+            Tag::Media(t) => t.as_str(),
+            Tag::StreamInf(t) => t.as_str(),
+            Tag::IFrameStreamInf(t) => t.as_str(),
+            Tag::SessionData(t) => t.as_str(),
+            Tag::SessionKey(t) => t.as_str(),
+            Tag::ContentSteering(t) => t.as_str(),
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
@@ -1356,8 +1356,8 @@ mod tests {
                     "CODECS=\"hvc1.2.4.L153.b0,ec-3\",",
                     "SUPPLEMENTAL-CODECS=\"dvh1.08.07/db4h\",",
                     "RESOLUTION=3840x2160,",
-                    "FRAME-RATE=23.976",
-                    "HDCP-LEVEL=TYPE-1",
+                    "FRAME-RATE=23.976,",
+                    "HDCP-LEVEL=TYPE-1,",
                     "ALLOWED-CPC=\"com.example.drm1:SMART-TV/PC\",",
                     "VIDEO-RANGE=PQ,",
                     "REQ-VIDEO-LAYOUT=\"CH-STEREO,CH-MONO\",",

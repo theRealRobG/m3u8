@@ -1,15 +1,18 @@
-use crate::tag::{
-    known::ParsedTag,
-    value::{ParsedAttributeValue, ParsedTagValue},
+use crate::{
+    tag::{
+        known::ParsedTag,
+        value::{ParsedAttributeValue, ParsedTagValue},
+    },
+    utils::{split_by_first_lf, str_from},
 };
-use std::collections::HashMap;
+use std::{borrow::Cow, collections::HashMap};
 
 /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.2.2
 #[derive(Debug, PartialEq)]
 pub struct Start<'a> {
     time_offset: f64,
-    // Original attribute list
-    attribute_list: HashMap<&'a str, ParsedAttributeValue<'a>>,
+    attribute_list: HashMap<&'a str, ParsedAttributeValue<'a>>, // Original attribute list
+    output_line: Cow<'a, [u8]>,                                 // Used with Writer
 }
 
 impl<'a> TryFrom<ParsedTag<'a>> for Start<'a> {
@@ -28,6 +31,7 @@ impl<'a> TryFrom<ParsedTag<'a>> for Start<'a> {
         Ok(Self {
             time_offset,
             attribute_list,
+            output_line: Cow::Borrowed(tag.original_input.as_bytes()),
         })
     }
 }
@@ -45,6 +49,7 @@ impl<'a> Start<'a> {
         Self {
             time_offset,
             attribute_list,
+            output_line: Cow::Owned(calculate_line(time_offset, precise).into_bytes()),
         }
     }
 
@@ -58,8 +63,42 @@ impl<'a> Start<'a> {
             Some(ParsedAttributeValue::UnquotedString(YES))
         )
     }
+
+    pub fn as_str(&self) -> &str {
+        split_by_first_lf(str_from(&self.output_line)).parsed
+    }
 }
 
 const TIME_OFFSET: &'static str = "TIME-OFFSET";
 const PRECISE: &'static str = "PRECISE";
 const YES: &'static str = "YES";
+
+fn calculate_line(time_offset: f64, precise: bool) -> String {
+    if precise {
+        format!("#EXT-X-START:{TIME_OFFSET}={time_offset},{PRECISE}={YES}")
+    } else {
+        format!("#EXT-X-START:{TIME_OFFSET}={time_offset}")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pretty_assertions::assert_eq;
+
+    #[test]
+    fn as_str_without_precise_should_be_valid() {
+        assert_eq!(
+            "#EXT-X-START:TIME-OFFSET=-42",
+            Start::new(-42.0, false).as_str()
+        )
+    }
+
+    #[test]
+    fn as_str_with_precise_should_be_valid() {
+        assert_eq!(
+            "#EXT-X-START:TIME-OFFSET=-42,PRECISE=YES",
+            Start::new(-42.0, true).as_str()
+        )
+    }
+}
