@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use crate::{tag::value::ParsedTagValue, utils::parse_date_time_bytes};
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -9,6 +11,12 @@ pub struct DateTime {
     pub time_minute: u8,
     pub time_second: f64,
     pub timezone_offset: DateTimeTimezoneOffset,
+}
+
+impl Display for DateTime {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", String::from(*self))
+    }
 }
 
 impl From<DateTime> for String {

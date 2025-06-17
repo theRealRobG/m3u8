@@ -72,5 +72,5 @@ mod tests {
 }
 
 fn calculate_line(date_time: DateTime) -> String {
-    format!("#EXT-X-PROGRAM-DATE-TIME:{}", String::from(date_time))
+    format!("#EXT-X-PROGRAM-DATE-TIME:{date_time}")
 }

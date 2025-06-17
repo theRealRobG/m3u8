@@ -287,7 +287,7 @@ fn calculate_line(
         ID,
         id,
         START_DATE,
-        String::from(start_date),
+        start_date,
     );
     if let Some(class) = class {
         line.push_str(format!(",{}=\"{}\"", CLASS, class).as_str());
@@ -296,7 +296,7 @@ fn calculate_line(
         line.push_str(format!(",{}=\"{}\"", CUE, cue).as_str());
     }
     if let Some(end_date) = end_date {
-        line.push_str(format!(",{}=\"{}\"", END_DATE, String::from(end_date)).as_str());
+        line.push_str(format!(",{}=\"{}\"", END_DATE, end_date).as_str());
     }
     if let Some(duration) = duration {
         line.push_str(format!(",{}={}", DURATION, duration).as_str());
