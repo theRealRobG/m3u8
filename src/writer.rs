@@ -40,25 +40,50 @@ where
         &self.writer
     }
 
-    pub fn write_line<'a, Line: Into<HlsLine<'a>>>(&mut self, line: Line) -> io::Result<()> {
+    /// Write the `HlsLine` to the underlying writer. Returns the number of bytes consumed during
+    /// writing or an `io::Error` from the underlying writer.
+    pub fn write_line<'a, Line: Into<HlsLine<'a>>>(&mut self, line: Line) -> io::Result<usize> {
+        let mut count = 0usize;
         match line.into() {
             HlsLine::Blank => (),
             HlsLine::Comment(c) => {
-                self.writer.write_all(b"#")?;
-                self.writer.write_all(c.as_bytes())?;
+                count += self.write(b"#")?;
+                count += self.write(c.as_bytes())?;
             }
-            HlsLine::Uri(u) => self.writer.write_all(u.as_bytes())?,
-            HlsLine::UnknownTag(t) => self.writer.write_all(t.as_str().as_bytes())?,
+            HlsLine::Uri(u) => count += self.write(u.as_bytes())?,
+            HlsLine::UnknownTag(t) => count += self.write(t.as_str().as_bytes())?,
             HlsLine::KnownTag(t) => match t {
                 crate::tag::known::Tag::Hls(tag) => {
-                    self.writer.write_all(tag.as_str().as_bytes())?
+                    count += self.write(tag.as_str().as_bytes())?;
                 }
                 crate::tag::known::Tag::Custom(tag) => {
-                    self.writer.write_all(string_from(tag).as_bytes())?;
+                    count += self.write(string_from(tag).as_bytes())?;
                 }
             },
         };
-        self.writer.write_all(b"\n")
+        count += self.write(b"\n")?;
+        Ok(count)
+    }
+
+    fn write(&mut self, mut buf: &[u8]) -> io::Result<usize> {
+        let mut count = 0usize;
+        while !buf.is_empty() {
+            match self.writer.write(buf) {
+                Ok(0) => {
+                    return Err(io::Error::new(
+                        std::io::ErrorKind::WriteZero,
+                        "failed to write whole buffer",
+                    ));
+                }
+                Ok(n) => {
+                    count += count;
+                    buf = &buf[n..];
+                }
+                Err(ref e) if e.kind() == std::io::ErrorKind::Interrupted => {}
+                Err(e) => return Err(e),
+            }
+        }
+        Ok(count)
     }
 }
 
