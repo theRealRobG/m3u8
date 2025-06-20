@@ -37,7 +37,7 @@ pub enum HlsPlaylistType {
 
 // Not exactly the same as `attribute-value`, because some of the types must be contextualized by
 // the `attribute-name`, but this list covers the possible raw values.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum ParsedAttributeValue<'a> {
     DecimalInteger(u64),
     SignedDecimalFloatingPoint(f64),

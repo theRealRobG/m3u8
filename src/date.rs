@@ -34,7 +34,21 @@ impl From<DateTime> for String {
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+impl Default for DateTime {
+    fn default() -> Self {
+        Self {
+            date_fullyear: 1970,
+            date_month: 1,
+            date_mday: 1,
+            time_hour: 0,
+            time_minute: 0,
+            time_second: 0.0,
+            timezone_offset: Default::default(),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Clone, Copy, Default)]
 pub struct DateTimeTimezoneOffset {
     pub time_hour: i8,
     pub time_minute: u8,

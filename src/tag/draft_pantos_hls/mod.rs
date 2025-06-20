@@ -423,7 +423,9 @@ mod tests {
     use crate::{
         date::{DateTime, DateTimeTimezoneOffset},
         tag::{
-            draft_pantos_hls::{map::MapByterange, part::PartByterange},
+            draft_pantos_hls::{
+                daterange::OwnedExtensionAttributeValue, map::MapByterange, part::PartByterange,
+            },
             value::{DecimalResolution, HlsPlaylistType, ParsedAttributeValue, ParsedTagValue},
         },
     };
@@ -938,8 +940,8 @@ mod tests {
     fn daterange() {
         assert_eq!(
             Ok(Tag::Daterange(Daterange::new(
-                "test",
-                Some("com.m3u8.test"),
+                "test".to_string(),
+                Some("com.m3u8.test".to_string()),
                 DateTime {
                     date_fullyear: 2025,
                     date_month: 6,
@@ -952,7 +954,7 @@ mod tests {
                         time_minute: 0
                     }
                 },
-                Some("ONCE"),
+                Some("ONCE".to_string()),
                 Some(DateTime {
                     date_fullyear: 2025,
                     date_month: 6,
@@ -967,10 +969,13 @@ mod tests {
                 }),
                 Some(120.0),
                 Some(180.0),
-                HashMap::from([("X-COM-M3U8-TEST", ParsedAttributeValue::QuotedString("YES"))]),
-                Some("0xABCD"),
-                Some("0xABCD"),
-                Some("0xABCD"),
+                HashMap::from([(
+                    "X-COM-M3U8-TEST".to_string(),
+                    OwnedExtensionAttributeValue::QuotedString("YES".to_string())
+                )]),
+                Some("0xABCD".to_string()),
+                Some("0xABCD".to_string()),
+                Some("0xABCD".to_string()),
                 true,
             ))),
             Tag::try_from(ParsedTag {
@@ -1020,8 +1025,8 @@ mod tests {
         );
         assert_eq!(
             Ok(Tag::Daterange(Daterange::new(
-                "test",
-                None,
+                "test".to_string(),
+                None as Option<String>,
                 DateTime {
                     date_fullyear: 2025,
                     date_month: 6,
@@ -1034,14 +1039,14 @@ mod tests {
                         time_minute: 0
                     }
                 },
-                None,
+                None as Option<String>,
                 None,
                 None,
                 None,
                 HashMap::new(),
-                None,
-                None,
-                None,
+                None as Option<String>,
+                None as Option<String>,
+                None as Option<String>,
                 false,
             ))),
             Tag::try_from(ParsedTag {
