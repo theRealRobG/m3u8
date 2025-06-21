@@ -1,7 +1,7 @@
 use crate::{
     config::ParsingOptions,
     tag::{
-        self,
+        self, hls,
         known::{self, IsKnownName, NoCustomTag, ParsedTag, TagInformation},
         unknown,
     },
@@ -24,6 +24,45 @@ where
     Comment(&'a str),
     Uri(&'a str),
     Blank,
+}
+
+impl<'a> From<hls::Tag<'a>> for HlsLine<'a> {
+    fn from(tag: hls::Tag<'a>) -> Self {
+        Self::KnownTag(known::Tag::Hls(tag))
+    }
+}
+
+impl<'a, CustomTag> From<CustomTag> for HlsLine<'a, CustomTag>
+where
+    CustomTag: TryFrom<ParsedTag<'a>, Error = &'static str>
+        + IsKnownName
+        + TagInformation
+        + Debug
+        + PartialEq,
+{
+    fn from(tag: CustomTag) -> Self {
+        Self::KnownTag(known::Tag::Custom(tag))
+    }
+}
+
+impl<'a> From<unknown::Tag<'a>> for HlsLine<'a> {
+    fn from(tag: unknown::Tag<'a>) -> Self {
+        Self::UnknownTag(tag)
+    }
+}
+
+impl<'a> HlsLine<'a> {
+    pub fn new_comment(comment: &'a str) -> Self {
+        Self::Comment(comment)
+    }
+
+    pub fn new_uri(uri: &'a str) -> Self {
+        Self::Uri(uri)
+    }
+
+    pub fn new_blank() -> Self {
+        Self::Blank
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -160,7 +199,7 @@ mod tests {
     #[test]
     fn basic_tag() {
         assert_eq!(
-            Ok(HlsLine::KnownTag(known::Tag::Hls(hls::Tag::M3u(M3u)))),
+            Ok(HlsLine::from(hls::Tag::M3u(M3u))),
             parse("#EXTM3U", &ParsingOptions::default()).map(|p| p.parsed)
         );
     }
@@ -240,12 +279,12 @@ mod tests {
         }
         // Test
         assert_eq!(
-            Ok(HlsLine::KnownTag(known::Tag::Custom(TestTag {
+            Ok(HlsLine::from(TestTag {
                 greeting_type: "GREETING",
                 message: "Hello, World!",
                 times: 42,
                 score: None,
-            }))),
+            })),
             parse_with_custom::<TestTag>(
                 "#EXT-X-TEST-TAG:TYPE=GREETING,MESSAGE=\"Hello, World!\",TIMES=42",
                 &ParsingOptions::default()
@@ -257,9 +296,7 @@ mod tests {
     #[test]
     fn avoiding_parsing_known_tag_when_configured_to_avoid_via_parsing_options() {
         assert_eq!(
-            Ok(HlsLine::KnownTag(known::Tag::Hls(hls::Tag::Start(
-                Start::new(-18.0, false)
-            )))),
+            Ok(HlsLine::from(hls::Tag::Start(Start::new(-18.0, false)))),
             parse("#EXT-X-START:TIME-OFFSET=-18", &ParsingOptions::default()).map(|p| p.parsed)
         );
         assert_eq!(
