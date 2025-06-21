@@ -1,4 +1,4 @@
-use crate::tag::{draft_pantos_hls, value::ParsedTagValue};
+use crate::tag::{hls, value::ParsedTagValue};
 use std::{cmp::PartialEq, fmt::Debug};
 
 #[derive(Debug, PartialEq)]
@@ -14,7 +14,7 @@ where
     // Clippy suggests that the `Tag` within the `Hls` case should be put in a Box, based on
     // https://rust-lang.github.io/rust-clippy/master/index.html#large_enum_variant
     //   > The largest variant contains at least 272 bytes; Boxing the large field
-    //   > (draft_pantos_hls::Tag) reduces the total size of the enum.
+    //   > (hls::Tag) reduces the total size of the enum.
     //
     // However, the description also indicates:
     //   > This lint obviously cannot take the distribution of variants in your running program into
@@ -31,7 +31,7 @@ where
     // I believe that the vast majority of cases where the parser is being used we will be using
     // instances of the `Hls` variant, and therefore, I am not putting the `Tag` in a `Box` and so
     // ignoring the Clippy warning.
-    Hls(draft_pantos_hls::Tag<'a>),
+    Hls(hls::Tag<'a>),
     Custom(CustomTag),
 }
 
@@ -89,7 +89,7 @@ where
         if CustomTag::is_known_name(tag.name) {
             Ok(Self::Custom(CustomTag::try_from(tag)?))
         } else {
-            Ok(Self::Hls(draft_pantos_hls::Tag::try_from(tag)?))
+            Ok(Self::Hls(hls::Tag::try_from(tag)?))
         }
     }
 }

@@ -134,7 +134,7 @@ mod tests {
     use crate::{
         date::{DateTime, DateTimeTimezoneOffset},
         tag::{
-            draft_pantos_hls::{
+            hls::{
                 self, inf::Inf, m3u::M3u, media_sequence::MediaSequence,
                 target_duration::Targetduration, version::Version,
             },
@@ -304,30 +304,28 @@ mod tests {
     fn writer_should_output_expected() {
         let mut writer = Writer::new(Vec::new());
         writer
+            .write_line(&HlsLine::KnownTag(known::Tag::Hls(hls::Tag::M3u(M3u))))
+            .unwrap();
+        writer
+            .write_line(&HlsLine::KnownTag(known::Tag::Hls(hls::Tag::Version(
+                Version::new(3),
+            ))))
+            .unwrap();
+        writer
             .write_line(&HlsLine::KnownTag(known::Tag::Hls(
-                draft_pantos_hls::Tag::M3u(M3u),
+                hls::Tag::Targetduration(Targetduration::new(8)),
             )))
             .unwrap();
         writer
             .write_line(&HlsLine::KnownTag(known::Tag::Hls(
-                draft_pantos_hls::Tag::Version(Version::new(3)),
-            )))
-            .unwrap();
-        writer
-            .write_line(&HlsLine::KnownTag(known::Tag::Hls(
-                draft_pantos_hls::Tag::Targetduration(Targetduration::new(8)),
-            )))
-            .unwrap();
-        writer
-            .write_line(&HlsLine::KnownTag(known::Tag::Hls(
-                draft_pantos_hls::Tag::MediaSequence(MediaSequence::new(2680)),
+                hls::Tag::MediaSequence(MediaSequence::new(2680)),
             )))
             .unwrap();
         writer.write_line(&HlsLine::Blank).unwrap();
         writer
-            .write_line(&HlsLine::KnownTag(known::Tag::Hls(
-                draft_pantos_hls::Tag::Inf(Inf::new(7.975, "")),
-            )))
+            .write_line(&HlsLine::KnownTag(known::Tag::Hls(hls::Tag::Inf(
+                Inf::new(7.975, ""),
+            ))))
             .unwrap();
         writer
             .write_line(&HlsLine::Uri(
@@ -335,9 +333,9 @@ mod tests {
             ))
             .unwrap();
         writer
-            .write_line(&HlsLine::KnownTag(known::Tag::Hls(
-                draft_pantos_hls::Tag::Inf(Inf::new(7.941, "")),
-            )))
+            .write_line(&HlsLine::KnownTag(known::Tag::Hls(hls::Tag::Inf(
+                Inf::new(7.941, ""),
+            ))))
             .unwrap();
         writer
             .write_line(&HlsLine::Uri(
@@ -345,9 +343,9 @@ mod tests {
             ))
             .unwrap();
         writer
-            .write_line(&HlsLine::KnownTag(known::Tag::Hls(
-                draft_pantos_hls::Tag::Inf(Inf::new(7.975, "")),
-            )))
+            .write_line(&HlsLine::KnownTag(known::Tag::Hls(hls::Tag::Inf(
+                Inf::new(7.975, ""),
+            ))))
             .unwrap();
         writer
             .write_line(&HlsLine::Uri(
@@ -374,9 +372,9 @@ mod tests {
         assert_eq!(
             22, // 21 (#EXTINF:6.006,PTS:0.0) + 1 (\n) == 22
             writer
-                .write_line(&HlsLine::KnownTag(known::Tag::Hls(
-                    draft_pantos_hls::Tag::Inf(Inf::new(6.006, "PTS:0.0"))
-                )))
+                .write_line(&HlsLine::KnownTag(known::Tag::Hls(hls::Tag::Inf(
+                    Inf::new(6.006, "PTS:0.0")
+                ))))
                 .unwrap()
         );
     }

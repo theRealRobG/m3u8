@@ -1,6 +1,6 @@
 use crate::{
     tag::{
-        draft_pantos_hls::TagName,
+        hls::TagName,
         known::ParsedTag,
         value::{ParsedAttributeValue, ParsedTagValue},
     },

@@ -127,7 +127,7 @@ mod tests {
     use crate::{
         config::ParsingOptionsBuilder,
         tag::{
-            draft_pantos_hls::{self, m3u::M3u, start::Start},
+            hls::{self, m3u::M3u, start::Start},
             value::{ParsedAttributeValue, ParsedTagValue},
         },
     };
@@ -160,9 +160,7 @@ mod tests {
     #[test]
     fn basic_tag() {
         assert_eq!(
-            Ok(HlsLine::KnownTag(known::Tag::Hls(
-                draft_pantos_hls::Tag::M3u(M3u)
-            ))),
+            Ok(HlsLine::KnownTag(known::Tag::Hls(hls::Tag::M3u(M3u)))),
             parse("#EXTM3U", &ParsingOptions::default()).map(|p| p.parsed)
         );
     }
@@ -259,9 +257,9 @@ mod tests {
     #[test]
     fn avoiding_parsing_known_tag_when_configured_to_avoid_via_parsing_options() {
         assert_eq!(
-            Ok(HlsLine::KnownTag(known::Tag::Hls(
-                draft_pantos_hls::Tag::Start(Start::new(-18.0, false))
-            ))),
+            Ok(HlsLine::KnownTag(known::Tag::Hls(hls::Tag::Start(
+                Start::new(-18.0, false)
+            )))),
             parse("#EXT-X-START:TIME-OFFSET=-18", &ParsingOptions::default()).map(|p| p.parsed)
         );
         assert_eq!(

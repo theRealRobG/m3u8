@@ -1,7 +1,7 @@
 use crate::{
     date::{self, DateTime},
     tag::{
-        draft_pantos_hls::TagName,
+        hls::TagName,
         known::ParsedTag,
         value::{ParsedAttributeValue, ParsedTagValue},
     },

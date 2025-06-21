@@ -1,5 +1,5 @@
 use crate::tag::{
-    draft_pantos_hls::{
+    hls::{
         bitrate::Bitrate, byterange::Byterange, content_steering::ContentSteering,
         daterange::Daterange, define::Define, discontinuity::Discontinuity,
         discontinuity_sequence::DiscontinuitySequence, endlist::Endlist, gap::Gap,
@@ -423,7 +423,7 @@ mod tests {
     use crate::{
         date::{DateTime, DateTimeTimezoneOffset},
         tag::{
-            draft_pantos_hls::{
+            hls::{
                 daterange::OwnedExtensionAttributeValue, map::MapByterange, part::PartByterange,
             },
             value::{DecimalResolution, HlsPlaylistType, ParsedAttributeValue, ParsedTagValue},

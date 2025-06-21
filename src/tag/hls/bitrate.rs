@@ -1,5 +1,5 @@
 use crate::{
-    tag::{draft_pantos_hls::TagName, known::ParsedTag, value::ParsedTagValue},
+    tag::{hls::TagName, known::ParsedTag, value::ParsedTagValue},
     utils::{split_by_first_lf, str_from},
 };
 use std::borrow::Cow;

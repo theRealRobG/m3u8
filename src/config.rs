@@ -1,4 +1,4 @@
-use crate::tag::draft_pantos_hls::TagName;
+use crate::tag::hls::TagName;
 use std::collections::HashSet;
 
 pub const ALL_KNOWN_HLS_TAG_NAMES: [TagName; 32] = [

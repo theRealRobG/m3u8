@@ -3,7 +3,7 @@
 ## Configuring known tags for parsing
 
 The parsing function allows the user to specify a subset of the known HLS tags that they would like
-to parse fully into `m3u8::tag::draft_pantos_hls::Tag` instances. For example, if information from
+to parse fully into `m3u8::tag::hls::Tag` instances. For example, if information from
 only `EXTINF` tags are desired, then the user can specify the parsing options using the
 `ParsingOptionsBuilder` as
 ```rust
@@ -46,10 +46,10 @@ Found 3 outliers among 100 measurements (3.00%)
 ```
 
 Some basic validation can still be done on `m3u8::tag::unknown::Tag`. For example, the name can be
-converted to a `m3u8::tag::draft_pantos_hls::TagName` and then you can check the `TagType` for some
+converted to a `m3u8::tag::hls::TagName` and then you can check the `TagType` for some
 generic reasoning on the tag position/semantics without parsing the values:
 ```rust
-use m3u8::tag::draft_pantos_hls::{TagName, TagType};
+use m3u8::tag::hls::{TagName, TagType};
 let tag_name = TagName::try_from(tag.name)?;
 match tag_name.tag_type() {
     TagType::Basic => handle_basic_tag(tag),
@@ -63,7 +63,7 @@ match tag_name.tag_type() {
 
 If there is a specific scenario where more information on a value is desired (other than just having
 `&str`), then the user can use the `m3u8::tag::value::parse` method directly on the unknown
-`tag.value`. To then get the full `m3u8::tag::draft_pantos_hls::Tag` the user can pass the result
+`tag.value`. To then get the full `m3u8::tag::hls::Tag` the user can pass the result
 into `Tag::try_from`.
 
 # HLS Specification
