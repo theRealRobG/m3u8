@@ -76,7 +76,7 @@ where
                     ));
                 }
                 Ok(n) => {
-                    count += count;
+                    count += n;
                     buf = &buf[n..];
                 }
                 Err(ref e) if e.kind() == std::io::ErrorKind::Interrupted => {}
@@ -131,8 +131,6 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
-
     use crate::{
         date::{DateTime, DateTimeTimezoneOffset},
         tag::{
@@ -143,6 +141,7 @@ mod tests {
             known,
         },
     };
+    use std::collections::HashMap;
 
     use super::*;
     use pretty_assertions::assert_eq;
@@ -358,6 +357,27 @@ mod tests {
         assert_eq!(
             EXPECTED_WRITE_OUTPUT,
             std::str::from_utf8(&writer.into_inner()).unwrap()
+        );
+    }
+
+    #[test]
+    fn write_line_should_return_correct_byte_count() {
+        let mut writer = Writer::new(Vec::new());
+        assert_eq!(
+            12, // 1 (#) + 10 (str) + 1 (\n) == 12
+            writer.write_line(&HlsLine::Comment(" A comment")).unwrap()
+        );
+        assert_eq!(
+            13, // 12 (str) + 1 (\n) == 13
+            writer.write_line(&HlsLine::Uri("example.m3u8")).unwrap()
+        );
+        assert_eq!(
+            22, // 21 (#EXTINF:6.006,PTS:0.0) + 1 (\n) == 22
+            writer
+                .write_line(&HlsLine::KnownTag(known::Tag::Hls(
+                    draft_pantos_hls::Tag::Inf(Inf::new(6.006, "PTS:0.0"))
+                )))
+                .unwrap()
         );
     }
 }
