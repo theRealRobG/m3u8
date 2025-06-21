@@ -42,9 +42,9 @@ where
 
     /// Write the `HlsLine` to the underlying writer. Returns the number of bytes consumed during
     /// writing or an `io::Error` from the underlying writer.
-    pub fn write_line<'a, Line: Into<HlsLine<'a>>>(&mut self, line: Line) -> io::Result<usize> {
+    pub fn write_line(&mut self, line: &HlsLine) -> io::Result<usize> {
         let mut count = 0usize;
-        match line.into() {
+        match line {
             HlsLine::Blank => (),
             HlsLine::Comment(c) => {
                 count += self.write(b"#")?;
@@ -87,7 +87,7 @@ where
     }
 }
 
-fn string_from<T>(custom_tag: T) -> String
+fn string_from<T>(custom_tag: &T) -> String
 where
     T: TagInformation,
 {
@@ -205,37 +205,37 @@ mod tests {
     #[test]
     fn to_string_on_empty_is_valid() {
         let test = TestTag::Empty;
-        assert_eq!("#EXT-X-TEST-TAG", string_from(test).as_str());
+        assert_eq!("#EXT-X-TEST-TAG", string_from(&test).as_str());
     }
 
     #[test]
     fn to_string_on_type_is_valid() {
         let test = TestTag::Type;
-        assert_eq!("#EXT-X-TEST-TAG:VOD", string_from(test).as_str());
+        assert_eq!("#EXT-X-TEST-TAG:VOD", string_from(&test).as_str());
     }
 
     #[test]
     fn to_string_on_int_is_valid() {
         let test = TestTag::Int;
-        assert_eq!("#EXT-X-TEST-TAG:42", string_from(test).as_str());
+        assert_eq!("#EXT-X-TEST-TAG:42", string_from(&test).as_str());
     }
 
     #[test]
     fn to_string_on_range_is_valid() {
         let test = TestTag::Range;
-        assert_eq!("#EXT-X-TEST-TAG:1024@512", string_from(test).as_str());
+        assert_eq!("#EXT-X-TEST-TAG:1024@512", string_from(&test).as_str());
     }
 
     #[test]
     fn to_string_on_float_is_valid() {
         let test = TestTag::Float { title: "" };
-        assert_eq!("#EXT-X-TEST-TAG:42.42", string_from(test).as_str());
+        assert_eq!("#EXT-X-TEST-TAG:42.42", string_from(&test).as_str());
         let test = TestTag::Float {
             title: " A useful comment",
         };
         assert_eq!(
             "#EXT-X-TEST-TAG:42.42, A useful comment",
-            string_from(test).as_str()
+            string_from(&test).as_str()
         );
     }
 
@@ -244,7 +244,7 @@ mod tests {
         let test = TestTag::Date;
         assert_eq!(
             "#EXT-X-TEST-TAG:2025-06-17T01:37:15.129-05:00",
-            string_from(test).as_str()
+            string_from(&test).as_str()
         );
     }
 
@@ -255,7 +255,7 @@ mod tests {
         let mut found_float = false;
         let mut found_quote = false;
         let mut found_enum = false;
-        let tag_string = string_from(test);
+        let tag_string = string_from(&test);
         let mut name_value_split = tag_string.split(':');
         assert_eq!("#EXT-X-TEST-TAG", name_value_split.next().unwrap());
         let attrs = name_value_split.next().unwrap().split(',').enumerate();
@@ -305,49 +305,55 @@ mod tests {
     fn writer_should_output_expected() {
         let mut writer = Writer::new(Vec::new());
         writer
-            .write_line(HlsLine::KnownTag(known::Tag::Hls(
+            .write_line(&HlsLine::KnownTag(known::Tag::Hls(
                 draft_pantos_hls::Tag::M3u(M3u),
             )))
             .unwrap();
         writer
-            .write_line(HlsLine::KnownTag(known::Tag::Hls(
+            .write_line(&HlsLine::KnownTag(known::Tag::Hls(
                 draft_pantos_hls::Tag::Version(Version::new(3)),
             )))
             .unwrap();
         writer
-            .write_line(HlsLine::KnownTag(known::Tag::Hls(
+            .write_line(&HlsLine::KnownTag(known::Tag::Hls(
                 draft_pantos_hls::Tag::Targetduration(Targetduration::new(8)),
             )))
             .unwrap();
         writer
-            .write_line(HlsLine::KnownTag(known::Tag::Hls(
+            .write_line(&HlsLine::KnownTag(known::Tag::Hls(
                 draft_pantos_hls::Tag::MediaSequence(MediaSequence::new(2680)),
             )))
             .unwrap();
-        writer.write_line(HlsLine::Blank).unwrap();
+        writer.write_line(&HlsLine::Blank).unwrap();
         writer
-            .write_line(HlsLine::KnownTag(known::Tag::Hls(
+            .write_line(&HlsLine::KnownTag(known::Tag::Hls(
                 draft_pantos_hls::Tag::Inf(Inf::new(7.975, "")),
             )))
             .unwrap();
         writer
-            .write_line(HlsLine::Uri("https://priv.example.com/fileSequence2680.ts"))
+            .write_line(&HlsLine::Uri(
+                "https://priv.example.com/fileSequence2680.ts",
+            ))
             .unwrap();
         writer
-            .write_line(HlsLine::KnownTag(known::Tag::Hls(
+            .write_line(&HlsLine::KnownTag(known::Tag::Hls(
                 draft_pantos_hls::Tag::Inf(Inf::new(7.941, "")),
             )))
             .unwrap();
         writer
-            .write_line(HlsLine::Uri("https://priv.example.com/fileSequence2681.ts"))
+            .write_line(&HlsLine::Uri(
+                "https://priv.example.com/fileSequence2681.ts",
+            ))
             .unwrap();
         writer
-            .write_line(HlsLine::KnownTag(known::Tag::Hls(
+            .write_line(&HlsLine::KnownTag(known::Tag::Hls(
                 draft_pantos_hls::Tag::Inf(Inf::new(7.975, "")),
             )))
             .unwrap();
         writer
-            .write_line(HlsLine::Uri("https://priv.example.com/fileSequence2682.ts"))
+            .write_line(&HlsLine::Uri(
+                "https://priv.example.com/fileSequence2682.ts",
+            ))
             .unwrap();
         assert_eq!(
             EXPECTED_WRITE_OUTPUT,
