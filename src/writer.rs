@@ -439,19 +439,19 @@ mod tests {
             .unwrap();
         writer.write_line(HlsLine::Blank).unwrap();
         writer
-            .write_line(HlsLine::from(Inf::new(7.975, "")))
+            .write_line(HlsLine::from(Inf::new(7.975, "".to_string())))
             .unwrap();
         writer
             .write_line(HlsLine::Uri("https://priv.example.com/fileSequence2680.ts"))
             .unwrap();
         writer
-            .write_line(HlsLine::from(Inf::new(7.941, "")))
+            .write_line(HlsLine::from(Inf::new(7.941, "".to_string())))
             .unwrap();
         writer
             .write_line(HlsLine::Uri("https://priv.example.com/fileSequence2681.ts"))
             .unwrap();
         writer
-            .write_line(HlsLine::from(Inf::new(7.975, "")))
+            .write_line(HlsLine::from(Inf::new(7.975, "".to_string())))
             .unwrap();
         writer
             .write_line(HlsLine::Uri("https://priv.example.com/fileSequence2682.ts"))
@@ -476,7 +476,10 @@ mod tests {
         assert_eq!(
             22, // 21 (#EXTINF:6.006,PTS:0.0) + 1 (\n) == 22
             writer
-                .write_line(HlsLine::from(hls::Tag::Inf(Inf::new(6.006, "PTS:0.0"))))
+                .write_line(HlsLine::from(hls::Tag::Inf(Inf::new(
+                    6.006,
+                    "PTS:0.0".to_string()
+                ))))
                 .unwrap()
         );
     }
