@@ -26,7 +26,14 @@ where
     Blank,
 }
 
-impl<'a> From<hls::Tag<'a>> for HlsLine<'a> {
+impl<'a, CustomTag> From<hls::Tag<'a>> for HlsLine<'a, CustomTag>
+where
+    CustomTag: TryFrom<ParsedTag<'a>, Error = &'static str>
+        + IsKnownName
+        + TagInformation
+        + Debug
+        + PartialEq,
+{
     fn from(tag: hls::Tag<'a>) -> Self {
         Self::KnownTag(known::Tag::Hls(tag))
     }
@@ -45,7 +52,14 @@ where
     }
 }
 
-impl<'a> From<unknown::Tag<'a>> for HlsLine<'a> {
+impl<'a, CustomTag> From<unknown::Tag<'a>> for HlsLine<'a, CustomTag>
+where
+    CustomTag: TryFrom<ParsedTag<'a>, Error = &'static str>
+        + IsKnownName
+        + TagInformation
+        + Debug
+        + PartialEq,
+{
     fn from(tag: unknown::Tag<'a>) -> Self {
         Self::UnknownTag(tag)
     }
@@ -64,6 +78,67 @@ impl<'a> HlsLine<'a> {
         Self::Blank
     }
 }
+
+macro_rules! impl_line_from_tag {
+    ($tag_mod_path:path, $tag_name:ident) => {
+        impl<'a, CustomTag> From<$tag_mod_path> for HlsLine<'a, CustomTag>
+        where
+            CustomTag: TryFrom<ParsedTag<'a>, Error = &'static str>
+                + IsKnownName
+                + TagInformation
+                + Debug
+                + PartialEq,
+        {
+            fn from(tag: $tag_mod_path) -> Self {
+                Self::KnownTag($crate::tag::known::Tag::Hls(
+                    $crate::tag::hls::Tag::$tag_name(tag),
+                ))
+            }
+        }
+    };
+}
+
+impl_line_from_tag!(hls::m3u::M3u, M3u);
+impl_line_from_tag!(hls::version::Version<'a>, Version);
+impl_line_from_tag!(
+    hls::independent_segments::IndependentSegments,
+    IndependentSegments
+);
+impl_line_from_tag!(hls::start::Start<'a>, Start);
+impl_line_from_tag!(hls::define::Define<'a>, Define);
+impl_line_from_tag!(hls::targetduration::Targetduration<'a>, Targetduration);
+impl_line_from_tag!(hls::media_sequence::MediaSequence<'a>, MediaSequence);
+impl_line_from_tag!(
+    hls::discontinuity_sequence::DiscontinuitySequence<'a>,
+    DiscontinuitySequence
+);
+impl_line_from_tag!(hls::endlist::Endlist, Endlist);
+impl_line_from_tag!(hls::playlist_type::PlaylistType, PlaylistType);
+impl_line_from_tag!(hls::i_frames_only::IFramesOnly, IFramesOnly);
+impl_line_from_tag!(hls::part_inf::PartInf<'a>, PartInf);
+impl_line_from_tag!(hls::server_control::ServerControl<'a>, ServerControl);
+impl_line_from_tag!(hls::inf::Inf<'a>, Inf);
+impl_line_from_tag!(hls::byterange::Byterange<'a>, Byterange);
+impl_line_from_tag!(hls::discontinuity::Discontinuity, Discontinuity);
+impl_line_from_tag!(hls::key::Key<'a>, Key);
+impl_line_from_tag!(hls::map::Map<'a>, Map);
+impl_line_from_tag!(hls::program_date_time::ProgramDateTime<'a>, ProgramDateTime);
+impl_line_from_tag!(hls::gap::Gap, Gap);
+impl_line_from_tag!(hls::bitrate::Bitrate<'a>, Bitrate);
+impl_line_from_tag!(hls::part::Part<'a>, Part);
+impl_line_from_tag!(hls::daterange::Daterange<'a>, Daterange);
+impl_line_from_tag!(hls::skip::Skip<'a>, Skip);
+impl_line_from_tag!(hls::preload_hint::PreloadHint<'a>, PreloadHint);
+impl_line_from_tag!(hls::rendition_report::RenditionReport<'a>, RenditionReport);
+impl_line_from_tag!(hls::media::Media<'a>, Media);
+impl_line_from_tag!(hls::stream_inf::StreamInf<'a>, StreamInf);
+impl_line_from_tag!(
+    hls::i_frame_stream_inf::IFrameStreamInf<'a>,
+    IFrameStreamInf
+);
+impl_line_from_tag!(hls::session_data::SessionData<'a>, SessionData);
+impl_line_from_tag!(hls::session_key::SessionKey<'a>, SessionKey);
+impl_line_from_tag!(hls::content_steering::ContentSteering<'a>, ContentSteering);
 
 #[derive(Debug, PartialEq)]
 pub struct ParsedLineSlice<'a, T>
