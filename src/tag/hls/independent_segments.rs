@@ -1,4 +1,5 @@
-use crate::tag::known::ParsedTag;
+use crate::tag::{hls::TagInner, known::ParsedTag};
+use std::borrow::Cow;
 
 /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.2.1
 #[derive(Debug, PartialEq)]
@@ -13,7 +14,9 @@ impl TryFrom<ParsedTag<'_>> for IndependentSegments {
 }
 
 impl IndependentSegments {
-    pub fn as_str() -> &'static str {
-        "#EXT-X-INDEPENDENT-SEGMENTS"
+    pub(crate) fn into_inner(self) -> TagInner<'static> {
+        TagInner {
+            output_line: Cow::Borrowed("#EXT-X-INDEPENDENT-SEGMENTS"),
+        }
     }
 }

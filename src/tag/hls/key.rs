@@ -1,18 +1,31 @@
-use crate::{
-    tag::{
-        known::ParsedTag,
-        value::{ParsedAttributeValue, ParsedTagValue},
-    },
-    utils::{split_by_first_lf, str_from},
+use crate::tag::{
+    hls::TagInner,
+    known::ParsedTag,
+    value::{ParsedAttributeValue, ParsedTagValue},
 };
 use std::{borrow::Cow, collections::HashMap};
 
 /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.4.4
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub struct Key<'a> {
-    method: &'a str,
+    method: Cow<'a, str>,
+    uri: Option<Cow<'a, str>>,
+    iv: Option<Cow<'a, str>>,
+    keyformat: Option<Cow<'a, str>>,
+    keyformatversions: Option<Cow<'a, str>>,
     attribute_list: HashMap<&'a str, ParsedAttributeValue<'a>>, // Original attribute list
-    output_line: Cow<'a, [u8]>,                                 // Used with Writer
+    output_line: Cow<'a, str>,                                  // Used with Writer
+    output_line_is_dirty: bool,                                 // If should recalculate output_line
+}
+
+impl<'a> PartialEq for Key<'a> {
+    fn eq(&self, other: &Self) -> bool {
+        self.method() == other.method()
+            && self.uri() == other.uri()
+            && self.iv() == other.iv()
+            && self.keyformat() == other.keyformat()
+            && self.keyformatversions() == other.keyformatversions()
+    }
 }
 
 impl<'a> TryFrom<ParsedTag<'a>> for Key<'a> {
@@ -26,81 +39,150 @@ impl<'a> TryFrom<ParsedTag<'a>> for Key<'a> {
             return Err(super::ValidationError::missing_required_attribute());
         };
         Ok(Self {
-            method,
+            method: Cow::Borrowed(method),
+            uri: None,
+            iv: None,
+            keyformat: None,
+            keyformatversions: None,
             attribute_list,
-            output_line: Cow::Borrowed(tag.original_input.as_bytes()),
+            output_line: Cow::Borrowed(tag.original_input),
+            output_line_is_dirty: false,
         })
     }
 }
 
 impl<'a> Key<'a> {
     pub fn new(
-        method: &'a str,
-        uri: Option<&'a str>,
-        iv: Option<&'a str>,
-        keyformat: Option<&'a str>,
-        keyformatversions: Option<&'a str>,
+        method: String,
+        uri: Option<String>,
+        iv: Option<String>,
+        keyformat: Option<String>,
+        keyformatversions: Option<String>,
     ) -> Self {
-        let mut attribute_list = HashMap::new();
-        attribute_list.insert(METHOD, ParsedAttributeValue::UnquotedString(method));
-        if let Some(uri) = uri {
-            attribute_list.insert(URI, ParsedAttributeValue::QuotedString(uri));
-        }
-        if let Some(iv) = iv {
-            attribute_list.insert(IV, ParsedAttributeValue::UnquotedString(iv));
-        }
-        if let Some(keyformat) = keyformat {
-            attribute_list.insert(KEYFORMAT, ParsedAttributeValue::QuotedString(keyformat));
-        }
-        if let Some(keyformatversions) = keyformatversions {
-            attribute_list.insert(
-                KEYFORMATVERSIONS,
-                ParsedAttributeValue::QuotedString(keyformatversions),
-            );
-        }
+        let method = Cow::Owned(method);
+        let uri = uri.map(|x| Cow::Owned(x));
+        let iv = iv.map(|x| Cow::Owned(x));
+        let keyformat = keyformat
+            .map(|x| Cow::Owned(x))
+            .unwrap_or(Cow::Borrowed("identity"));
+        let keyformatversions = keyformatversions.map(|x| Cow::Owned(x));
+        let output_line = Cow::Owned(calculate_line(
+            &method,
+            &uri,
+            &iv,
+            &keyformat,
+            &keyformatversions,
+        ));
         Self {
             method,
-            attribute_list,
-            output_line: Cow::Owned(
-                calculate_line(method, uri, iv, keyformat, keyformatversions).into_bytes(),
-            ),
+            uri,
+            iv,
+            keyformat: Some(keyformat),
+            keyformatversions,
+            attribute_list: HashMap::new(),
+            output_line,
+            output_line_is_dirty: false,
         }
     }
 
-    pub fn method(&self) -> &'a str {
-        self.method
-    }
-
-    pub fn uri(&self) -> Option<&'a str> {
-        match self.attribute_list.get(URI) {
-            Some(ParsedAttributeValue::QuotedString(uri)) => Some(uri),
-            _ => None,
+    pub(crate) fn into_inner(mut self) -> TagInner<'a> {
+        if self.output_line_is_dirty {
+            self.recalculate_output_line();
+        }
+        TagInner {
+            output_line: self.output_line,
         }
     }
 
-    pub fn iv(&self) -> Option<&'a str> {
-        match self.attribute_list.get(IV) {
-            Some(ParsedAttributeValue::UnquotedString(iv)) => Some(iv),
-            _ => None,
+    pub fn method(&self) -> &str {
+        &self.method
+    }
+
+    pub fn uri(&self) -> Option<&str> {
+        if let Some(uri) = &self.uri {
+            Some(uri)
+        } else {
+            match self.attribute_list.get(URI) {
+                Some(ParsedAttributeValue::QuotedString(uri)) => Some(uri),
+                _ => None,
+            }
         }
     }
 
-    pub fn keyformat(&self) -> &'a str {
-        match self.attribute_list.get(KEYFORMAT) {
-            Some(ParsedAttributeValue::QuotedString(keyformat)) => keyformat,
-            _ => "identity",
+    pub fn iv(&self) -> Option<&str> {
+        if let Some(iv) = &self.iv {
+            Some(iv)
+        } else {
+            match self.attribute_list.get(IV) {
+                Some(ParsedAttributeValue::UnquotedString(iv)) => Some(iv),
+                _ => None,
+            }
         }
     }
 
-    pub fn keyformatversions(&self) -> Option<&'a str> {
-        match self.attribute_list.get(KEYFORMATVERSIONS) {
-            Some(ParsedAttributeValue::QuotedString(keyformatversions)) => Some(keyformatversions),
-            _ => None,
+    pub fn keyformat(&self) -> &str {
+        if let Some(keyformat) = &self.keyformat {
+            keyformat
+        } else {
+            match self.attribute_list.get(KEYFORMAT) {
+                Some(ParsedAttributeValue::QuotedString(keyformat)) => keyformat,
+                _ => "identity",
+            }
         }
     }
 
-    pub fn as_str(&self) -> &str {
-        split_by_first_lf(str_from(&self.output_line)).parsed
+    pub fn keyformatversions(&self) -> Option<&str> {
+        if let Some(keyformatversions) = &self.keyformatversions {
+            Some(keyformatversions)
+        } else {
+            match self.attribute_list.get(KEYFORMATVERSIONS) {
+                Some(ParsedAttributeValue::QuotedString(keyformatversions)) => {
+                    Some(keyformatversions)
+                }
+                _ => None,
+            }
+        }
+    }
+
+    pub fn set_method(&mut self, method: String) {
+        self.attribute_list.remove(METHOD);
+        self.method = Cow::Owned(method);
+        self.output_line_is_dirty = true;
+    }
+
+    pub fn set_uri(&mut self, uri: Option<String>) {
+        self.attribute_list.remove(URI);
+        self.uri = uri.map(|x| Cow::Owned(x));
+        self.output_line_is_dirty = true;
+    }
+
+    pub fn set_iv(&mut self, iv: Option<String>) {
+        self.attribute_list.remove(IV);
+        self.iv = iv.map(|x| Cow::Owned(x));
+        self.output_line_is_dirty = true;
+    }
+
+    pub fn set_keyformat(&mut self, keyformat: String) {
+        self.attribute_list.remove(KEYFORMAT);
+        self.keyformat = Some(Cow::Owned(keyformat));
+        self.output_line_is_dirty = true;
+    }
+
+    pub fn set_keyformatversions(&mut self, keyformatversions: Option<String>) {
+        self.attribute_list.remove(KEYFORMATVERSIONS);
+        self.keyformatversions = keyformatversions.map(|x| Cow::Owned(x));
+        self.output_line_is_dirty = true;
+    }
+
+    fn recalculate_output_line(&mut self) {
+        self.output_line = Cow::Owned(calculate_line(
+            &self.method().into(),
+            &self.uri().map(|x| x.into()),
+            &self.iv().map(|x| x.into()),
+            &self.keyformat().into(),
+            &self.keyformatversions().map(|x| x.into()),
+        ));
+        self.output_line_is_dirty = false;
     }
 }
 
@@ -110,12 +192,12 @@ const IV: &str = "IV";
 const KEYFORMAT: &str = "KEYFORMAT";
 const KEYFORMATVERSIONS: &str = "KEYFORMATVERSIONS";
 
-fn calculate_line(
-    method: &str,
-    uri: Option<&str>,
-    iv: Option<&str>,
-    keyformat: Option<&str>,
-    keyformatversions: Option<&str>,
+fn calculate_line<'a>(
+    method: &Cow<'a, str>,
+    uri: &Option<Cow<'a, str>>,
+    iv: &Option<Cow<'a, str>>,
+    keyformat: &Cow<'a, str>,
+    keyformatversions: &Option<Cow<'a, str>>,
 ) -> String {
     let mut line = format!("#EXT-X-KEY:{METHOD}={method}");
     if let Some(uri) = uri {
@@ -124,9 +206,7 @@ fn calculate_line(
     if let Some(iv) = iv {
         line.push_str(format!(",{IV}={iv}").as_str());
     }
-    if let Some(keyformat) = keyformat {
-        line.push_str(format!(",{KEYFORMAT}=\"{keyformat}\"").as_str());
-    }
+    line.push_str(format!(",{KEYFORMAT}=\"{keyformat}\"").as_str());
     if let Some(keyformatversions) = keyformatversions {
         line.push_str(format!(",{KEYFORMATVERSIONS}=\"{keyformatversions}\"").as_str());
     }
@@ -146,13 +226,14 @@ mod tests {
                 "KEYFORMAT=\"com.apple.streamingkeydelivery\",KEYFORMATVERSIONS=\"1\"",
             ),
             Key::new(
-                "SAMPLE-AES",
-                Some("skd://some-key-id"),
-                Some("0xABCD"),
-                Some("com.apple.streamingkeydelivery"),
-                Some("1"),
+                "SAMPLE-AES".to_string(),
+                Some("skd://some-key-id".to_string()),
+                Some("0xABCD".to_string()),
+                Some("com.apple.streamingkeydelivery".to_string()),
+                Some("1".to_string()),
             )
-            .as_str()
+            .into_inner()
+            .value()
         );
     }
 
@@ -160,7 +241,9 @@ mod tests {
     fn as_str_with_options_should_be_valid() {
         assert_eq!(
             "#EXT-X-KEY:METHOD=NONE",
-            Key::new("NONE", None, None, None, None).as_str()
+            Key::new("NONE".to_string(), None, None, None, None)
+                .into_inner()
+                .value()
         )
     }
 }

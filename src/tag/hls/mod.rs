@@ -1,17 +1,23 @@
-use crate::tag::{
-    hls::{
-        bitrate::Bitrate, byterange::Byterange, content_steering::ContentSteering,
-        daterange::Daterange, define::Define, discontinuity::Discontinuity,
-        discontinuity_sequence::DiscontinuitySequence, endlist::Endlist, gap::Gap,
-        i_frame_stream_inf::IFrameStreamInf, i_frames_only::IFramesOnly,
-        independent_segments::IndependentSegments, inf::Inf, key::Key, m3u::M3u, map::Map,
-        media::Media, media_sequence::MediaSequence, part::Part, part_inf::PartInf,
-        playlist_type::PlaylistType, preload_hint::PreloadHint, program_date_time::ProgramDateTime,
-        rendition_report::RenditionReport, server_control::ServerControl,
-        session_data::SessionData, session_key::SessionKey, skip::Skip, start::Start,
-        stream_inf::StreamInf, target_duration::Targetduration, version::Version,
+use std::borrow::Cow;
+
+use crate::{
+    tag::{
+        hls::{
+            bitrate::Bitrate, byterange::Byterange, content_steering::ContentSteering,
+            daterange::Daterange, define::Define, discontinuity::Discontinuity,
+            discontinuity_sequence::DiscontinuitySequence, endlist::Endlist, gap::Gap,
+            i_frame_stream_inf::IFrameStreamInf, i_frames_only::IFramesOnly,
+            independent_segments::IndependentSegments, inf::Inf, key::Key, m3u::M3u, map::Map,
+            media::Media, media_sequence::MediaSequence, part::Part, part_inf::PartInf,
+            playlist_type::PlaylistType, preload_hint::PreloadHint,
+            program_date_time::ProgramDateTime, rendition_report::RenditionReport,
+            server_control::ServerControl, session_data::SessionData, session_key::SessionKey,
+            skip::Skip, start::Start, stream_inf::StreamInf, targetduration::Targetduration,
+            version::Version,
+        },
+        known::ParsedTag,
     },
-    known::ParsedTag,
+    utils::split_by_first_lf,
 };
 
 pub mod bitrate;
@@ -44,7 +50,7 @@ pub mod session_key;
 pub mod skip;
 pub mod start;
 pub mod stream_inf;
-pub mod target_duration;
+pub mod targetduration;
 pub mod version;
 
 #[derive(Debug, PartialEq)]
@@ -161,6 +167,55 @@ impl<'a> TryFrom<ParsedTag<'a>> for Tag<'a> {
     }
 }
 
+pub(crate) struct TagInner<'a> {
+    output_line: Cow<'a, str>,
+}
+
+impl<'a> TagInner<'a> {
+    pub(crate) fn value(&self) -> &str {
+        split_by_first_lf(&self.output_line).parsed
+    }
+}
+
+impl<'a> Tag<'a> {
+    pub(crate) fn into_inner(self) -> TagInner<'a> {
+        match self {
+            Tag::M3u(t) => todo!(),
+            Tag::Version(t) => todo!(),
+            Tag::IndependentSegments(t) => t.into_inner(),
+            Tag::Start(t) => todo!(),
+            Tag::Define(t) => t.into_inner(),
+            Tag::Targetduration(t) => todo!(),
+            Tag::MediaSequence(t) => todo!(),
+            Tag::DiscontinuitySequence(t) => t.into_inner(),
+            Tag::Endlist(t) => t.into_inner(),
+            Tag::PlaylistType(t) => todo!(),
+            Tag::IFramesOnly(t) => t.into_inner(),
+            Tag::PartInf(t) => todo!(),
+            Tag::ServerControl(t) => todo!(),
+            Tag::Inf(t) => t.into_inner(),
+            Tag::Byterange(t) => t.into_inner(),
+            Tag::Discontinuity(t) => t.into_inner(),
+            Tag::Key(t) => t.into_inner(),
+            Tag::Map(t) => todo!(),
+            Tag::ProgramDateTime(t) => todo!(),
+            Tag::Gap(t) => t.into_inner(),
+            Tag::Bitrate(t) => t.into_inner(),
+            Tag::Part(t) => todo!(),
+            Tag::Daterange(t) => t.into_inner(),
+            Tag::Skip(t) => todo!(),
+            Tag::PreloadHint(t) => todo!(),
+            Tag::RenditionReport(t) => todo!(),
+            Tag::Media(t) => todo!(),
+            Tag::StreamInf(t) => todo!(),
+            Tag::IFrameStreamInf(t) => t.into_inner(),
+            Tag::SessionData(t) => todo!(),
+            Tag::SessionKey(t) => todo!(),
+            Tag::ContentSteering(t) => t.into_inner(),
+        }
+    }
+}
+
 impl Tag<'_> {
     pub fn name(&self) -> TagName {
         match self {
@@ -196,43 +251,6 @@ impl Tag<'_> {
             Tag::SessionData(_) => TagName::SessionData,
             Tag::SessionKey(_) => TagName::SessionKey,
             Tag::ContentSteering(_) => TagName::ContentSteering,
-        }
-    }
-
-    pub fn as_str(&self) -> &str {
-        match self {
-            Tag::M3u(_) => M3u::as_str(),
-            Tag::Version(t) => t.as_str(),
-            Tag::IndependentSegments(_) => IndependentSegments::as_str(),
-            Tag::Start(t) => t.as_str(),
-            Tag::Define(t) => t.as_str(),
-            Tag::Targetduration(t) => t.as_str(),
-            Tag::MediaSequence(t) => t.as_str(),
-            Tag::DiscontinuitySequence(t) => t.as_str(),
-            Tag::Endlist(_) => Endlist::as_str(),
-            Tag::PlaylistType(t) => t.as_str(),
-            Tag::IFramesOnly(_) => IFramesOnly::as_str(),
-            Tag::PartInf(t) => t.as_str(),
-            Tag::ServerControl(t) => t.as_str(),
-            Tag::Inf(t) => t.as_str(),
-            Tag::Byterange(t) => t.as_str(),
-            Tag::Discontinuity(_) => Discontinuity::as_str(),
-            Tag::Key(t) => t.as_str(),
-            Tag::Map(t) => t.as_str(),
-            Tag::ProgramDateTime(t) => t.as_str(),
-            Tag::Gap(_) => Gap::as_str(),
-            Tag::Bitrate(t) => t.as_str(),
-            Tag::Part(t) => t.as_str(),
-            Tag::Daterange(t) => t.as_str(),
-            Tag::Skip(t) => t.as_str(),
-            Tag::PreloadHint(t) => t.as_str(),
-            Tag::RenditionReport(t) => t.as_str(),
-            Tag::Media(t) => t.as_str(),
-            Tag::StreamInf(t) => t.as_str(),
-            Tag::IFrameStreamInf(t) => t.as_str(),
-            Tag::SessionData(t) => t.as_str(),
-            Tag::SessionKey(t) => t.as_str(),
-            Tag::ContentSteering(t) => t.as_str(),
         }
     }
 }
@@ -503,7 +521,10 @@ mod tests {
     #[test]
     fn define() {
         assert_eq!(
-            Ok(Tag::Define(Define::new_name("TEST", "GOOD"))),
+            Ok(Tag::Define(Define::new_name(
+                "TEST".to_string(),
+                "GOOD".to_string()
+            ))),
             Tag::try_from(ParsedTag {
                 name: "-X-DEFINE",
                 value: ParsedTagValue::AttributeList(HashMap::from([
@@ -514,7 +535,7 @@ mod tests {
             })
         );
         assert_eq!(
-            Ok(Tag::Define(Define::new_import("TEST"))),
+            Ok(Tag::Define(Define::new_import("TEST".to_string()))),
             Tag::try_from(ParsedTag {
                 name: "-X-DEFINE",
                 value: ParsedTagValue::AttributeList(HashMap::from([(
@@ -525,7 +546,9 @@ mod tests {
             })
         );
         assert_eq!(
-            Ok(Tag::Define(Define::new_queryparam("testQueryParam"))),
+            Ok(Tag::Define(Define::new_queryparam(
+                "testQueryParam".to_string()
+            ))),
             Tag::try_from(ParsedTag {
                 name: "-X-DEFINE",
                 value: ParsedTagValue::AttributeList(HashMap::from([(
@@ -687,7 +710,7 @@ mod tests {
     #[test]
     fn inf() {
         assert_eq!(
-            Ok(Tag::Inf(Inf::new(6.0, ""))),
+            Ok(Tag::Inf(Inf::new(6.0, "".to_string()))),
             Tag::try_from(ParsedTag {
                 name: "INF",
                 value: ParsedTagValue::DecimalInteger(6),
@@ -695,7 +718,7 @@ mod tests {
             })
         );
         assert_eq!(
-            Ok(Tag::Inf(Inf::new(6.006, ""))),
+            Ok(Tag::Inf(Inf::new(6.006, "".to_string()))),
             Tag::try_from(ParsedTag {
                 name: "INF",
                 value: ParsedTagValue::DecimalFloatingPointWithOptionalTitle(6.006, ""),
@@ -703,7 +726,7 @@ mod tests {
             })
         );
         assert_eq!(
-            Ok(Tag::Inf(Inf::new(6.006, "A useful title"))),
+            Ok(Tag::Inf(Inf::new(6.006, "A useful title".to_string()))),
             Tag::try_from(ParsedTag {
                 name: "INF",
                 value: ParsedTagValue::DecimalFloatingPointWithOptionalTitle(
@@ -751,11 +774,11 @@ mod tests {
     fn key() {
         assert_eq!(
             Ok(Tag::Key(Key::new(
-                "SAMPLE-AES",
-                Some("skd://some-key-id"),
-                Some("0xABCD"),
-                Some("com.apple.streamingkeydelivery"),
-                Some("1"),
+                "SAMPLE-AES".to_string(),
+                Some("skd://some-key-id".to_string()),
+                Some("0xABCD".to_string()),
+                Some("com.apple.streamingkeydelivery".to_string()),
+                Some("1".to_string()),
             ))),
             Tag::try_from(ParsedTag {
                 name: "-X-KEY",
@@ -776,7 +799,13 @@ mod tests {
             })
         );
         assert_eq!(
-            Ok(Tag::Key(Key::new("NONE", None, None, None, None,))),
+            Ok(Tag::Key(Key::new(
+                "NONE".to_string(),
+                None,
+                None,
+                None,
+                None,
+            ))),
             Tag::try_from(ParsedTag {
                 name: "-X-KEY",
                 value: ParsedTagValue::AttributeList(HashMap::from([(
@@ -1426,23 +1455,23 @@ mod tests {
     fn i_frame_stream_inf() {
         assert_eq!(
             Ok(Tag::IFrameStreamInf(IFrameStreamInf::new(
-                "iframe.high.m3u8",
+                "iframe.high.m3u8".to_string(),
                 10000000,
                 Some(9000000),
                 Some(2.0),
-                Some("hvc1.2.4.L153.b0,ec-3"),
-                Some("dvh1.08.07/db4h"),
+                Some("hvc1.2.4.L153.b0,ec-3".to_string()),
+                Some("dvh1.08.07/db4h".to_string()),
                 Some(DecimalResolution {
                     width: 3840,
                     height: 2160
                 }),
-                Some("TYPE-1"),
-                Some("com.example.drm1:SMART-TV/PC"),
-                Some("PQ"),
-                Some("CH-STEREO,CH-MONO"),
-                Some("1234"),
-                Some("alternate-view"),
-                Some("1234"),
+                Some("TYPE-1".to_string()),
+                Some("com.example.drm1:SMART-TV/PC".to_string()),
+                Some("PQ".to_string()),
+                Some("CH-STEREO,CH-MONO".to_string()),
+                Some("1234".to_string()),
+                Some("alternate-view".to_string()),
+                Some("1234".to_string()),
             ))),
             Tag::try_from(ParsedTag {
                 name: "-X-I-FRAME-STREAM-INF",
@@ -1513,7 +1542,7 @@ mod tests {
         );
         assert_eq!(
             Ok(Tag::IFrameStreamInf(IFrameStreamInf::new(
-                "iframe.high.m3u8",
+                "iframe.high.m3u8".to_string(),
                 10000000,
                 None,
                 None,
@@ -1640,8 +1669,8 @@ mod tests {
     fn content_steering() {
         assert_eq!(
             Ok(Tag::ContentSteering(ContentSteering::new(
-                "content-steering.json",
-                Some("1234")
+                "content-steering.json".to_string(),
+                Some("1234".to_string())
             ))),
             Tag::try_from(ParsedTag {
                 name: "-X-CONTENT-STEERING",
@@ -1657,7 +1686,7 @@ mod tests {
         );
         assert_eq!(
             Ok(Tag::ContentSteering(ContentSteering::new(
-                "content-steering.json",
+                "content-steering.json".to_string(),
                 None
             ))),
             Tag::try_from(ParsedTag {

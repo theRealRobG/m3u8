@@ -1,11 +1,10 @@
 use crate::{
     date::{self, DateTime},
     tag::{
-        hls::TagName,
+        hls::{TagInner, TagName},
         known::ParsedTag,
         value::{ParsedAttributeValue, ParsedTagValue},
     },
-    utils::split_by_first_lf,
 };
 use std::{
     borrow::Cow,
@@ -29,6 +28,7 @@ pub struct Daterange<'a> {
     scte35_in: Option<Cow<'a, str>>,
     attribute_list: HashMap<&'a str, ParsedAttributeValue<'a>>, // Original attribute list
     output_line: Cow<'a, str>,                                  // Used with Writer
+    output_line_is_dirty: bool,                                 // If should recalculate output_line
 }
 
 impl<'a> PartialEq for Daterange<'a> {
@@ -47,8 +47,6 @@ impl<'a> PartialEq for Daterange<'a> {
             && self.scte35_in() == other.scte35_in()
     }
 }
-
-impl<'a> Eq for Daterange<'a> {}
 
 impl<'a> TryFrom<ParsedTag<'a>> for Daterange<'a> {
     type Error = &'static str;
@@ -81,6 +79,7 @@ impl<'a> TryFrom<ParsedTag<'a>> for Daterange<'a> {
             scte35_in: None,
             attribute_list,
             output_line: Cow::Borrowed(tag.original_input),
+            output_line_is_dirty: false,
         })
     }
 }
@@ -106,19 +105,6 @@ impl<'a> Daterange<'a> {
         let scte35_cmd = scte35_cmd.map(|x| Cow::Owned(x));
         let scte35_out = scte35_out.map(|x| Cow::Owned(x));
         let scte35_in = scte35_in.map(|x| Cow::Owned(x));
-        let extension_attributes = extension_attributes
-            .drain()
-            .filter_map(|(key, value)| {
-                if !key.starts_with("X-") {
-                    return None;
-                }
-                if let Some(value) = InternalExtensionAttributeValue::try_from(value).ok() {
-                    Some((Cow::Owned(key), value))
-                } else {
-                    None
-                }
-            })
-            .collect();
         let output_line = Cow::Owned(calculate_line(
             &id,
             &class,
@@ -127,7 +113,7 @@ impl<'a> Daterange<'a> {
             end_date,
             duration,
             planned_duration,
-            &extension_attributes,
+            &extension_attributes_from_owned(&extension_attributes),
             &scte35_cmd,
             &scte35_out,
             &scte35_in,
@@ -141,18 +127,36 @@ impl<'a> Daterange<'a> {
             end_date,
             duration,
             planned_duration,
-            extension_attributes,
+            extension_attributes: extension_attributes
+                .drain()
+                .filter_map(|(key, value)| {
+                    if !key.starts_with("X-") {
+                        return None;
+                    }
+                    if let Some(value) = InternalExtensionAttributeValue::try_from(value).ok() {
+                        Some((Cow::Owned(key), value))
+                    } else {
+                        None
+                    }
+                })
+                .collect(),
             end_on_next: Some(end_on_next),
             scte35_cmd,
             scte35_out,
             scte35_in,
             attribute_list: HashMap::new(),
             output_line,
+            output_line_is_dirty: false,
         }
     }
 
-    pub fn as_str(&self) -> &str {
-        split_by_first_lf(&self.output_line).parsed
+    pub(crate) fn into_inner(mut self) -> TagInner<'a> {
+        if self.output_line_is_dirty {
+            self.recalculate_output_line();
+        }
+        TagInner {
+            output_line: self.output_line,
+        }
     }
 
     // === GETTERS ===
@@ -306,44 +310,44 @@ impl<'a> Daterange<'a> {
 
     pub fn set_id(&mut self, id: String) {
         self.attribute_list.remove(ID);
-        self.id = Cow::Owned(id.into());
-        self.recalculate_output_line();
+        self.id = Cow::Owned(id);
+        self.output_line_is_dirty = true;
     }
 
     pub fn set_class(&mut self, class: Option<String>) {
         self.attribute_list.remove(CLASS);
-        self.class = class.map(|class| Cow::Owned(class.into()));
-        self.recalculate_output_line();
+        self.class = class.map(|class| Cow::Owned(class));
+        self.output_line_is_dirty = true;
     }
 
     pub fn set_start_date(&mut self, start_date: DateTime) {
         self.attribute_list.remove(START_DATE);
         self.start_date = start_date;
-        self.recalculate_output_line();
+        self.output_line_is_dirty = true;
     }
 
     pub fn set_cue(&mut self, cue: Option<String>) {
         self.attribute_list.remove(CUE);
-        self.cue = cue.map(|cue| Cow::Owned(cue.into()));
-        self.recalculate_output_line();
+        self.cue = cue.map(|cue| Cow::Owned(cue));
+        self.output_line_is_dirty = true;
     }
 
     pub fn set_end_date(&mut self, end_date: Option<DateTime>) {
         self.attribute_list.remove(END_DATE);
         self.end_date = end_date;
-        self.recalculate_output_line();
+        self.output_line_is_dirty = true;
     }
 
     pub fn set_duration(&mut self, duration: Option<f64>) {
         self.attribute_list.remove(DURATION);
         self.duration = duration;
-        self.recalculate_output_line();
+        self.output_line_is_dirty = true;
     }
 
     pub fn set_planned_duration(&mut self, planned_duration: Option<f64>) {
         self.attribute_list.remove(PLANNED_DURATION);
         self.planned_duration = planned_duration;
-        self.recalculate_output_line();
+        self.output_line_is_dirty = true;
     }
 
     pub fn set_extension_attribute(
@@ -358,46 +362,40 @@ impl<'a> Daterange<'a> {
             if let Some(value) = InternalExtensionAttributeValue::try_from(value).ok() {
                 self.attribute_list.remove(name.as_str());
                 self.extension_attributes.insert(Cow::Owned(name), value);
-                self.recalculate_output_line();
+                self.output_line_is_dirty = true;
             }
         } else {
             self.attribute_list.remove(name.as_str());
             self.extension_attributes.remove(name.as_str());
-            self.recalculate_output_line();
+            self.output_line_is_dirty = true;
         }
     }
 
     pub fn set_end_on_next(&mut self, end_on_next: bool) {
         self.attribute_list.remove(END_ON_NEXT);
         self.end_on_next = Some(end_on_next);
-        self.recalculate_output_line();
+        self.output_line_is_dirty = true;
     }
 
     pub fn set_scte35_cmd(&mut self, scte35_cmd: Option<String>) {
         self.attribute_list.remove(SCTE35_CMD);
-        self.scte35_cmd = scte35_cmd.map(|scte35_cmd| Cow::Owned(scte35_cmd.into()));
-        self.recalculate_output_line();
+        self.scte35_cmd = scte35_cmd.map(|scte35_cmd| Cow::Owned(scte35_cmd));
+        self.output_line_is_dirty = true;
     }
 
     pub fn set_scte35_out(&mut self, scte35_out: Option<String>) {
         self.attribute_list.remove(SCTE35_OUT);
-        self.scte35_out = scte35_out.map(|scte35_out| Cow::Owned(scte35_out.into()));
-        self.recalculate_output_line();
+        self.scte35_out = scte35_out.map(|scte35_out| Cow::Owned(scte35_out));
+        self.output_line_is_dirty = true;
     }
 
     pub fn set_scte35_in(&mut self, scte35_in: Option<String>) {
         self.attribute_list.remove(SCTE35_IN);
-        self.scte35_in = scte35_in.map(|scte35_in| Cow::Owned(scte35_in.into()));
-        self.recalculate_output_line();
+        self.scte35_in = scte35_in.map(|scte35_in| Cow::Owned(scte35_in));
+        self.output_line_is_dirty = true;
     }
 
     fn recalculate_output_line(&mut self) {
-        let mut client_attributes = HashMap::new();
-        for key in self.extension_attribute_keys() {
-            if let Some(attr) = self.extension_attribute(key) {
-                client_attributes.insert(key, attr.clone());
-            }
-        }
         self.output_line = Cow::Owned(calculate_line(
             &self.id().into(),
             &self.class().map(|x| x.into()),
@@ -406,12 +404,13 @@ impl<'a> Daterange<'a> {
             self.end_date(),
             self.duration(),
             self.planned_duration(),
-            &self.extension_attributes,
+            &self.extension_attributes(),
             &self.scte35_cmd().map(|x| x.into()),
             &self.scte35_out().map(|x| x.into()),
             &self.scte35_in().map(|x| x.into()),
             self.end_on_next(),
-        ))
+        ));
+        self.output_line_is_dirty = false;
     }
 }
 
@@ -546,7 +545,7 @@ fn calculate_line<'a>(
     end_date: Option<DateTime>,
     duration: Option<f64>,
     planned_duration: Option<f64>,
-    client_attributes: &HashMap<Cow<'a, str>, InternalExtensionAttributeValue<'a>>,
+    client_attributes: &HashMap<&str, ExtensionAttributeValue<'a>>,
     scte35_cmd: &Option<Cow<'a, str>>,
     scte35_out: &Option<Cow<'a, str>>,
     scte35_in: &Option<Cow<'a, str>>,
@@ -580,15 +579,15 @@ fn calculate_line<'a>(
         line.push_str(&key);
         line.push_str("=");
         match value {
-            InternalExtensionAttributeValue::HexadecimalSequence(s) => {
+            ExtensionAttributeValue::HexadecimalSequence(s) => {
                 line.push_str(&s);
             }
-            InternalExtensionAttributeValue::QuotedString(s) => {
+            ExtensionAttributeValue::QuotedString(s) => {
                 line.push_str("\"");
                 line.push_str(&s);
                 line.push_str("\"");
             }
-            InternalExtensionAttributeValue::SignedDecimalFloatingPoint(d) => {
+            ExtensionAttributeValue::SignedDecimalFloatingPoint(d) => {
                 line.push_str(format!("{}", d).as_str());
             }
         };
@@ -606,6 +605,44 @@ fn calculate_line<'a>(
         line.push_str(",END-ON-NEXT=YES");
     }
     line
+}
+
+fn extension_attributes_from_owned(
+    extension_attributes: &HashMap<String, OwnedExtensionAttributeValue>,
+) -> HashMap<&str, ExtensionAttributeValue> {
+    let mut intermediate_hash_map = HashMap::new();
+    let user_set_extension_attrs: Vec<(&str, ExtensionAttributeValue)> = extension_attributes
+        .iter()
+        .filter_map(|(key, value)| {
+            if !key.starts_with("X-") {
+                return None;
+            }
+            match value {
+                OwnedExtensionAttributeValue::QuotedString(s) => Some((
+                    key.as_str(),
+                    ExtensionAttributeValue::QuotedString(s.as_str()),
+                )),
+                OwnedExtensionAttributeValue::HexadecimalSequence(s) => {
+                    if is_hexadecimal_sequence(s) {
+                        Some((
+                            key.as_str(),
+                            ExtensionAttributeValue::HexadecimalSequence(s.as_str()),
+                        ))
+                    } else {
+                        None
+                    }
+                }
+                OwnedExtensionAttributeValue::SignedDecimalFloatingPoint(d) => Some((
+                    key.as_str(),
+                    ExtensionAttributeValue::SignedDecimalFloatingPoint(*d),
+                )),
+            }
+        })
+        .collect();
+    for (key, value) in user_set_extension_attrs {
+        intermediate_hash_map.insert(key, value);
+    }
+    intermediate_hash_map
 }
 
 #[cfg(test)]
@@ -644,7 +681,7 @@ mod tests {
         );
         assert_eq!(
             "#EXT-X-DATERANGE:ID=\"some-id\",START-DATE=\"2025-06-14T23:41:42.000-05:00\"",
-            tag.as_str()
+            tag.into_inner().value()
         );
     }
 
@@ -693,7 +730,7 @@ mod tests {
                 "END-DATE=\"2025-06-14T23:43:42.000-05:00\",DURATION=120,PLANNED-DURATION=180,",
                 "SCTE35-CMD=0xABCD,SCTE35-OUT=0xABCD,SCTE35-IN=0xABCD,END-ON-NEXT=YES"
             ),
-            tag.as_str()
+            tag.into_inner().value()
         );
     }
 
@@ -739,7 +776,8 @@ mod tests {
         );
         // Client attributes can come in any order (due to it being a HashMap) so we need to be a
         // little more creative in validating the tag format.
-        let tag_as_str = tag.as_str();
+        let tag_inner = tag.into_inner();
+        let tag_as_str = tag_inner.value();
         let mut found_a = false;
         let mut found_b = false;
         let mut found_c = false;
@@ -796,7 +834,7 @@ mod tests {
         );
         assert_eq!(
             "#EXT-X-DATERANGE:ID=\"some-id\",START-DATE=\"1970-01-01T00:00:00.000Z\",CUE=\"ONCE\"",
-            daterange.as_str()
+            daterange.clone().into_inner().value()
         );
         daterange.set_id("another-id".to_string());
         daterange.set_class(Some("com.example.test".to_string()));
@@ -812,7 +850,7 @@ mod tests {
                 "#EXT-X-DATERANGE:ID=\"another-id\",START-DATE=\"1970-01-01T00:00:00.000Z\",",
                 "CLASS=\"com.example.test\",X-EXAMPLE=\"TEST\"",
             ),
-            daterange.as_str()
+            daterange.into_inner().value()
         );
     }
 }

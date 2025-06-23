@@ -1,19 +1,24 @@
-use crate::{
-    tag::{
-        hls::TagName,
-        known::ParsedTag,
-        value::{ParsedAttributeValue, ParsedTagValue},
-    },
-    utils::{split_by_first_lf, str_from},
+use crate::tag::{
+    hls::{TagInner, TagName},
+    known::ParsedTag,
+    value::{ParsedAttributeValue, ParsedTagValue},
 };
 use std::{borrow::Cow, collections::HashMap};
 
 /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.6.6
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub struct ContentSteering<'a> {
-    server_uri: &'a str,
+    server_uri: Cow<'a, str>,
+    pathway_id: Option<Cow<'a, str>>,
     attribute_list: HashMap<&'a str, ParsedAttributeValue<'a>>, // Original attribute list
-    output_line: Cow<'a, [u8]>,                                 // Used with Writer
+    output_line: Cow<'a, str>,                                  // Used with Writer
+    output_line_is_dirty: bool,                                 // If should recalculate output_line
+}
+
+impl<'a> PartialEq for ContentSteering<'a> {
+    fn eq(&self, other: &Self) -> bool {
+        self.server_uri() == other.server_uri() && self.pathway_id() == other.pathway_id()
+    }
 }
 
 impl<'a> TryFrom<ParsedTag<'a>> for ContentSteering<'a> {
@@ -28,50 +33,78 @@ impl<'a> TryFrom<ParsedTag<'a>> for ContentSteering<'a> {
             return Err(super::ValidationError::missing_required_attribute());
         };
         Ok(Self {
-            server_uri,
+            server_uri: Cow::Borrowed(server_uri),
+            pathway_id: None,
             attribute_list,
-            output_line: Cow::Borrowed(tag.original_input.as_bytes()),
+            output_line: Cow::Borrowed(tag.original_input),
+            output_line_is_dirty: false,
         })
     }
 }
 
 impl<'a> ContentSteering<'a> {
-    pub fn new(server_uri: &'a str, pathway_id: Option<&'a str>) -> Self {
-        let mut attribute_list = HashMap::new();
-        attribute_list.insert(SERVER_URI, ParsedAttributeValue::QuotedString(server_uri));
-        if let Some(pathway_id) = pathway_id {
-            attribute_list.insert(PATHWAY_ID, ParsedAttributeValue::QuotedString(pathway_id));
-        }
+    pub fn new(server_uri: String, pathway_id: Option<String>) -> Self {
+        let server_uri = Cow::Owned(server_uri);
+        let pathway_id = pathway_id.map(|x| Cow::Owned(x));
+        let output_line = Cow::Owned(calculate_line(&server_uri, &pathway_id));
         Self {
             server_uri,
-            attribute_list,
-            output_line: Cow::Owned(calculate_line(server_uri, pathway_id).into_bytes()),
+            pathway_id,
+            attribute_list: HashMap::new(),
+            output_line,
+            output_line_is_dirty: false,
+        }
+    }
+
+    pub(crate) fn into_inner(mut self) -> TagInner<'a> {
+        if self.output_line_is_dirty {
+            self.recalculate_output_line();
+        }
+        TagInner {
+            output_line: self.output_line,
         }
     }
 
     pub fn server_uri(&self) -> &str {
-        self.server_uri
+        &self.server_uri
     }
 
     pub fn pathway_id(&self) -> Option<&str> {
-        match self.attribute_list.get(PATHWAY_ID) {
-            Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
-            _ => None,
+        if let Some(pathway_id) = &self.pathway_id {
+            Some(&pathway_id)
+        } else {
+            match self.attribute_list.get(PATHWAY_ID) {
+                Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
+                _ => None,
+            }
         }
     }
 
-    pub fn as_str(&self) -> &str {
-        match self.output_line {
-            Cow::Borrowed(bytes) => split_by_first_lf(str_from(bytes)).parsed,
-            Cow::Owned(ref bytes) => str_from(bytes.as_slice()),
-        }
+    pub fn set_server_uri(&mut self, server_uri: String) {
+        self.attribute_list.remove(SERVER_URI);
+        self.server_uri = Cow::Owned(server_uri);
+        self.output_line_is_dirty = true;
+    }
+
+    pub fn set_pathway_id(&mut self, pathway_id: Option<String>) {
+        self.attribute_list.remove(PATHWAY_ID);
+        self.pathway_id = pathway_id.map(|x| Cow::Owned(x));
+        self.output_line_is_dirty = true;
+    }
+
+    fn recalculate_output_line(&mut self) {
+        self.output_line = Cow::Owned(calculate_line(
+            &self.server_uri().into(),
+            &self.pathway_id().map(|x| x.into()),
+        ));
+        self.output_line_is_dirty = false;
     }
 }
 
 const SERVER_URI: &str = "SERVER-URI";
 const PATHWAY_ID: &str = "PATHWAY-ID";
 
-fn calculate_line(server_uri: &str, pathway_id: Option<&str>) -> String {
+fn calculate_line<'a>(server_uri: &Cow<'a, str>, pathway_id: &Option<Cow<'a, str>>) -> String {
     let mut line = format!(
         "#EXT{}:{}=\"{}\"",
         TagName::ContentSteering.as_str(),
@@ -91,19 +124,19 @@ mod tests {
 
     #[test]
     fn new_without_pathway_id_should_be_valid_line() {
-        let tag = ContentSteering::new("example.json", None);
+        let tag = ContentSteering::new("example.json".to_string(), None);
         assert_eq!(
             "#EXT-X-CONTENT-STEERING:SERVER-URI=\"example.json\"",
-            tag.as_str()
+            tag.into_inner().value()
         );
     }
 
     #[test]
     fn new_with_pathway_id_should_be_valid_line() {
-        let tag = ContentSteering::new("example.json", Some("1234"));
+        let tag = ContentSteering::new("example.json".to_string(), Some("1234".to_string()));
         assert_eq!(
             "#EXT-X-CONTENT-STEERING:SERVER-URI=\"example.json\",PATHWAY-ID=\"1234\"",
-            tag.as_str()
+            tag.into_inner().value()
         );
     }
 }

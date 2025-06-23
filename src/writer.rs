@@ -1,11 +1,14 @@
 use crate::{
     line::HlsLine,
     tag::{
-        known::TagInformation,
+        known::{IsKnownName, ParsedTag, TagInformation},
         value::{HlsPlaylistType, ParsedAttributeValue, ParsedTagValue},
     },
 };
-use std::io::{self, Write};
+use std::{
+    fmt::Debug,
+    io::{self, Write},
+};
 
 #[derive(Clone)]
 pub struct Writer<W>
@@ -42,7 +45,133 @@ where
 
     /// Write the `HlsLine` to the underlying writer. Returns the number of bytes consumed during
     /// writing or an `io::Error` from the underlying writer.
-    pub fn write_line(&mut self, line: &HlsLine) -> io::Result<usize> {
+    ///
+    /// In this case the `CustomTag` generic is the default `NoCustomTag` struct.
+    pub fn write_line(&mut self, line: HlsLine) -> io::Result<usize> {
+        self.write_custom_line(line)
+    }
+
+    /// Example:
+    /// ```
+    /// # use m3u8::Writer;
+    /// let mut writer = Writer::new(b"#EXTM3U\n".to_vec());
+    /// writer.write_blank().unwrap();
+    /// writer.write_comment(" Note blank line above.").unwrap();
+    /// let expected = r#"#EXTM3U
+    ///
+    /// ## Note blank line above.
+    /// "#;
+    /// assert_eq!(expected.as_bytes(), writer.into_inner());
+    /// ```
+    pub fn write_blank(&mut self) -> io::Result<usize> {
+        self.write_line(HlsLine::Blank)
+    }
+
+    /// Example:
+    /// ```
+    /// # use m3u8::Writer;
+    /// let mut writer = Writer::new(Vec::new());
+    /// writer.write_comment(" This is a comment.").unwrap();
+    /// assert_eq!("# This is a comment.\n".as_bytes(), writer.into_inner());
+    /// ```
+    pub fn write_comment(&mut self, comment: &str) -> io::Result<usize> {
+        self.write_line(HlsLine::Comment(comment))
+    }
+
+    /// Example:
+    /// ```
+    /// # use m3u8::Writer;
+    /// let mut writer = Writer::new(Vec::new());
+    /// writer.write_uri("example.m3u8").unwrap();
+    /// assert_eq!("example.m3u8\n".as_bytes(), writer.into_inner());
+    /// ```
+    pub fn write_uri(&mut self, uri: &str) -> io::Result<usize> {
+        self.write_line(HlsLine::Uri(uri))
+    }
+
+    /// Example:
+    /// ```
+    /// # use m3u8::Writer;
+    /// # use m3u8::tag::hls::Tag;
+    /// # use m3u8::tag::hls::bitrate::Bitrate;
+    /// let mut writer = Writer::new(Vec::new());
+    /// writer.write_hls_tag(Tag::Bitrate(Bitrate::new(10000000))).unwrap();
+    /// assert_eq!(
+    ///     "#EXT-X-BITRATE:10000000\n".as_bytes(),
+    ///     writer.into_inner()
+    /// );
+    /// ```
+    pub fn write_hls_tag(&mut self, tag: crate::tag::hls::Tag) -> io::Result<usize> {
+        self.write_line(HlsLine::from(tag))
+    }
+
+    /// Example:
+    /// ```
+    /// # use m3u8::Writer;
+    /// # use m3u8::tag::known::{ParsedTag, IsKnownName, TagInformation};
+    /// # use m3u8::tag::value::ParsedTagValue;
+    /// #[derive(Debug, PartialEq)]
+    /// struct ExampleCustomTag {
+    ///     answer: u64,
+    /// };
+    /// impl TryFrom<ParsedTag<'_>> for ExampleCustomTag {
+    ///     type Error = &'static str;
+    ///     fn try_from(tag: ParsedTag) -> Result<Self, Self::Error> {
+    ///         if tag.name != "-X-MEANING-OF-LIFE" {
+    ///             return Err("Unexpected tag name")
+    ///         }
+    ///         match tag.value {
+    ///             ParsedTagValue::DecimalInteger(answer) => Ok(Self { answer }),
+    ///             _ => Err("Unexpected tag value")
+    ///         }
+    ///     }
+    /// }
+    /// impl IsKnownName for ExampleCustomTag {
+    ///     fn is_known_name(name: &str) -> bool {
+    ///         name == "-X-MEANING-OF-LIFE"
+    ///     }
+    /// }
+    /// impl TagInformation for ExampleCustomTag {
+    ///     fn name(&self) -> &str {
+    ///         "-X-MEANING-OF-LIFE"
+    ///     }
+    ///
+    ///     fn value(&self) -> ParsedTagValue {
+    ///         ParsedTagValue::DecimalInteger(self.answer)
+    ///     }
+    /// }
+    ///
+    /// let mut writer = Writer::new(Vec::new());
+    /// writer.write_custom_tag(ExampleCustomTag { answer: 42 }).unwrap();
+    /// assert_eq!(
+    ///     "#EXT-X-MEANING-OF-LIFE:42\n".as_bytes(),
+    ///     writer.into_inner()
+    /// );
+    /// ```
+    pub fn write_custom_tag<'a, CustomTag>(&mut self, tag: CustomTag) -> io::Result<usize>
+    where
+        CustomTag: TryFrom<ParsedTag<'a>, Error = &'static str>
+            + IsKnownName
+            + TagInformation
+            + Debug
+            + PartialEq,
+    {
+        self.write_custom_line(HlsLine::from(tag))
+    }
+
+    /// Write the `HlsLine` to the underlying writer. Returns the number of bytes consumed during
+    /// writing or an `io::Error` from the underlying writer.
+    pub fn write_custom_line<'a, CustomTag>(
+        &mut self,
+        line: HlsLine<'a, CustomTag>,
+    ) -> io::Result<usize>
+    where
+        CustomTag: TryFrom<ParsedTag<'a>, Error = &'static str>
+            + IsKnownName
+            + TagInformation
+            + Debug
+            + PartialEq,
+    {
         let mut count = 0usize;
         match line {
             HlsLine::Blank => (),
@@ -54,7 +183,7 @@ where
             HlsLine::UnknownTag(t) => count += self.write(t.as_str().as_bytes())?,
             HlsLine::KnownTag(t) => match t {
                 crate::tag::known::Tag::Hls(tag) => {
-                    count += self.write(tag.as_str().as_bytes())?;
+                    count += self.write(tag.into_inner().value().as_bytes())?;
                 }
                 crate::tag::known::Tag::Custom(tag) => {
                     count += self.write(string_from(tag).as_bytes())?;
@@ -87,7 +216,7 @@ where
     }
 }
 
-fn string_from<T>(custom_tag: &T) -> String
+fn string_from<T>(custom_tag: T) -> String
 where
     T: TagInformation,
 {
@@ -133,12 +262,9 @@ where
 mod tests {
     use crate::{
         date::{DateTime, DateTimeTimezoneOffset},
-        tag::{
-            hls::{
-                self, inf::Inf, m3u::M3u, media_sequence::MediaSequence,
-                target_duration::Targetduration, version::Version,
-            },
-            known,
+        tag::hls::{
+            self, inf::Inf, m3u::M3u, media_sequence::MediaSequence,
+            targetduration::Targetduration, version::Version,
         },
     };
     use std::collections::HashMap;
@@ -204,37 +330,37 @@ mod tests {
     #[test]
     fn to_string_on_empty_is_valid() {
         let test = TestTag::Empty;
-        assert_eq!("#EXT-X-TEST-TAG", string_from(&test).as_str());
+        assert_eq!("#EXT-X-TEST-TAG", string_from(test).as_str());
     }
 
     #[test]
     fn to_string_on_type_is_valid() {
         let test = TestTag::Type;
-        assert_eq!("#EXT-X-TEST-TAG:VOD", string_from(&test).as_str());
+        assert_eq!("#EXT-X-TEST-TAG:VOD", string_from(test).as_str());
     }
 
     #[test]
     fn to_string_on_int_is_valid() {
         let test = TestTag::Int;
-        assert_eq!("#EXT-X-TEST-TAG:42", string_from(&test).as_str());
+        assert_eq!("#EXT-X-TEST-TAG:42", string_from(test).as_str());
     }
 
     #[test]
     fn to_string_on_range_is_valid() {
         let test = TestTag::Range;
-        assert_eq!("#EXT-X-TEST-TAG:1024@512", string_from(&test).as_str());
+        assert_eq!("#EXT-X-TEST-TAG:1024@512", string_from(test).as_str());
     }
 
     #[test]
     fn to_string_on_float_is_valid() {
         let test = TestTag::Float { title: "" };
-        assert_eq!("#EXT-X-TEST-TAG:42.42", string_from(&test).as_str());
+        assert_eq!("#EXT-X-TEST-TAG:42.42", string_from(test).as_str());
         let test = TestTag::Float {
             title: " A useful comment",
         };
         assert_eq!(
             "#EXT-X-TEST-TAG:42.42, A useful comment",
-            string_from(&test).as_str()
+            string_from(test).as_str()
         );
     }
 
@@ -243,7 +369,7 @@ mod tests {
         let test = TestTag::Date;
         assert_eq!(
             "#EXT-X-TEST-TAG:2025-06-17T01:37:15.129-05:00",
-            string_from(&test).as_str()
+            string_from(test).as_str()
         );
     }
 
@@ -254,7 +380,7 @@ mod tests {
         let mut found_float = false;
         let mut found_quote = false;
         let mut found_enum = false;
-        let tag_string = string_from(&test);
+        let tag_string = string_from(test);
         let mut name_value_split = tag_string.split(':');
         assert_eq!("#EXT-X-TEST-TAG", name_value_split.next().unwrap());
         let attrs = name_value_split.next().unwrap().split(',').enumerate();
@@ -303,54 +429,32 @@ mod tests {
     #[test]
     fn writer_should_output_expected() {
         let mut writer = Writer::new(Vec::new());
+        writer.write_line(HlsLine::from(M3u)).unwrap();
+        writer.write_line(HlsLine::from(Version::new(3))).unwrap();
         writer
-            .write_line(&HlsLine::KnownTag(known::Tag::Hls(hls::Tag::M3u(M3u))))
+            .write_line(HlsLine::from(Targetduration::new(8)))
             .unwrap();
         writer
-            .write_line(&HlsLine::KnownTag(known::Tag::Hls(hls::Tag::Version(
-                Version::new(3),
-            ))))
+            .write_line(HlsLine::from(MediaSequence::new(2680)))
+            .unwrap();
+        writer.write_line(HlsLine::Blank).unwrap();
+        writer
+            .write_line(HlsLine::from(Inf::new(7.975, "")))
             .unwrap();
         writer
-            .write_line(&HlsLine::KnownTag(known::Tag::Hls(
-                hls::Tag::Targetduration(Targetduration::new(8)),
-            )))
+            .write_line(HlsLine::Uri("https://priv.example.com/fileSequence2680.ts"))
             .unwrap();
         writer
-            .write_line(&HlsLine::KnownTag(known::Tag::Hls(
-                hls::Tag::MediaSequence(MediaSequence::new(2680)),
-            )))
-            .unwrap();
-        writer.write_line(&HlsLine::Blank).unwrap();
-        writer
-            .write_line(&HlsLine::KnownTag(known::Tag::Hls(hls::Tag::Inf(
-                Inf::new(7.975, ""),
-            ))))
+            .write_line(HlsLine::from(Inf::new(7.941, "")))
             .unwrap();
         writer
-            .write_line(&HlsLine::Uri(
-                "https://priv.example.com/fileSequence2680.ts",
-            ))
+            .write_line(HlsLine::Uri("https://priv.example.com/fileSequence2681.ts"))
             .unwrap();
         writer
-            .write_line(&HlsLine::KnownTag(known::Tag::Hls(hls::Tag::Inf(
-                Inf::new(7.941, ""),
-            ))))
+            .write_line(HlsLine::from(Inf::new(7.975, "")))
             .unwrap();
         writer
-            .write_line(&HlsLine::Uri(
-                "https://priv.example.com/fileSequence2681.ts",
-            ))
-            .unwrap();
-        writer
-            .write_line(&HlsLine::KnownTag(known::Tag::Hls(hls::Tag::Inf(
-                Inf::new(7.975, ""),
-            ))))
-            .unwrap();
-        writer
-            .write_line(&HlsLine::Uri(
-                "https://priv.example.com/fileSequence2682.ts",
-            ))
+            .write_line(HlsLine::Uri("https://priv.example.com/fileSequence2682.ts"))
             .unwrap();
         assert_eq!(
             EXPECTED_WRITE_OUTPUT,
@@ -363,18 +467,16 @@ mod tests {
         let mut writer = Writer::new(Vec::new());
         assert_eq!(
             12, // 1 (#) + 10 (str) + 1 (\n) == 12
-            writer.write_line(&HlsLine::Comment(" A comment")).unwrap()
+            writer.write_line(HlsLine::Comment(" A comment")).unwrap()
         );
         assert_eq!(
             13, // 12 (str) + 1 (\n) == 13
-            writer.write_line(&HlsLine::Uri("example.m3u8")).unwrap()
+            writer.write_line(HlsLine::Uri("example.m3u8")).unwrap()
         );
         assert_eq!(
             22, // 21 (#EXTINF:6.006,PTS:0.0) + 1 (\n) == 22
             writer
-                .write_line(&HlsLine::KnownTag(known::Tag::Hls(hls::Tag::Inf(
-                    Inf::new(6.006, "PTS:0.0")
-                ))))
+                .write_line(HlsLine::from(hls::Tag::Inf(Inf::new(6.006, "PTS:0.0"))))
                 .unwrap()
         );
     }

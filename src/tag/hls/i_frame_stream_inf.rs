@@ -1,23 +1,30 @@
-use crate::{
-    tag::{
-        known::ParsedTag,
-        value::{DecimalResolution, ParsedAttributeValue, ParsedTagValue},
-    },
-    utils::{split_by_first_lf, str_from},
+use crate::tag::{
+    hls::TagInner,
+    known::ParsedTag,
+    value::{DecimalResolution, ParsedAttributeValue, ParsedTagValue},
 };
 use std::{borrow::Cow, collections::HashMap};
 
 /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.6.3
 #[derive(Debug)]
 pub struct IFrameStreamInf<'a> {
-    uri: &'a str,
+    uri: Cow<'a, str>,
     bandwidth: u64,
+    average_bandwidth: Option<u64>,
+    score: Option<f64>,
+    codecs: Option<Cow<'a, str>>,
+    supplemental_codecs: Option<Cow<'a, str>>,
+    resolution: Option<DecimalResolution>,
+    hdcp_level: Option<Cow<'a, str>>,
+    allowed_cpc: Option<Cow<'a, str>>,
+    video_range: Option<Cow<'a, str>>,
+    req_video_layout: Option<Cow<'a, str>>,
+    stable_variant_id: Option<Cow<'a, str>>,
+    video: Option<Cow<'a, str>>,
+    pathway_id: Option<Cow<'a, str>>,
     attribute_list: HashMap<&'a str, ParsedAttributeValue<'a>>, // Original attribute list
-    output_line: Cow<'a, [u8]>,                                 // Used with Writer
-    // This needs to exist because the user can construct an IFrameStreamInf with
-    // `IFrameStreamInf::new()`, but will pass a `DecimalResolution`, not a `&str`. I can't convert
-    // a `DecimalResolution` to a `&str` and so need to store it as is for later use.
-    stored_decimal_resolution: Option<DecimalResolution>,
+    output_line: Cow<'a, str>,                                  // Used with Writer
+    output_line_is_dirty: bool,                                 // If should recalculate output_line
 }
 
 impl<'a> PartialEq for IFrameStreamInf<'a> {
@@ -54,113 +61,104 @@ impl<'a> TryFrom<ParsedTag<'a>> for IFrameStreamInf<'a> {
             return Err(super::ValidationError::missing_required_attribute());
         };
         Ok(Self {
-            uri,
+            uri: Cow::Borrowed(uri),
             bandwidth: *bandwidth,
+            average_bandwidth: None,
+            score: None,
+            codecs: None,
+            supplemental_codecs: None,
+            resolution: None,
+            hdcp_level: None,
+            allowed_cpc: None,
+            video_range: None,
+            req_video_layout: None,
+            stable_variant_id: None,
+            video: None,
+            pathway_id: None,
             attribute_list,
-            output_line: Cow::Borrowed(tag.original_input.as_bytes()),
-            stored_decimal_resolution: None,
+            output_line: Cow::Borrowed(tag.original_input),
+            output_line_is_dirty: false,
         })
     }
 }
 
 impl<'a> IFrameStreamInf<'a> {
     pub fn new(
-        uri: &'a str,
+        uri: String,
         bandwidth: u64,
         average_bandwidth: Option<u64>,
         score: Option<f64>,
-        codecs: Option<&'a str>,
-        supplemental_codecs: Option<&'a str>,
+        codecs: Option<String>,
+        supplemental_codecs: Option<String>,
         resolution: Option<DecimalResolution>,
-        hdcp_level: Option<&'a str>,
-        allowed_cpc: Option<&'a str>,
-        video_range: Option<&'a str>,
-        req_video_layout: Option<&'a str>,
-        stable_variant_id: Option<&'a str>,
-        video: Option<&'a str>,
-        pathway_id: Option<&'a str>,
+        hdcp_level: Option<String>,
+        allowed_cpc: Option<String>,
+        video_range: Option<String>,
+        req_video_layout: Option<String>,
+        stable_variant_id: Option<String>,
+        video: Option<String>,
+        pathway_id: Option<String>,
     ) -> Self {
-        let mut attribute_list = HashMap::new();
-        if let Some(average_bandwidth) = average_bandwidth {
-            attribute_list.insert(
-                AVERAGE_BANDWIDTH,
-                ParsedAttributeValue::DecimalInteger(average_bandwidth),
-            );
-        }
-        if let Some(score) = score {
-            attribute_list.insert(
-                SCORE,
-                ParsedAttributeValue::SignedDecimalFloatingPoint(score),
-            );
-        }
-        if let Some(codecs) = codecs {
-            attribute_list.insert(CODECS, ParsedAttributeValue::QuotedString(codecs));
-        }
-        if let Some(supplemental_codecs) = supplemental_codecs {
-            attribute_list.insert(
-                SUPPLEMENTAL_CODECS,
-                ParsedAttributeValue::QuotedString(supplemental_codecs),
-            );
-        }
-        if let Some(hdcp_level) = hdcp_level {
-            attribute_list.insert(HDCP_LEVEL, ParsedAttributeValue::UnquotedString(hdcp_level));
-        }
-        if let Some(allowed_cpc) = allowed_cpc {
-            attribute_list.insert(ALLOWED_CPC, ParsedAttributeValue::QuotedString(allowed_cpc));
-        }
-        if let Some(video_range) = video_range {
-            attribute_list.insert(
-                VIDEO_RANGE,
-                ParsedAttributeValue::UnquotedString(video_range),
-            );
-        }
-        if let Some(req_video_layout) = req_video_layout {
-            attribute_list.insert(
-                REQ_VIDEO_LAYOUT,
-                ParsedAttributeValue::QuotedString(req_video_layout),
-            );
-        }
-        if let Some(stable_variant_id) = stable_variant_id {
-            attribute_list.insert(
-                STABLE_VARIANT_ID,
-                ParsedAttributeValue::QuotedString(stable_variant_id),
-            );
-        }
-        if let Some(video) = video {
-            attribute_list.insert(VIDEO, ParsedAttributeValue::QuotedString(video));
-        }
-        if let Some(pathway_id) = pathway_id {
-            attribute_list.insert(PATHWAY_ID, ParsedAttributeValue::QuotedString(pathway_id));
-        }
+        let uri = Cow::Owned(uri);
+        let codecs = codecs.map(|x| Cow::Owned(x));
+        let supplemental_codecs = supplemental_codecs.map(|x| Cow::Owned(x));
+        let hdcp_level = hdcp_level.map(|x| Cow::Owned(x));
+        let allowed_cpc = allowed_cpc.map(|x| Cow::Owned(x));
+        let video_range = video_range.map(|x| Cow::Owned(x));
+        let req_video_layout = req_video_layout.map(|x| Cow::Owned(x));
+        let stable_variant_id = stable_variant_id.map(|x| Cow::Owned(x));
+        let video = video.map(|x| Cow::Owned(x));
+        let pathway_id = pathway_id.map(|x| Cow::Owned(x));
+        let output_line = Cow::Owned(calculate_line(
+            &uri,
+            &bandwidth,
+            &average_bandwidth,
+            &score,
+            &codecs,
+            &supplemental_codecs,
+            &resolution,
+            &hdcp_level,
+            &allowed_cpc,
+            &video_range,
+            &req_video_layout,
+            &stable_variant_id,
+            &video,
+            &pathway_id,
+        ));
         Self {
             uri,
             bandwidth,
-            attribute_list,
-            output_line: Cow::Owned(
-                calculate_line(
-                    uri,
-                    bandwidth,
-                    average_bandwidth,
-                    score,
-                    codecs,
-                    supplemental_codecs,
-                    resolution,
-                    hdcp_level,
-                    allowed_cpc,
-                    video_range,
-                    req_video_layout,
-                    stable_variant_id,
-                    video,
-                    pathway_id,
-                )
-                .into_bytes(),
-            ),
-            stored_decimal_resolution: resolution,
+            average_bandwidth,
+            score,
+            codecs,
+            supplemental_codecs,
+            resolution,
+            hdcp_level,
+            allowed_cpc,
+            video_range,
+            req_video_layout,
+            stable_variant_id,
+            video,
+            pathway_id,
+            attribute_list: HashMap::new(),
+            output_line,
+            output_line_is_dirty: false,
         }
     }
 
-    pub fn uri(&self) -> &'a str {
-        self.uri
+    pub(crate) fn into_inner(mut self) -> TagInner<'a> {
+        if self.output_line_is_dirty {
+            self.recalculate_output_line();
+        }
+        TagInner {
+            output_line: self.output_line,
+        }
+    }
+
+    // === GETTERS ===
+
+    pub fn uri(&self) -> &str {
+        &self.uri
     }
 
     pub fn bandwidth(&self) -> u64 {
@@ -168,35 +166,51 @@ impl<'a> IFrameStreamInf<'a> {
     }
 
     pub fn average_bandwidth(&self) -> Option<u64> {
-        match self.attribute_list.get(AVERAGE_BANDWIDTH) {
-            Some(ParsedAttributeValue::DecimalInteger(b)) => Some(*b),
-            _ => None,
+        if let Some(average_bandwidth) = self.average_bandwidth {
+            Some(average_bandwidth)
+        } else {
+            match self.attribute_list.get(AVERAGE_BANDWIDTH) {
+                Some(ParsedAttributeValue::DecimalInteger(b)) => Some(*b),
+                _ => None,
+            }
         }
     }
 
     pub fn score(&self) -> Option<f64> {
-        match self.attribute_list.get(SCORE) {
-            Some(value) => value.as_option_f64(),
-            _ => None,
+        if let Some(score) = self.score {
+            Some(score)
+        } else {
+            match self.attribute_list.get(SCORE) {
+                Some(value) => value.as_option_f64(),
+                _ => None,
+            }
         }
     }
 
-    pub fn codecs(&self) -> Option<&'a str> {
-        match self.attribute_list.get(CODECS) {
-            Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
-            _ => None,
+    pub fn codecs(&self) -> Option<&str> {
+        if let Some(codecs) = &self.codecs {
+            Some(codecs)
+        } else {
+            match self.attribute_list.get(CODECS) {
+                Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
+                _ => None,
+            }
         }
     }
 
-    pub fn supplemental_codecs(&self) -> Option<&'a str> {
-        match self.attribute_list.get(SUPPLEMENTAL_CODECS) {
-            Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
-            _ => None,
+    pub fn supplemental_codecs(&self) -> Option<&str> {
+        if let Some(supplemental_codecs) = &self.supplemental_codecs {
+            Some(supplemental_codecs)
+        } else {
+            match self.attribute_list.get(SUPPLEMENTAL_CODECS) {
+                Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
+                _ => None,
+            }
         }
     }
 
     pub fn resolution(&self) -> Option<DecimalResolution> {
-        if let Some(decimal_resolution) = self.stored_decimal_resolution {
+        if let Some(decimal_resolution) = self.resolution {
             Some(decimal_resolution)
         } else {
             match self.attribute_list.get(RESOLUTION) {
@@ -218,57 +232,187 @@ impl<'a> IFrameStreamInf<'a> {
         }
     }
 
-    pub fn hdcp_level(&self) -> Option<&'a str> {
-        match self.attribute_list.get(HDCP_LEVEL) {
-            Some(ParsedAttributeValue::UnquotedString(s)) => Some(s),
-            _ => None,
+    pub fn hdcp_level(&self) -> Option<&str> {
+        if let Some(hdcp_level) = &self.hdcp_level {
+            Some(hdcp_level)
+        } else {
+            match self.attribute_list.get(HDCP_LEVEL) {
+                Some(ParsedAttributeValue::UnquotedString(s)) => Some(s),
+                _ => None,
+            }
         }
     }
 
-    pub fn allowed_cpc(&self) -> Option<&'a str> {
-        match self.attribute_list.get(ALLOWED_CPC) {
-            Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
-            _ => None,
+    pub fn allowed_cpc(&self) -> Option<&str> {
+        if let Some(allowed_cpc) = &self.allowed_cpc {
+            Some(allowed_cpc)
+        } else {
+            match self.attribute_list.get(ALLOWED_CPC) {
+                Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
+                _ => None,
+            }
         }
     }
 
-    pub fn video_range(&self) -> Option<&'a str> {
-        match self.attribute_list.get(VIDEO_RANGE) {
-            Some(ParsedAttributeValue::UnquotedString(s)) => Some(s),
-            _ => None,
+    pub fn video_range(&self) -> Option<&str> {
+        if let Some(video_range) = &self.video_range {
+            Some(video_range)
+        } else {
+            match self.attribute_list.get(VIDEO_RANGE) {
+                Some(ParsedAttributeValue::UnquotedString(s)) => Some(s),
+                _ => None,
+            }
         }
     }
 
-    pub fn req_video_layout(&self) -> Option<&'a str> {
-        match self.attribute_list.get(REQ_VIDEO_LAYOUT) {
-            Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
-            _ => None,
+    pub fn req_video_layout(&self) -> Option<&str> {
+        if let Some(req_video_layout) = &self.req_video_layout {
+            Some(req_video_layout)
+        } else {
+            match self.attribute_list.get(REQ_VIDEO_LAYOUT) {
+                Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
+                _ => None,
+            }
         }
     }
 
-    pub fn stable_variant_id(&self) -> Option<&'a str> {
-        match self.attribute_list.get(STABLE_VARIANT_ID) {
-            Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
-            _ => None,
+    pub fn stable_variant_id(&self) -> Option<&str> {
+        if let Some(stable_variant_id) = &self.stable_variant_id {
+            Some(stable_variant_id)
+        } else {
+            match self.attribute_list.get(STABLE_VARIANT_ID) {
+                Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
+                _ => None,
+            }
         }
     }
 
-    pub fn video(&self) -> Option<&'a str> {
-        match self.attribute_list.get(VIDEO) {
-            Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
-            _ => None,
+    pub fn video(&self) -> Option<&str> {
+        if let Some(video) = &self.video {
+            Some(video)
+        } else {
+            match self.attribute_list.get(VIDEO) {
+                Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
+                _ => None,
+            }
         }
     }
 
-    pub fn pathway_id(&self) -> Option<&'a str> {
-        match self.attribute_list.get(PATHWAY_ID) {
-            Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
-            _ => None,
+    pub fn pathway_id(&self) -> Option<&str> {
+        if let Some(pathway_id) = &self.pathway_id {
+            Some(pathway_id)
+        } else {
+            match self.attribute_list.get(PATHWAY_ID) {
+                Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
+                _ => None,
+            }
         }
     }
 
-    pub fn as_str(&self) -> &str {
-        split_by_first_lf(str_from(&self.output_line)).parsed
+    // === SETTERS ===
+
+    pub fn set_uri(&mut self, uri: String) {
+        self.attribute_list.remove(URI);
+        self.uri = Cow::Owned(uri);
+        self.output_line_is_dirty = true;
+    }
+
+    pub fn set_bandwidth(&mut self, bandwidth: u64) {
+        self.attribute_list.remove(BANDWIDTH);
+        self.bandwidth = bandwidth;
+        self.output_line_is_dirty = true;
+    }
+
+    pub fn set_average_bandwidth(&mut self, average_bandwidth: Option<u64>) {
+        self.attribute_list.remove(AVERAGE_BANDWIDTH);
+        self.average_bandwidth = average_bandwidth;
+        self.output_line_is_dirty = true;
+    }
+
+    pub fn set_score(&mut self, score: Option<f64>) {
+        self.attribute_list.remove(SCORE);
+        self.score = score;
+        self.output_line_is_dirty = true;
+    }
+
+    pub fn set_codecs(&mut self, codecs: Option<String>) {
+        self.attribute_list.remove(CODECS);
+        self.codecs = codecs.map(|x| Cow::Owned(x));
+        self.output_line_is_dirty = true;
+    }
+
+    pub fn set_supplemental_codecs(&mut self, supplemental_codecs: Option<String>) {
+        self.attribute_list.remove(SUPPLEMENTAL_CODECS);
+        self.supplemental_codecs = supplemental_codecs.map(|x| Cow::Owned(x));
+        self.output_line_is_dirty = true;
+    }
+
+    pub fn set_resolution(&mut self, resolution: Option<DecimalResolution>) {
+        self.attribute_list.remove(RESOLUTION);
+        self.resolution = resolution;
+        self.output_line_is_dirty = true;
+    }
+
+    pub fn set_hdcp_level(&mut self, hdcp_level: Option<String>) {
+        self.attribute_list.remove(HDCP_LEVEL);
+        self.hdcp_level = hdcp_level.map(|x| Cow::Owned(x));
+        self.output_line_is_dirty = true;
+    }
+
+    pub fn set_allowed_cpc(&mut self, allowed_cpc: Option<String>) {
+        self.attribute_list.remove(ALLOWED_CPC);
+        self.allowed_cpc = allowed_cpc.map(|x| Cow::Owned(x));
+        self.output_line_is_dirty = true;
+    }
+
+    pub fn set_video_range(&mut self, video_range: Option<String>) {
+        self.attribute_list.remove(VIDEO_RANGE);
+        self.video_range = video_range.map(|x| Cow::Owned(x));
+        self.output_line_is_dirty = true;
+    }
+
+    pub fn set_req_video_layout(&mut self, req_video_layout: Option<String>) {
+        self.attribute_list.remove(REQ_VIDEO_LAYOUT);
+        self.req_video_layout = req_video_layout.map(|x| Cow::Owned(x));
+        self.output_line_is_dirty = true;
+    }
+
+    pub fn set_stable_variant_id(&mut self, stable_variant_id: Option<String>) {
+        self.attribute_list.remove(STABLE_VARIANT_ID);
+        self.stable_variant_id = stable_variant_id.map(|x| Cow::Owned(x));
+        self.output_line_is_dirty = true;
+    }
+
+    pub fn set_video(&mut self, video: Option<String>) {
+        self.attribute_list.remove(VIDEO);
+        self.video = video.map(|x| Cow::Owned(x));
+        self.output_line_is_dirty = true;
+    }
+
+    pub fn set_pathway_id(&mut self, pathway_id: Option<String>) {
+        self.attribute_list.remove(PATHWAY_ID);
+        self.pathway_id = pathway_id.map(|x| Cow::Owned(x));
+        self.output_line_is_dirty = true;
+    }
+
+    fn recalculate_output_line(&mut self) {
+        self.output_line = Cow::Owned(calculate_line(
+            &self.uri().into(),
+            &self.bandwidth(),
+            &self.average_bandwidth(),
+            &self.score(),
+            &self.codecs().map(|x| x.into()),
+            &self.supplemental_codecs().map(|x| x.into()),
+            &self.resolution().map(|x| x.into()),
+            &self.hdcp_level().map(|x| x.into()),
+            &self.allowed_cpc().map(|x| x.into()),
+            &self.video_range().map(|x| x.into()),
+            &self.req_video_layout().map(|x| x.into()),
+            &self.stable_variant_id().map(|x| x.into()),
+            &self.video().map(|x| x.into()),
+            &self.pathway_id().map(|x| x.into()),
+        ));
+        self.output_line_is_dirty = false;
     }
 }
 
@@ -287,21 +431,21 @@ const STABLE_VARIANT_ID: &str = "STABLE-VARIANT-ID";
 const VIDEO: &str = "VIDEO";
 const PATHWAY_ID: &str = "PATHWAY-ID";
 
-fn calculate_line(
-    uri: &str,
-    bandwidth: u64,
-    average_bandwidth: Option<u64>,
-    score: Option<f64>,
-    codecs: Option<&str>,
-    supplemental_codecs: Option<&str>,
-    resolution: Option<DecimalResolution>,
-    hdcp_level: Option<&str>,
-    allowed_cpc: Option<&str>,
-    video_range: Option<&str>,
-    req_video_layout: Option<&str>,
-    stable_variant_id: Option<&str>,
-    video: Option<&str>,
-    pathway_id: Option<&str>,
+fn calculate_line<'a>(
+    uri: &Cow<'a, str>,
+    bandwidth: &u64,
+    average_bandwidth: &Option<u64>,
+    score: &Option<f64>,
+    codecs: &Option<Cow<'a, str>>,
+    supplemental_codecs: &Option<Cow<'a, str>>,
+    resolution: &Option<DecimalResolution>,
+    hdcp_level: &Option<Cow<'a, str>>,
+    allowed_cpc: &Option<Cow<'a, str>>,
+    video_range: &Option<Cow<'a, str>>,
+    req_video_layout: &Option<Cow<'a, str>>,
+    stable_variant_id: &Option<Cow<'a, str>>,
+    video: &Option<Cow<'a, str>>,
+    pathway_id: &Option<Cow<'a, str>>,
 ) -> String {
     let mut line = format!("#EXT-X-I-FRAME-STREAM-INF:{URI}=\"{uri}\",{BANDWIDTH}={bandwidth}");
     if let Some(average_bandwidth) = average_bandwidth {
@@ -353,7 +497,7 @@ mod tests {
         assert_eq!(
             "#EXT-X-I-FRAME-STREAM-INF:URI=\"example.iframe.m3u8\",BANDWIDTH=10000000",
             IFrameStreamInf::new(
-                "example.iframe.m3u8",
+                "example.iframe.m3u8".to_string(),
                 10000000,
                 None,
                 None,
@@ -368,7 +512,8 @@ mod tests {
                 None,
                 None,
             )
-            .as_str()
+            .into_inner()
+            .value()
         );
     }
 
@@ -384,25 +529,26 @@ mod tests {
                 "VIDEO=\"alternate-view\",PATHWAY-ID=\"1234\""
             ),
             IFrameStreamInf::new(
-                "iframe.high.m3u8",
+                "iframe.high.m3u8".to_string(),
                 10000000,
                 Some(9000000),
                 Some(2.0),
-                Some("hvc1.2.4.L153.b0,ec-3"),
-                Some("dvh1.08.07/db4h"),
+                Some("hvc1.2.4.L153.b0,ec-3".to_string()),
+                Some("dvh1.08.07/db4h".to_string()),
                 Some(DecimalResolution {
                     width: 3840,
                     height: 2160
                 }),
-                Some("TYPE-1"),
-                Some("com.example.drm1:SMART-TV/PC"),
-                Some("PQ"),
-                Some("CH-STEREO,CH-MONO"),
-                Some("1234"),
-                Some("alternate-view"),
-                Some("1234"),
+                Some("TYPE-1".to_string()),
+                Some("com.example.drm1:SMART-TV/PC".to_string()),
+                Some("PQ".to_string()),
+                Some("CH-STEREO,CH-MONO".to_string()),
+                Some("1234".to_string()),
+                Some("alternate-view".to_string()),
+                Some("1234".to_string()),
             )
-            .as_str()
+            .into_inner()
+            .value()
         );
     }
 }

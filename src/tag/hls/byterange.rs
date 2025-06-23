@@ -1,15 +1,23 @@
-use crate::{
-    tag::{hls::TagName, known::ParsedTag, value::ParsedTagValue},
-    utils::{split_by_first_lf, str_from},
+use crate::tag::{
+    hls::{TagInner, TagName},
+    known::ParsedTag,
+    value::ParsedTagValue,
 };
 use std::borrow::Cow;
 
 /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.4.2
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub struct Byterange<'a> {
     length: u64,
     offset: Option<u64>,
-    output_line: Cow<'a, [u8]>, // Used with Writer
+    output_line: Cow<'a, str>,  // Used with Writer
+    output_line_is_dirty: bool, // If should recalculate output_line
+}
+
+impl PartialEq for Byterange<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.length() == other.length() && self.offset() == other.offset()
+    }
 }
 
 impl<'a> TryFrom<ParsedTag<'a>> for Byterange<'a> {
@@ -20,12 +28,14 @@ impl<'a> TryFrom<ParsedTag<'a>> for Byterange<'a> {
             ParsedTagValue::DecimalInteger(length) => Ok(Self {
                 length,
                 offset: None,
-                output_line: Cow::Borrowed(tag.original_input.as_bytes()),
+                output_line: Cow::Borrowed(tag.original_input),
+                output_line_is_dirty: false,
             }),
             ParsedTagValue::DecimalIntegerRange(length, offset) => Ok(Self {
                 length,
                 offset: Some(offset),
-                output_line: Cow::Borrowed(tag.original_input.as_bytes()),
+                output_line: Cow::Borrowed(tag.original_input),
+                output_line_is_dirty: false,
             }),
             _ => Err(super::ValidationError::unexpected_value_type()),
         }
@@ -37,7 +47,8 @@ impl<'a> Byterange<'a> {
         Self {
             length,
             offset,
-            output_line: Cow::Owned(calculate_line(length, offset).into_bytes()),
+            output_line: Cow::Owned(calculate_line(length, offset)),
+            output_line_is_dirty: false,
         }
     }
 
@@ -49,11 +60,26 @@ impl<'a> Byterange<'a> {
         self.offset
     }
 
-    pub fn as_str(&self) -> &str {
-        match self.output_line {
-            Cow::Borrowed(bytes) => split_by_first_lf(str_from(bytes)).parsed,
-            Cow::Owned(ref bytes) => str_from(bytes.as_slice()),
+    pub fn set_length(&mut self, length: u64) {
+        self.length = length;
+    }
+
+    pub fn set_offset(&mut self, offset: Option<u64>) {
+        self.offset = offset;
+    }
+
+    pub(crate) fn into_inner(mut self) -> TagInner<'a> {
+        if self.output_line_is_dirty {
+            self.recalculate_output_line();
         }
+        TagInner {
+            output_line: self.output_line,
+        }
+    }
+
+    fn recalculate_output_line(&mut self) {
+        self.output_line = Cow::Owned(calculate_line(self.length(), self.offset()));
+        self.output_line_is_dirty = false;
     }
 }
 
@@ -73,12 +99,12 @@ mod tests {
     #[test]
     fn new_with_no_offset_should_be_valid_line() {
         let tag = Byterange::new(1024, None);
-        assert_eq!("#EXT-X-BYTERANGE:1024", tag.as_str());
+        assert_eq!("#EXT-X-BYTERANGE:1024", tag.into_inner().value());
     }
 
     #[test]
     fn new_with_offset_should_be_valid_line() {
         let tag = Byterange::new(1024, Some(512));
-        assert_eq!("#EXT-X-BYTERANGE:1024@512", tag.as_str());
+        assert_eq!("#EXT-X-BYTERANGE:1024@512", tag.into_inner().value());
     }
 }
