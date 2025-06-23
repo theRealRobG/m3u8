@@ -1,20 +1,51 @@
-use crate::{
-    tag::{
-        known::ParsedTag,
-        value::{ParsedAttributeValue, ParsedTagValue},
-    },
-    utils::{split_by_first_lf, str_from},
+use crate::tag::{
+    hls::TagInner,
+    known::ParsedTag,
+    value::{ParsedAttributeValue, ParsedTagValue},
 };
 use std::{borrow::Cow, collections::HashMap};
 
 /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.6.1
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub struct Media<'a> {
-    media_type: &'a str,
-    group_id: &'a str,
-    name: &'a str,
+    media_type: Cow<'a, str>,
+    group_id: Cow<'a, str>,
+    name: Cow<'a, str>,
+    uri: Option<Cow<'a, str>>,
+    language: Option<Cow<'a, str>>,
+    assoc_language: Option<Cow<'a, str>>,
+    stable_rendition_id: Option<Cow<'a, str>>,
+    default: Option<bool>,
+    autoselect: Option<bool>,
+    forced: Option<bool>,
+    instream_id: Option<Cow<'a, str>>,
+    bit_depth: Option<u64>,
+    sample_rate: Option<u64>,
+    characteristics: Option<Cow<'a, str>>,
+    channels: Option<Cow<'a, str>>,
     attribute_list: HashMap<&'a str, ParsedAttributeValue<'a>>, // Original attribute list
-    output_line: Cow<'a, [u8]>,                                 // Used with Writer
+    output_line: Cow<'a, str>,                                  // Used with Writer
+    output_line_is_dirty: bool,                                 // If should recalculate output_line
+}
+
+impl<'a> PartialEq for Media<'a> {
+    fn eq(&self, other: &Self) -> bool {
+        self.media_type() == other.media_type()
+            && self.group_id() == other.group_id()
+            && self.name() == other.name()
+            && self.uri() == other.uri()
+            && self.language() == other.language()
+            && self.assoc_language() == other.assoc_language()
+            && self.stable_rendition_id() == other.stable_rendition_id()
+            && self.default() == other.default()
+            && self.autoselect() == other.autoselect()
+            && self.forced() == other.forced()
+            && self.instream_id() == other.instream_id()
+            && self.bit_depth() == other.bit_depth()
+            && self.sample_rate() == other.sample_rate()
+            && self.characteristics() == other.characteristics()
+            && self.channels() == other.channels()
+    }
 }
 
 impl<'a> TryFrom<ParsedTag<'a>> for Media<'a> {
@@ -36,197 +67,329 @@ impl<'a> TryFrom<ParsedTag<'a>> for Media<'a> {
             return Err(super::ValidationError::missing_required_attribute());
         };
         Ok(Self {
-            media_type,
-            group_id,
-            name,
+            media_type: Cow::Borrowed(media_type),
+            group_id: Cow::Borrowed(group_id),
+            name: Cow::Borrowed(name),
+            uri: None,
+            language: None,
+            assoc_language: None,
+            stable_rendition_id: None,
+            default: None,
+            autoselect: None,
+            forced: None,
+            instream_id: None,
+            bit_depth: None,
+            sample_rate: None,
+            characteristics: None,
+            channels: None,
             attribute_list,
-            output_line: Cow::Borrowed(tag.original_input.as_bytes()),
+            output_line: Cow::Borrowed(tag.original_input),
+            output_line_is_dirty: false,
         })
     }
 }
 
 impl<'a> Media<'a> {
     pub fn new(
-        media_type: &'a str,
-        name: &'a str,
-        group_id: &'a str,
-        uri: Option<&'a str>,
-        language: Option<&'a str>,
-        assoc_language: Option<&'a str>,
-        stable_rendition_id: Option<&'a str>,
+        media_type: String,
+        name: String,
+        group_id: String,
+        uri: Option<String>,
+        language: Option<String>,
+        assoc_language: Option<String>,
+        stable_rendition_id: Option<String>,
         default: bool,
         autoselect: bool,
         forced: bool,
-        instream_id: Option<&'a str>,
+        instream_id: Option<String>,
         bit_depth: Option<u64>,
         sample_rate: Option<u64>,
-        characteristics: Option<&'a str>,
-        channels: Option<&'a str>,
+        characteristics: Option<String>,
+        channels: Option<String>,
     ) -> Self {
-        let mut attribute_list = HashMap::new();
-        attribute_list.insert(TYPE, ParsedAttributeValue::UnquotedString(media_type));
-        attribute_list.insert(NAME, ParsedAttributeValue::QuotedString(name));
-        attribute_list.insert(GROUP_ID, ParsedAttributeValue::QuotedString(group_id));
-        if let Some(uri) = uri {
-            attribute_list.insert(URI, ParsedAttributeValue::QuotedString(uri));
-        }
-        if let Some(language) = language {
-            attribute_list.insert(LANGUAGE, ParsedAttributeValue::QuotedString(language));
-        }
-        if let Some(assoc_language) = assoc_language {
-            attribute_list.insert(
-                ASSOC_LANGUAGE,
-                ParsedAttributeValue::QuotedString(assoc_language),
-            );
-        }
-        if let Some(stable_rendition_id) = stable_rendition_id {
-            attribute_list.insert(
-                STABLE_RENDITION_ID,
-                ParsedAttributeValue::QuotedString(stable_rendition_id),
-            );
-        }
-        if default {
-            attribute_list.insert(DEFAULT, ParsedAttributeValue::UnquotedString(YES));
-        }
-        if autoselect {
-            attribute_list.insert(AUTOSELECT, ParsedAttributeValue::UnquotedString(YES));
-        }
-        if forced {
-            attribute_list.insert(FORCED, ParsedAttributeValue::UnquotedString(YES));
-        }
-        if let Some(instream_id) = instream_id {
-            attribute_list.insert(INSTREAM_ID, ParsedAttributeValue::QuotedString(instream_id));
-        }
-        if let Some(bit_depth) = bit_depth {
-            attribute_list.insert(BIT_DEPTH, ParsedAttributeValue::DecimalInteger(bit_depth));
-        }
-        if let Some(sample_rate) = sample_rate {
-            attribute_list.insert(
-                SAMPLE_RATE,
-                ParsedAttributeValue::DecimalInteger(sample_rate),
-            );
-        }
-        if let Some(characteristics) = characteristics {
-            attribute_list.insert(
-                CHARACTERISTICS,
-                ParsedAttributeValue::QuotedString(characteristics),
-            );
-        }
-        if let Some(channels) = channels {
-            attribute_list.insert(CHANNELS, ParsedAttributeValue::QuotedString(channels));
-        }
+        let media_type = Cow::Owned(media_type);
+        let name = Cow::Owned(name);
+        let group_id = Cow::Owned(group_id);
+        let uri = uri.map(|x| Cow::Owned(x));
+        let language = language.map(|x| Cow::Owned(x));
+        let assoc_language = assoc_language.map(|x| Cow::Owned(x));
+        let stable_rendition_id = stable_rendition_id.map(|x| Cow::Owned(x));
+        let instream_id = instream_id.map(|x| Cow::Owned(x));
+        let characteristics = characteristics.map(|x| Cow::Owned(x));
+        let channels = channels.map(|x| Cow::Owned(x));
+        let output_line = Cow::Owned(calculate_line(
+            &media_type,
+            &name,
+            &group_id,
+            &uri,
+            &language,
+            &assoc_language,
+            &stable_rendition_id,
+            default,
+            autoselect,
+            forced,
+            &instream_id,
+            bit_depth,
+            sample_rate,
+            &characteristics,
+            &channels,
+        ));
         Self {
             media_type,
             group_id,
             name,
-            attribute_list,
-            output_line: Cow::Owned(
-                calculate_line(
-                    media_type,
-                    name,
-                    group_id,
-                    uri,
-                    language,
-                    assoc_language,
-                    stable_rendition_id,
-                    default,
-                    autoselect,
-                    forced,
-                    instream_id,
-                    bit_depth,
-                    sample_rate,
-                    characteristics,
-                    channels,
-                )
-                .into_bytes(),
-            ),
+            uri,
+            language,
+            assoc_language,
+            stable_rendition_id,
+            default: Some(default),
+            autoselect: Some(autoselect),
+            forced: Some(forced),
+            instream_id,
+            bit_depth,
+            sample_rate,
+            characteristics,
+            channels,
+            attribute_list: HashMap::new(),
+            output_line,
+            output_line_is_dirty: false,
         }
     }
 
-    pub fn media_type(&self) -> &'a str {
-        self.media_type
-    }
-    pub fn name(&self) -> &'a str {
-        self.name
-    }
-    pub fn group_id(&self) -> &'a str {
-        self.group_id
-    }
-    pub fn uri(&self) -> Option<&'a str> {
-        match self.attribute_list.get(URI) {
-            Some(ParsedAttributeValue::QuotedString(uri)) => Some(uri),
-            _ => None,
+    pub(crate) fn into_inner(mut self) -> TagInner<'a> {
+        if self.output_line_is_dirty {
+            self.recalculate_output_line();
+        }
+        TagInner {
+            output_line: self.output_line,
         }
     }
-    pub fn language(&self) -> Option<&'a str> {
-        match self.attribute_list.get(LANGUAGE) {
-            Some(ParsedAttributeValue::QuotedString(language)) => Some(language),
-            _ => None,
+
+    pub fn media_type(&self) -> &str {
+        &self.media_type
+    }
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+    pub fn group_id(&self) -> &str {
+        &self.group_id
+    }
+    pub fn uri(&self) -> Option<&str> {
+        if let Some(uri) = &self.uri {
+            Some(uri)
+        } else {
+            match self.attribute_list.get(URI) {
+                Some(ParsedAttributeValue::QuotedString(uri)) => Some(uri),
+                _ => None,
+            }
         }
     }
-    pub fn assoc_language(&self) -> Option<&'a str> {
-        match self.attribute_list.get(ASSOC_LANGUAGE) {
-            Some(ParsedAttributeValue::QuotedString(language)) => Some(language),
-            _ => None,
+    pub fn language(&self) -> Option<&str> {
+        if let Some(language) = &self.language {
+            Some(language)
+        } else {
+            match self.attribute_list.get(LANGUAGE) {
+                Some(ParsedAttributeValue::QuotedString(language)) => Some(language),
+                _ => None,
+            }
         }
     }
-    pub fn stable_rendition_id(&self) -> Option<&'a str> {
-        match self.attribute_list.get(STABLE_RENDITION_ID) {
-            Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
-            _ => None,
+    pub fn assoc_language(&self) -> Option<&str> {
+        if let Some(assoc_language) = &self.assoc_language {
+            Some(assoc_language)
+        } else {
+            match self.attribute_list.get(ASSOC_LANGUAGE) {
+                Some(ParsedAttributeValue::QuotedString(language)) => Some(language),
+                _ => None,
+            }
+        }
+    }
+    pub fn stable_rendition_id(&self) -> Option<&str> {
+        if let Some(stable_rendition_id) = &self.stable_rendition_id {
+            Some(stable_rendition_id)
+        } else {
+            match self.attribute_list.get(STABLE_RENDITION_ID) {
+                Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
+                _ => None,
+            }
         }
     }
     pub fn default(&self) -> bool {
-        matches!(
-            self.attribute_list.get(DEFAULT),
-            Some(ParsedAttributeValue::UnquotedString(YES))
-        )
+        if let Some(default) = self.default {
+            default
+        } else {
+            matches!(
+                self.attribute_list.get(DEFAULT),
+                Some(ParsedAttributeValue::UnquotedString(YES))
+            )
+        }
     }
     pub fn autoselect(&self) -> bool {
-        matches!(
-            self.attribute_list.get(AUTOSELECT),
-            Some(ParsedAttributeValue::UnquotedString(YES))
-        )
+        if let Some(autoselect) = self.autoselect {
+            autoselect
+        } else {
+            matches!(
+                self.attribute_list.get(AUTOSELECT),
+                Some(ParsedAttributeValue::UnquotedString(YES))
+            )
+        }
     }
     pub fn forced(&self) -> bool {
-        matches!(
-            self.attribute_list.get(FORCED),
-            Some(ParsedAttributeValue::UnquotedString(YES))
-        )
+        if let Some(forced) = self.forced {
+            forced
+        } else {
+            matches!(
+                self.attribute_list.get(FORCED),
+                Some(ParsedAttributeValue::UnquotedString(YES))
+            )
+        }
     }
-    pub fn instream_id(&self) -> Option<&'a str> {
-        match self.attribute_list.get(INSTREAM_ID) {
-            Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
-            _ => None,
+    pub fn instream_id(&self) -> Option<&str> {
+        if let Some(instream_id) = &self.instream_id {
+            Some(instream_id)
+        } else {
+            match self.attribute_list.get(INSTREAM_ID) {
+                Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
+                _ => None,
+            }
         }
     }
     pub fn bit_depth(&self) -> Option<u64> {
-        match self.attribute_list.get(BIT_DEPTH) {
-            Some(ParsedAttributeValue::DecimalInteger(d)) => Some(*d),
-            _ => None,
+        if let Some(bit_depth) = self.bit_depth {
+            Some(bit_depth)
+        } else {
+            match self.attribute_list.get(BIT_DEPTH) {
+                Some(ParsedAttributeValue::DecimalInteger(d)) => Some(*d),
+                _ => None,
+            }
         }
     }
     pub fn sample_rate(&self) -> Option<u64> {
-        match self.attribute_list.get(SAMPLE_RATE) {
-            Some(ParsedAttributeValue::DecimalInteger(rate)) => Some(*rate),
-            _ => None,
+        if let Some(sample_rate) = self.sample_rate {
+            Some(sample_rate)
+        } else {
+            match self.attribute_list.get(SAMPLE_RATE) {
+                Some(ParsedAttributeValue::DecimalInteger(rate)) => Some(*rate),
+                _ => None,
+            }
         }
     }
-    pub fn characteristics(&self) -> Option<&'a str> {
-        match self.attribute_list.get(CHARACTERISTICS) {
-            Some(ParsedAttributeValue::QuotedString(c)) => Some(c),
-            _ => None,
+    pub fn characteristics(&self) -> Option<&str> {
+        if let Some(characteristics) = &self.characteristics {
+            Some(characteristics)
+        } else {
+            match self.attribute_list.get(CHARACTERISTICS) {
+                Some(ParsedAttributeValue::QuotedString(c)) => Some(c),
+                _ => None,
+            }
         }
     }
-    pub fn channels(&self) -> Option<&'a str> {
-        match self.attribute_list.get(CHANNELS) {
-            Some(ParsedAttributeValue::QuotedString(c)) => Some(c),
-            _ => None,
+    pub fn channels(&self) -> Option<&str> {
+        if let Some(channels) = &self.channels {
+            Some(channels)
+        } else {
+            match self.attribute_list.get(CHANNELS) {
+                Some(ParsedAttributeValue::QuotedString(c)) => Some(c),
+                _ => None,
+            }
         }
     }
 
-    pub fn as_str(&self) -> &str {
-        split_by_first_lf(str_from(&self.output_line)).parsed
+    pub fn set_media_type(&mut self, media_type: String) {
+        self.attribute_list.remove(TYPE);
+        self.media_type = Cow::Owned(media_type);
+        self.output_line_is_dirty = true;
+    }
+    pub fn set_name(&mut self, name: String) {
+        self.attribute_list.remove(NAME);
+        self.name = Cow::Owned(name);
+        self.output_line_is_dirty = true;
+    }
+    pub fn set_group_id(&mut self, group_id: String) {
+        self.attribute_list.remove(GROUP_ID);
+        self.group_id = Cow::Owned(group_id);
+        self.output_line_is_dirty = true;
+    }
+    pub fn set_uri(&mut self, uri: Option<String>) {
+        self.attribute_list.remove(URI);
+        self.uri = uri.map(|x| Cow::Owned(x));
+        self.output_line_is_dirty = true;
+    }
+    pub fn set_language(&mut self, language: Option<String>) {
+        self.attribute_list.remove(LANGUAGE);
+        self.language = language.map(|x| Cow::Owned(x));
+        self.output_line_is_dirty = true;
+    }
+    pub fn set_assoc_language(&mut self, assoc_language: Option<String>) {
+        self.attribute_list.remove(ASSOC_LANGUAGE);
+        self.assoc_language = assoc_language.map(|x| Cow::Owned(x));
+        self.output_line_is_dirty = true;
+    }
+    pub fn set_stable_rendition_id(&mut self, stable_rendition_id: Option<String>) {
+        self.attribute_list.remove(STABLE_RENDITION_ID);
+        self.stable_rendition_id = stable_rendition_id.map(|x| Cow::Owned(x));
+        self.output_line_is_dirty = true;
+    }
+    pub fn set_default(&mut self, default: bool) {
+        self.attribute_list.remove(DEFAULT);
+        self.default = Some(default);
+        self.output_line_is_dirty = true;
+    }
+    pub fn set_autoselect(&mut self, autoselect: bool) {
+        self.attribute_list.remove(AUTOSELECT);
+        self.autoselect = Some(autoselect);
+        self.output_line_is_dirty = true;
+    }
+    pub fn set_forced(&mut self, forced: bool) {
+        self.attribute_list.remove(FORCED);
+        self.forced = Some(forced);
+        self.output_line_is_dirty = true;
+    }
+    pub fn set_instream_id(&mut self, instream_id: Option<String>) {
+        self.attribute_list.remove(INSTREAM_ID);
+        self.instream_id = instream_id.map(|x| Cow::Owned(x));
+        self.output_line_is_dirty = true;
+    }
+    pub fn set_bit_depth(&mut self, bit_depth: Option<u64>) {
+        self.attribute_list.remove(BIT_DEPTH);
+        self.bit_depth = bit_depth;
+        self.output_line_is_dirty = true;
+    }
+    pub fn set_sample_rate(&mut self, sample_rate: Option<u64>) {
+        self.attribute_list.remove(SAMPLE_RATE);
+        self.sample_rate = sample_rate;
+        self.output_line_is_dirty = true;
+    }
+    pub fn set_characteristics(&mut self, characteristics: Option<String>) {
+        self.attribute_list.remove(CHARACTERISTICS);
+        self.characteristics = characteristics.map(|x| Cow::Owned(x));
+        self.output_line_is_dirty = true;
+    }
+    pub fn set_channels(&mut self, channels: Option<String>) {
+        self.attribute_list.remove(CHANNELS);
+        self.channels = channels.map(|x| Cow::Owned(x));
+        self.output_line_is_dirty = true;
+    }
+
+    fn recalculate_output_line(&mut self) {
+        self.output_line = Cow::Owned(calculate_line(
+            &self.media_type().into(),
+            &self.name().into(),
+            &self.group_id().into(),
+            &self.uri().map(|x| x.into()),
+            &self.language().map(|x| x.into()),
+            &self.assoc_language().map(|x| x.into()),
+            &self.stable_rendition_id().map(|x| x.into()),
+            self.default(),
+            self.autoselect(),
+            self.forced(),
+            &self.instream_id().map(|x| x.into()),
+            self.bit_depth(),
+            self.sample_rate(),
+            &self.characteristics().map(|x| x.into()),
+            &self.channels().map(|x| x.into()),
+        ));
+        self.output_line_is_dirty = false;
     }
 }
 
@@ -247,22 +410,22 @@ const CHARACTERISTICS: &str = "CHARACTERISTICS";
 const CHANNELS: &str = "CHANNELS";
 const YES: &str = "YES";
 
-fn calculate_line(
-    media_type: &str,
-    name: &str,
-    group_id: &str,
-    uri: Option<&str>,
-    language: Option<&str>,
-    assoc_language: Option<&str>,
-    stable_rendition_id: Option<&str>,
+fn calculate_line<'a>(
+    media_type: &Cow<'a, str>,
+    name: &Cow<'a, str>,
+    group_id: &Cow<'a, str>,
+    uri: &Option<Cow<'a, str>>,
+    language: &Option<Cow<'a, str>>,
+    assoc_language: &Option<Cow<'a, str>>,
+    stable_rendition_id: &Option<Cow<'a, str>>,
     default: bool,
     autoselect: bool,
     forced: bool,
-    instream_id: Option<&str>,
+    instream_id: &Option<Cow<'a, str>>,
     bit_depth: Option<u64>,
     sample_rate: Option<u64>,
-    characteristics: Option<&str>,
-    channels: Option<&str>,
+    characteristics: &Option<Cow<'a, str>>,
+    channels: &Option<Cow<'a, str>>,
 ) -> String {
     let mut line =
         format!("#EXT-X-MEDIA:{TYPE}={media_type},{NAME}=\"{name}\",{GROUP_ID}=\"{group_id}\"");
@@ -321,9 +484,9 @@ mod tests {
                 "INSTREAM-ID=\"CC1\""
             ),
             Media::new(
-                "CLOSED-CAPTIONS",
-                "English",
-                "cc",
+                "CLOSED-CAPTIONS".to_string(),
+                "English".to_string(),
+                "cc".to_string(),
                 None,
                 None,
                 None,
@@ -331,13 +494,14 @@ mod tests {
                 false,
                 false,
                 false,
-                Some("CC1"),
+                Some("CC1".to_string()),
                 None,
                 None,
                 None,
                 None,
             )
-            .as_str()
+            .into_inner()
+            .value()
         );
     }
 
@@ -362,23 +526,24 @@ mod tests {
                 "CHANNELS=\"2\"",
             ),
             Media::new(
-                "AUDIO",
-                "English",
-                "stereo",
-                Some("audio/en/stereo.m3u8"),
-                Some("en"),
-                Some("en"),
-                Some("1234"),
+                "AUDIO".to_string(),
+                "English".to_string(),
+                "stereo".to_string(),
+                Some("audio/en/stereo.m3u8".to_string()),
+                Some("en".to_string()),
+                Some("en".to_string()),
+                Some("1234".to_string()),
                 true,
                 true,
                 true,
                 None,
                 Some(8),
                 Some(48000),
-                Some("public.accessibility.describes-video"),
-                Some("2"),
+                Some("public.accessibility.describes-video".to_string()),
+                Some("2".to_string()),
             )
-            .as_str()
+            .into_inner()
+            .value()
         );
     }
 }

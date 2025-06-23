@@ -180,33 +180,33 @@ impl<'a> TagInner<'a> {
 impl<'a> Tag<'a> {
     pub(crate) fn into_inner(self) -> TagInner<'a> {
         match self {
-            Tag::M3u(t) => todo!(),
+            Tag::M3u(t) => t.into_inner(),
             Tag::Version(t) => todo!(),
             Tag::IndependentSegments(t) => t.into_inner(),
             Tag::Start(t) => todo!(),
             Tag::Define(t) => t.into_inner(),
             Tag::Targetduration(t) => todo!(),
-            Tag::MediaSequence(t) => todo!(),
+            Tag::MediaSequence(t) => t.into_inner(),
             Tag::DiscontinuitySequence(t) => t.into_inner(),
             Tag::Endlist(t) => t.into_inner(),
             Tag::PlaylistType(t) => todo!(),
             Tag::IFramesOnly(t) => t.into_inner(),
-            Tag::PartInf(t) => todo!(),
+            Tag::PartInf(t) => t.into_inner(),
             Tag::ServerControl(t) => todo!(),
             Tag::Inf(t) => t.into_inner(),
             Tag::Byterange(t) => t.into_inner(),
             Tag::Discontinuity(t) => t.into_inner(),
             Tag::Key(t) => t.into_inner(),
-            Tag::Map(t) => todo!(),
+            Tag::Map(t) => t.into_inner(),
             Tag::ProgramDateTime(t) => todo!(),
             Tag::Gap(t) => t.into_inner(),
             Tag::Bitrate(t) => t.into_inner(),
-            Tag::Part(t) => todo!(),
+            Tag::Part(t) => t.into_inner(),
             Tag::Daterange(t) => t.into_inner(),
             Tag::Skip(t) => todo!(),
             Tag::PreloadHint(t) => todo!(),
             Tag::RenditionReport(t) => todo!(),
-            Tag::Media(t) => todo!(),
+            Tag::Media(t) => t.into_inner(),
             Tag::StreamInf(t) => todo!(),
             Tag::IFrameStreamInf(t) => t.into_inner(),
             Tag::SessionData(t) => todo!(),
@@ -821,7 +821,7 @@ mod tests {
     fn map() {
         assert_eq!(
             Ok(Tag::Map(Map::new(
-                "init.mp4",
+                "init.mp4".to_string(),
                 Some(MapByterange {
                     length: 1024,
                     offset: 0
@@ -837,7 +837,7 @@ mod tests {
             })
         );
         assert_eq!(
-            Ok(Tag::Map(Map::new("init.mp4", None,))),
+            Ok(Tag::Map(Map::new("init.mp4".to_string(), None,))),
             Tag::try_from(ParsedTag {
                 name: "-X-MAP",
                 value: ParsedTagValue::AttributeList(HashMap::from([(
@@ -901,7 +901,7 @@ mod tests {
     fn part() {
         assert_eq!(
             Ok(Tag::Part(Part::new(
-                "part.1.mp4",
+                "part.1.mp4".to_string(),
                 0.5,
                 true,
                 Some(PartByterange {
@@ -927,7 +927,7 @@ mod tests {
         );
         assert_eq!(
             Ok(Tag::Part(Part::new(
-                "part.1.mp4",
+                "part.1.mp4".to_string(),
                 0.5,
                 false,
                 Some(PartByterange {
@@ -950,7 +950,13 @@ mod tests {
             })
         );
         assert_eq!(
-            Ok(Tag::Part(Part::new("part.1.mp4", 0.5, false, None, false,))),
+            Ok(Tag::Part(Part::new(
+                "part.1.mp4".to_string(),
+                0.5,
+                false,
+                None,
+                false,
+            ))),
             Tag::try_from(ParsedTag {
                 name: "-X-PART",
                 value: ParsedTagValue::AttributeList(HashMap::from([
@@ -1204,21 +1210,21 @@ mod tests {
     fn media() {
         assert_eq!(
             Ok(Tag::Media(Media::new(
-                "AUDIO",
-                "English",
-                "stereo",
-                Some("audio/en/stereo.m3u8"),
-                Some("en"),
-                Some("en"),
-                Some("1234"),
+                "AUDIO".to_string(),
+                "English".to_string(),
+                "stereo".to_string(),
+                Some("audio/en/stereo.m3u8".to_string()),
+                Some("en".to_string()),
+                Some("en".to_string()),
+                Some("1234".to_string()),
                 true,
                 true,
                 true,
                 None,
                 Some(8),
                 Some(48000),
-                Some("public.accessibility.describes-video"),
-                Some("2"),
+                Some("public.accessibility.describes-video".to_string()),
+                Some("2".to_string()),
             ))),
             Tag::try_from(ParsedTag {
                 name: "-X-MEDIA",
@@ -1268,9 +1274,9 @@ mod tests {
         );
         assert_eq!(
             Ok(Tag::Media(Media::new(
-                "CLOSED-CAPTIONS",
-                "English",
-                "cc",
+                "CLOSED-CAPTIONS".to_string(),
+                "English".to_string(),
+                "cc".to_string(),
                 None,
                 None,
                 None,
@@ -1278,7 +1284,7 @@ mod tests {
                 false,
                 false,
                 false,
-                Some("CC1"),
+                Some("CC1".to_string()),
                 None,
                 None,
                 None,

@@ -1,22 +1,18 @@
-use crate::{
-    tag::{
-        known::ParsedTag,
-        value::{ParsedAttributeValue, ParsedTagValue},
-    },
-    utils::{split_by_first_lf, str_from},
+use crate::tag::{
+    hls::TagInner,
+    known::ParsedTag,
+    value::{ParsedAttributeValue, ParsedTagValue},
 };
 use std::{borrow::Cow, collections::HashMap, fmt::Display};
 
 /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.4.5
 #[derive(Debug)]
 pub struct Map<'a> {
-    uri: &'a str,
+    uri: Cow<'a, str>,
+    byterange: Option<MapByterange>,
     attribute_list: HashMap<&'a str, ParsedAttributeValue<'a>>, // Original attribute list
-    output_line: Cow<'a, [u8]>,                                 // Used with Writer
-    // This needs to exist because the user can construct a Map with `Map::new()`, but will pass a
-    // `MapByteRange`, not a `&str`. I can't convert a `MapByteRange` to a `&str` and so need to
-    // store it as is for later use.
-    stored_byterange: Option<MapByterange>,
+    output_line: Cow<'a, str>,                                  // Used with Writer
+    output_line_is_dirty: bool,                                 // If should recalculate output_line
 }
 
 impl<'a> PartialEq for Map<'a> {
@@ -47,32 +43,43 @@ impl<'a> TryFrom<ParsedTag<'a>> for Map<'a> {
             return Err(super::ValidationError::missing_required_attribute());
         };
         Ok(Self {
-            uri,
+            uri: Cow::Borrowed(uri),
+            byterange: None,
             attribute_list,
-            output_line: Cow::Borrowed(tag.original_input.as_bytes()),
-            stored_byterange: None,
+            output_line: Cow::Borrowed(tag.original_input),
+            output_line_is_dirty: false,
         })
     }
 }
 
 impl<'a> Map<'a> {
-    pub fn new(uri: &'a str, byterange: Option<MapByterange>) -> Self {
-        let mut attribute_list = HashMap::new();
-        attribute_list.insert(URI, ParsedAttributeValue::QuotedString(uri));
+    pub fn new(uri: String, byterange: Option<MapByterange>) -> Self {
+        let uri = Cow::Owned(uri);
+        let output_line = Cow::Owned(calculate_line(&uri, byterange));
         Self {
             uri,
-            attribute_list,
-            output_line: Cow::Owned(calculate_line(uri, byterange).into_bytes()),
-            stored_byterange: byterange,
+            byterange,
+            attribute_list: HashMap::new(),
+            output_line,
+            output_line_is_dirty: false,
         }
     }
 
-    pub fn uri(&self) -> &'a str {
-        self.uri
+    pub(crate) fn into_inner(mut self) -> TagInner<'a> {
+        if self.output_line_is_dirty {
+            self.recalculate_output_line();
+        }
+        TagInner {
+            output_line: self.output_line,
+        }
+    }
+
+    pub fn uri(&self) -> &str {
+        &self.uri
     }
 
     pub fn byterange(&self) -> Option<MapByterange> {
-        if let Some(byterange) = self.stored_byterange {
+        if let Some(byterange) = self.byterange {
             Some(byterange)
         } else {
             match self.attribute_list.get(BYTERANGE) {
@@ -94,15 +101,28 @@ impl<'a> Map<'a> {
         }
     }
 
-    pub fn as_str(&self) -> &str {
-        split_by_first_lf(str_from(&self.output_line)).parsed
+    pub fn set_uri(&mut self, uri: String) {
+        self.attribute_list.remove(URI);
+        self.uri = Cow::Owned(uri);
+        self.output_line_is_dirty = true;
+    }
+
+    pub fn set_byterange(&mut self, byterange: Option<MapByterange>) {
+        self.attribute_list.remove(BYTERANGE);
+        self.byterange = byterange;
+        self.output_line_is_dirty = true;
+    }
+
+    fn recalculate_output_line(&mut self) {
+        self.output_line = Cow::Owned(calculate_line(&self.uri().into(), self.byterange()));
+        self.output_line_is_dirty = false;
     }
 }
 
 const URI: &str = "URI";
 const BYTERANGE: &str = "BYTERANGE";
 
-fn calculate_line(uri: &str, byterange: Option<MapByterange>) -> String {
+fn calculate_line<'a>(uri: &Cow<'a, str>, byterange: Option<MapByterange>) -> String {
     let mut line = format!("#EXT-X-MAP:{URI}=\"{uri}\"");
     if let Some(byterange) = byterange {
         line.push_str(format!(",{BYTERANGE}=\"{byterange}\"").as_str());
@@ -119,7 +139,9 @@ mod tests {
     fn as_str_no_byterange_should_be_valid() {
         assert_eq!(
             "#EXT-X-MAP:URI=\"example.mp4\"",
-            Map::new("example.mp4", None).as_str()
+            Map::new("example.mp4".to_string(), None)
+                .into_inner()
+                .value()
         );
     }
 
@@ -128,13 +150,14 @@ mod tests {
         assert_eq!(
             "#EXT-X-MAP:URI=\"example.mp4\",BYTERANGE=\"1024@512\"",
             Map::new(
-                "example.mp4",
+                "example.mp4".to_string(),
                 Some(MapByterange {
                     length: 1024,
                     offset: 512
                 })
             )
-            .as_str()
+            .into_inner()
+            .value()
         );
     }
 }

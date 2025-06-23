@@ -1,23 +1,21 @@
-use crate::{
-    tag::{
-        known::ParsedTag,
-        value::{ParsedAttributeValue, ParsedTagValue},
-    },
-    utils::{split_by_first_lf, str_from},
+use crate::tag::{
+    hls::TagInner,
+    known::ParsedTag,
+    value::{ParsedAttributeValue, ParsedTagValue},
 };
 use std::{borrow::Cow, collections::HashMap, fmt::Display};
 
 /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.4.9
 #[derive(Debug)]
 pub struct Part<'a> {
-    uri: &'a str,
+    uri: Cow<'a, str>,
     duration: f64,
+    independent: Option<bool>,
+    byterange: Option<PartByterange>,
+    gap: Option<bool>,
     attribute_list: HashMap<&'a str, ParsedAttributeValue<'a>>, // Original attribute list
-    output_line: Cow<'a, [u8]>,                                 // Used with Writer
-    // This needs to exist because the user can construct a Part with `Part::new()`, but will pass a
-    // `PartByteRange`, not a `&str`. I can't convert a `PartByteRange` to a `&str` and so need to
-    // store it as is for later use.
-    stored_byterange: Option<PartByterange>,
+    output_line: Cow<'a, str>,                                  // Used with Writer
+    output_line_is_dirty: bool,                                 // If should recalculate output_line
 }
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct PartByterange {
@@ -61,48 +59,51 @@ impl<'a> TryFrom<ParsedTag<'a>> for Part<'a> {
             return Err(super::ValidationError::missing_required_attribute());
         };
         Ok(Self {
-            uri,
+            uri: Cow::Borrowed(uri),
             duration,
+            independent: None,
+            byterange: None,
+            gap: None,
             attribute_list,
-            output_line: Cow::Borrowed(tag.original_input.as_bytes()),
-            stored_byterange: None,
+            output_line: Cow::Borrowed(tag.original_input),
+            output_line_is_dirty: false,
         })
     }
 }
 
 impl<'a> Part<'a> {
     pub fn new(
-        uri: &'a str,
+        uri: String,
         duration: f64,
         independent: bool,
         byterange: Option<PartByterange>,
         gap: bool,
     ) -> Self {
-        let mut attribute_list = HashMap::new();
-        attribute_list.insert(URI, ParsedAttributeValue::QuotedString(uri));
-        attribute_list.insert(
-            DURATION,
-            ParsedAttributeValue::SignedDecimalFloatingPoint(duration),
-        );
-        if independent {
-            attribute_list.insert(INDEPENDENT, ParsedAttributeValue::UnquotedString(YES));
-        }
-        if gap {
-            attribute_list.insert(GAP, ParsedAttributeValue::UnquotedString(YES));
-        }
+        let uri = Cow::Owned(uri);
+        let output_line = Cow::Owned(calculate_line(&uri, duration, independent, byterange, gap));
         Self {
             uri,
             duration,
-            attribute_list,
-            output_line: Cow::Owned(
-                calculate_line(uri, duration, independent, byterange, gap).into_bytes(),
-            ),
-            stored_byterange: byterange,
+            independent: Some(independent),
+            byterange,
+            gap: Some(gap),
+            attribute_list: HashMap::new(),
+            output_line,
+            output_line_is_dirty: false,
         }
     }
 
-    pub fn uri(&self) -> &'a str {
-        self.uri
+    pub(crate) fn into_inner(mut self) -> TagInner<'a> {
+        if self.output_line_is_dirty {
+            self.recalculate_output_line();
+        }
+        TagInner {
+            output_line: self.output_line,
+        }
+    }
+
+    pub fn uri(&self) -> &str {
+        &self.uri
     }
 
     pub fn duration(&self) -> f64 {
@@ -110,14 +111,18 @@ impl<'a> Part<'a> {
     }
 
     pub fn independent(&self) -> bool {
-        matches!(
-            self.attribute_list.get(INDEPENDENT),
-            Some(ParsedAttributeValue::UnquotedString(YES))
-        )
+        if let Some(independent) = self.independent {
+            independent
+        } else {
+            matches!(
+                self.attribute_list.get(INDEPENDENT),
+                Some(ParsedAttributeValue::UnquotedString(YES))
+            )
+        }
     }
 
     pub fn byterange(&self) -> Option<PartByterange> {
-        if let Some(byterange) = self.stored_byterange {
+        if let Some(byterange) = self.byterange {
             Some(byterange)
         } else {
             match self.attribute_list.get(BYTERANGE) {
@@ -142,14 +147,51 @@ impl<'a> Part<'a> {
     }
 
     pub fn gap(&self) -> bool {
-        matches!(
-            self.attribute_list.get(GAP),
-            Some(ParsedAttributeValue::UnquotedString(YES))
-        )
+        if let Some(gap) = self.gap {
+            gap
+        } else {
+            matches!(
+                self.attribute_list.get(GAP),
+                Some(ParsedAttributeValue::UnquotedString(YES))
+            )
+        }
     }
 
-    pub fn as_str(&self) -> &str {
-        split_by_first_lf(str_from(&self.output_line)).parsed
+    pub fn set_uri(&mut self, uri: String) {
+        self.attribute_list.remove(URI);
+        self.uri = Cow::Owned(uri);
+        self.output_line_is_dirty = true;
+    }
+    pub fn set_duration(&mut self, duration: f64) {
+        self.attribute_list.remove(DURATION);
+        self.duration = duration;
+        self.output_line_is_dirty = true;
+    }
+    pub fn set_independent(&mut self, independent: bool) {
+        self.attribute_list.remove(INDEPENDENT);
+        self.independent = Some(independent);
+        self.output_line_is_dirty = true;
+    }
+    pub fn set_byterange(&mut self, byterange: Option<PartByterange>) {
+        self.attribute_list.remove(BYTERANGE);
+        self.byterange = byterange;
+        self.output_line_is_dirty = true;
+    }
+    pub fn set_gap(&mut self, gap: bool) {
+        self.attribute_list.remove(GAP);
+        self.gap = Some(gap);
+        self.output_line_is_dirty = true;
+    }
+
+    fn recalculate_output_line(&mut self) {
+        self.output_line = Cow::Owned(calculate_line(
+            &self.uri().into(),
+            self.duration(),
+            self.independent(),
+            self.byterange(),
+            self.gap(),
+        ));
+        self.output_line_is_dirty = false;
     }
 }
 
@@ -160,8 +202,8 @@ const BYTERANGE: &str = "BYTERANGE";
 const GAP: &str = "GAP";
 const YES: &str = "YES";
 
-fn calculate_line(
-    uri: &str,
+fn calculate_line<'a>(
+    uri: &Cow<'a, str>,
     duration: f64,
     independent: bool,
     byterange: Option<PartByterange>,
@@ -189,7 +231,9 @@ mod tests {
     fn as_str_with_no_options_should_be_valid() {
         assert_eq!(
             "#EXT-X-PART:URI=\"part.1.0.mp4\",DURATION=0.5",
-            Part::new("part.1.0.mp4", 0.5, false, None, false).as_str()
+            Part::new("part.1.0.mp4".to_string(), 0.5, false, None, false)
+                .into_inner()
+                .value()
         );
     }
 
@@ -198,7 +242,7 @@ mod tests {
         assert_eq!(
             "#EXT-X-PART:URI=\"part.1.0.mp4\",DURATION=0.5,INDEPENDENT=YES,BYTERANGE=1024,GAP=YES",
             Part::new(
-                "part.1.0.mp4",
+                "part.1.0.mp4".to_string(),
                 0.5,
                 true,
                 Some(PartByterange {
@@ -207,7 +251,8 @@ mod tests {
                 }),
                 true
             )
-            .as_str()
+            .into_inner()
+            .value()
         );
     }
 
@@ -216,7 +261,7 @@ mod tests {
         assert_eq!(
             "#EXT-X-PART:URI=\"part.1.0.mp4\",DURATION=0.5,INDEPENDENT=YES,BYTERANGE=1024@512,GAP=YES",
             Part::new(
-                "part.1.0.mp4",
+                "part.1.0.mp4".to_string(),
                 0.5,
                 true,
                 Some(PartByterange {
@@ -225,7 +270,8 @@ mod tests {
                 }),
                 true
             )
-            .as_str()
+            .into_inner()
+            .value()
         );
     }
 }
