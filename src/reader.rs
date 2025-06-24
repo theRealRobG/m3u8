@@ -1,4 +1,4 @@
-use std::io::BufRead;
+use std::io::{self, BufRead};
 
 use crate::{
     config::ParsingOptions,
@@ -40,11 +40,13 @@ impl<R: BufRead> Reader<R> {
         &mut self,
         buf: &'b mut String,
     ) -> Result<Option<HlsLine<'b>>, &'static str> {
-        let available = match self.inner.fill_buf() {
-            Ok(n) if n.is_empty() => return Ok(None),
-            Ok(n) => std::str::from_utf8(n).map_err(|_| "Not UTF-8")?,
-            // Err(ref e) if e.kind() == io::ErrorKind::Interrupted => continue,
-            Err(_) => return Err("IO read error"),
+        let available = loop {
+            match self.inner.fill_buf() {
+                Ok(n) if n.is_empty() => return Ok(None),
+                Ok(n) => break std::str::from_utf8(n).map_err(|_| "Not UTF-8")?,
+                Err(ref e) if e.kind() == io::ErrorKind::Interrupted => (),
+                Err(_) => return Err("IO read error"),
+            }
         };
         let total_len = available.len();
         buf.clear();
