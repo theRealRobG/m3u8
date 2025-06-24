@@ -58,7 +58,7 @@ impl<'a> MediaSequence<'a> {
     }
 
     fn recalculate_output_line(&mut self) {
-        self.output_line = Cow::Owned(calculate_line(self.media_sequence));
+        self.output_line = Cow::Owned(calculate_line(self.media_sequence()));
         self.output_line_is_dirty = false;
     }
 }

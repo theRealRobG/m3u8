@@ -60,10 +60,10 @@ impl<'a> Key<'a> {
         keyformatversions: Option<String>,
     ) -> Self {
         let method = Cow::Owned(method);
-        let uri = uri.map(|x| Cow::Owned(x));
-        let iv = iv.map(|x| Cow::Owned(x));
-        let keyformat = keyformat.map(|x| Cow::Owned(x));
-        let keyformatversions = keyformatversions.map(|x| Cow::Owned(x));
+        let uri = uri.map(Cow::Owned);
+        let iv = iv.map(Cow::Owned);
+        let keyformat = keyformat.map(Cow::Owned);
+        let keyformatversions = keyformatversions.map(Cow::Owned);
         let output_line = Cow::Owned(calculate_line(
             &method,
             &uri,
@@ -150,13 +150,13 @@ impl<'a> Key<'a> {
 
     pub fn set_uri(&mut self, uri: Option<String>) {
         self.attribute_list.remove(URI);
-        self.uri = uri.map(|x| Cow::Owned(x));
+        self.uri = uri.map(Cow::Owned);
         self.output_line_is_dirty = true;
     }
 
     pub fn set_iv(&mut self, iv: Option<String>) {
         self.attribute_list.remove(IV);
-        self.iv = iv.map(|x| Cow::Owned(x));
+        self.iv = iv.map(Cow::Owned);
         self.output_line_is_dirty = true;
     }
 
@@ -168,7 +168,7 @@ impl<'a> Key<'a> {
 
     pub fn set_keyformatversions(&mut self, keyformatversions: Option<String>) {
         self.attribute_list.remove(KEYFORMATVERSIONS);
-        self.keyformatversions = keyformatversions.map(|x| Cow::Owned(x));
+        self.keyformatversions = keyformatversions.map(Cow::Owned);
         self.output_line_is_dirty = true;
     }
 
@@ -180,7 +180,7 @@ impl<'a> Key<'a> {
             Some(keyformat)
         };
         self.output_line = Cow::Owned(calculate_line(
-            &self.method().into(),
+            self.method(),
             &self.uri().map(|x| x.into()),
             &self.iv().map(|x| x.into()),
             &keyformat.map(|x| x.into()),
@@ -197,7 +197,7 @@ const KEYFORMAT: &str = "KEYFORMAT";
 const KEYFORMATVERSIONS: &str = "KEYFORMATVERSIONS";
 
 fn calculate_line<'a>(
-    method: &Cow<'a, str>,
+    method: &str,
     uri: &Option<Cow<'a, str>>,
     iv: &Option<Cow<'a, str>>,
     keyformat: &Option<Cow<'a, str>>,

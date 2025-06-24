@@ -185,7 +185,7 @@ impl<'a> Part<'a> {
 
     fn recalculate_output_line(&mut self) {
         self.output_line = Cow::Owned(calculate_line(
-            &self.uri().into(),
+            self.uri(),
             self.duration(),
             self.independent(),
             self.byterange(),
@@ -202,8 +202,8 @@ const BYTERANGE: &str = "BYTERANGE";
 const GAP: &str = "GAP";
 const YES: &str = "YES";
 
-fn calculate_line<'a>(
-    uri: &Cow<'a, str>,
+fn calculate_line(
+    uri: &str,
     duration: f64,
     independent: bool,
     byterange: Option<PartByterange>,

@@ -110,13 +110,13 @@ impl<'a> Media<'a> {
         let media_type = Cow::Owned(media_type);
         let name = Cow::Owned(name);
         let group_id = Cow::Owned(group_id);
-        let uri = uri.map(|x| Cow::Owned(x));
-        let language = language.map(|x| Cow::Owned(x));
-        let assoc_language = assoc_language.map(|x| Cow::Owned(x));
-        let stable_rendition_id = stable_rendition_id.map(|x| Cow::Owned(x));
-        let instream_id = instream_id.map(|x| Cow::Owned(x));
-        let characteristics = characteristics.map(|x| Cow::Owned(x));
-        let channels = channels.map(|x| Cow::Owned(x));
+        let uri = uri.map(Cow::Owned);
+        let language = language.map(Cow::Owned);
+        let assoc_language = assoc_language.map(Cow::Owned);
+        let stable_rendition_id = stable_rendition_id.map(Cow::Owned);
+        let instream_id = instream_id.map(Cow::Owned);
+        let characteristics = characteristics.map(Cow::Owned);
+        let channels = channels.map(Cow::Owned);
         let output_line = Cow::Owned(calculate_line(
             &media_type,
             &name,
@@ -312,22 +312,22 @@ impl<'a> Media<'a> {
     }
     pub fn set_uri(&mut self, uri: Option<String>) {
         self.attribute_list.remove(URI);
-        self.uri = uri.map(|x| Cow::Owned(x));
+        self.uri = uri.map(Cow::Owned);
         self.output_line_is_dirty = true;
     }
     pub fn set_language(&mut self, language: Option<String>) {
         self.attribute_list.remove(LANGUAGE);
-        self.language = language.map(|x| Cow::Owned(x));
+        self.language = language.map(Cow::Owned);
         self.output_line_is_dirty = true;
     }
     pub fn set_assoc_language(&mut self, assoc_language: Option<String>) {
         self.attribute_list.remove(ASSOC_LANGUAGE);
-        self.assoc_language = assoc_language.map(|x| Cow::Owned(x));
+        self.assoc_language = assoc_language.map(Cow::Owned);
         self.output_line_is_dirty = true;
     }
     pub fn set_stable_rendition_id(&mut self, stable_rendition_id: Option<String>) {
         self.attribute_list.remove(STABLE_RENDITION_ID);
-        self.stable_rendition_id = stable_rendition_id.map(|x| Cow::Owned(x));
+        self.stable_rendition_id = stable_rendition_id.map(Cow::Owned);
         self.output_line_is_dirty = true;
     }
     pub fn set_default(&mut self, default: bool) {
@@ -347,7 +347,7 @@ impl<'a> Media<'a> {
     }
     pub fn set_instream_id(&mut self, instream_id: Option<String>) {
         self.attribute_list.remove(INSTREAM_ID);
-        self.instream_id = instream_id.map(|x| Cow::Owned(x));
+        self.instream_id = instream_id.map(Cow::Owned);
         self.output_line_is_dirty = true;
     }
     pub fn set_bit_depth(&mut self, bit_depth: Option<u64>) {
@@ -362,20 +362,20 @@ impl<'a> Media<'a> {
     }
     pub fn set_characteristics(&mut self, characteristics: Option<String>) {
         self.attribute_list.remove(CHARACTERISTICS);
-        self.characteristics = characteristics.map(|x| Cow::Owned(x));
+        self.characteristics = characteristics.map(Cow::Owned);
         self.output_line_is_dirty = true;
     }
     pub fn set_channels(&mut self, channels: Option<String>) {
         self.attribute_list.remove(CHANNELS);
-        self.channels = channels.map(|x| Cow::Owned(x));
+        self.channels = channels.map(Cow::Owned);
         self.output_line_is_dirty = true;
     }
 
     fn recalculate_output_line(&mut self) {
         self.output_line = Cow::Owned(calculate_line(
-            &self.media_type().into(),
-            &self.name().into(),
-            &self.group_id().into(),
+            self.media_type(),
+            self.name(),
+            self.group_id(),
             &self.uri().map(|x| x.into()),
             &self.language().map(|x| x.into()),
             &self.assoc_language().map(|x| x.into()),
@@ -411,9 +411,9 @@ const CHANNELS: &str = "CHANNELS";
 const YES: &str = "YES";
 
 fn calculate_line<'a>(
-    media_type: &Cow<'a, str>,
-    name: &Cow<'a, str>,
-    group_id: &Cow<'a, str>,
+    media_type: &str,
+    name: &str,
+    group_id: &str,
     uri: &Option<Cow<'a, str>>,
     language: &Option<Cow<'a, str>>,
     assoc_language: &Option<Cow<'a, str>>,

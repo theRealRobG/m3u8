@@ -68,7 +68,7 @@ impl<'a> PartInf<'a> {
     }
 
     fn recalculate_output_line(&mut self) {
-        self.output_line = Cow::Owned(calculate_line(self.part_target));
+        self.output_line = Cow::Owned(calculate_line(self.part_target()));
         self.output_line_is_dirty = false;
     }
 }

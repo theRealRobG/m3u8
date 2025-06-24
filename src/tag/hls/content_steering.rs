@@ -45,7 +45,7 @@ impl<'a> TryFrom<ParsedTag<'a>> for ContentSteering<'a> {
 impl<'a> ContentSteering<'a> {
     pub fn new(server_uri: String, pathway_id: Option<String>) -> Self {
         let server_uri = Cow::Owned(server_uri);
-        let pathway_id = pathway_id.map(|x| Cow::Owned(x));
+        let pathway_id = pathway_id.map(Cow::Owned);
         let output_line = Cow::Owned(calculate_line(&server_uri, &pathway_id));
         Self {
             server_uri,
@@ -71,7 +71,7 @@ impl<'a> ContentSteering<'a> {
 
     pub fn pathway_id(&self) -> Option<&str> {
         if let Some(pathway_id) = &self.pathway_id {
-            Some(&pathway_id)
+            Some(pathway_id)
         } else {
             match self.attribute_list.get(PATHWAY_ID) {
                 Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
@@ -88,13 +88,13 @@ impl<'a> ContentSteering<'a> {
 
     pub fn set_pathway_id(&mut self, pathway_id: Option<String>) {
         self.attribute_list.remove(PATHWAY_ID);
-        self.pathway_id = pathway_id.map(|x| Cow::Owned(x));
+        self.pathway_id = pathway_id.map(Cow::Owned);
         self.output_line_is_dirty = true;
     }
 
     fn recalculate_output_line(&mut self) {
         self.output_line = Cow::Owned(calculate_line(
-            &self.server_uri().into(),
+            self.server_uri(),
             &self.pathway_id().map(|x| x.into()),
         ));
         self.output_line_is_dirty = false;
@@ -104,7 +104,7 @@ impl<'a> ContentSteering<'a> {
 const SERVER_URI: &str = "SERVER-URI";
 const PATHWAY_ID: &str = "PATHWAY-ID";
 
-fn calculate_line<'a>(server_uri: &Cow<'a, str>, pathway_id: &Option<Cow<'a, str>>) -> String {
+fn calculate_line<'a>(server_uri: &str, pathway_id: &Option<Cow<'a, str>>) -> String {
     let mut line = format!(
         "#EXT{}:{}=\"{}\"",
         TagName::ContentSteering.as_str(),

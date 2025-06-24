@@ -78,12 +78,12 @@ impl<'a> Inf<'a> {
     }
 
     fn recalculate_output_line(&mut self) {
-        self.output_line = Cow::Owned(calculate_line(self.duration, &self.title));
+        self.output_line = Cow::Owned(calculate_line(self.duration(), self.title()));
         self.output_line_is_dirty = false;
     }
 }
 
-fn calculate_line<'a>(duration: f64, title: &Cow<'a, str>) -> String {
+fn calculate_line(duration: f64, title: &str) -> String {
     if title.is_empty() {
         format!("#EXTINF:{duration}")
     } else {

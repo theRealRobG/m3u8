@@ -100,15 +100,15 @@ impl<'a> IFrameStreamInf<'a> {
         pathway_id: Option<String>,
     ) -> Self {
         let uri = Cow::Owned(uri);
-        let codecs = codecs.map(|x| Cow::Owned(x));
-        let supplemental_codecs = supplemental_codecs.map(|x| Cow::Owned(x));
-        let hdcp_level = hdcp_level.map(|x| Cow::Owned(x));
-        let allowed_cpc = allowed_cpc.map(|x| Cow::Owned(x));
-        let video_range = video_range.map(|x| Cow::Owned(x));
-        let req_video_layout = req_video_layout.map(|x| Cow::Owned(x));
-        let stable_variant_id = stable_variant_id.map(|x| Cow::Owned(x));
-        let video = video.map(|x| Cow::Owned(x));
-        let pathway_id = pathway_id.map(|x| Cow::Owned(x));
+        let codecs = codecs.map(Cow::Owned);
+        let supplemental_codecs = supplemental_codecs.map(Cow::Owned);
+        let hdcp_level = hdcp_level.map(Cow::Owned);
+        let allowed_cpc = allowed_cpc.map(Cow::Owned);
+        let video_range = video_range.map(Cow::Owned);
+        let req_video_layout = req_video_layout.map(Cow::Owned);
+        let stable_variant_id = stable_variant_id.map(Cow::Owned);
+        let video = video.map(Cow::Owned);
+        let pathway_id = pathway_id.map(Cow::Owned);
         let output_line = Cow::Owned(calculate_line(
             &uri,
             &bandwidth,
@@ -337,13 +337,13 @@ impl<'a> IFrameStreamInf<'a> {
 
     pub fn set_codecs(&mut self, codecs: Option<String>) {
         self.attribute_list.remove(CODECS);
-        self.codecs = codecs.map(|x| Cow::Owned(x));
+        self.codecs = codecs.map(Cow::Owned);
         self.output_line_is_dirty = true;
     }
 
     pub fn set_supplemental_codecs(&mut self, supplemental_codecs: Option<String>) {
         self.attribute_list.remove(SUPPLEMENTAL_CODECS);
-        self.supplemental_codecs = supplemental_codecs.map(|x| Cow::Owned(x));
+        self.supplemental_codecs = supplemental_codecs.map(Cow::Owned);
         self.output_line_is_dirty = true;
     }
 
@@ -355,55 +355,55 @@ impl<'a> IFrameStreamInf<'a> {
 
     pub fn set_hdcp_level(&mut self, hdcp_level: Option<String>) {
         self.attribute_list.remove(HDCP_LEVEL);
-        self.hdcp_level = hdcp_level.map(|x| Cow::Owned(x));
+        self.hdcp_level = hdcp_level.map(Cow::Owned);
         self.output_line_is_dirty = true;
     }
 
     pub fn set_allowed_cpc(&mut self, allowed_cpc: Option<String>) {
         self.attribute_list.remove(ALLOWED_CPC);
-        self.allowed_cpc = allowed_cpc.map(|x| Cow::Owned(x));
+        self.allowed_cpc = allowed_cpc.map(Cow::Owned);
         self.output_line_is_dirty = true;
     }
 
     pub fn set_video_range(&mut self, video_range: Option<String>) {
         self.attribute_list.remove(VIDEO_RANGE);
-        self.video_range = video_range.map(|x| Cow::Owned(x));
+        self.video_range = video_range.map(Cow::Owned);
         self.output_line_is_dirty = true;
     }
 
     pub fn set_req_video_layout(&mut self, req_video_layout: Option<String>) {
         self.attribute_list.remove(REQ_VIDEO_LAYOUT);
-        self.req_video_layout = req_video_layout.map(|x| Cow::Owned(x));
+        self.req_video_layout = req_video_layout.map(Cow::Owned);
         self.output_line_is_dirty = true;
     }
 
     pub fn set_stable_variant_id(&mut self, stable_variant_id: Option<String>) {
         self.attribute_list.remove(STABLE_VARIANT_ID);
-        self.stable_variant_id = stable_variant_id.map(|x| Cow::Owned(x));
+        self.stable_variant_id = stable_variant_id.map(Cow::Owned);
         self.output_line_is_dirty = true;
     }
 
     pub fn set_video(&mut self, video: Option<String>) {
         self.attribute_list.remove(VIDEO);
-        self.video = video.map(|x| Cow::Owned(x));
+        self.video = video.map(Cow::Owned);
         self.output_line_is_dirty = true;
     }
 
     pub fn set_pathway_id(&mut self, pathway_id: Option<String>) {
         self.attribute_list.remove(PATHWAY_ID);
-        self.pathway_id = pathway_id.map(|x| Cow::Owned(x));
+        self.pathway_id = pathway_id.map(Cow::Owned);
         self.output_line_is_dirty = true;
     }
 
     fn recalculate_output_line(&mut self) {
         self.output_line = Cow::Owned(calculate_line(
-            &self.uri().into(),
+            self.uri(),
             &self.bandwidth(),
             &self.average_bandwidth(),
             &self.score(),
             &self.codecs().map(|x| x.into()),
             &self.supplemental_codecs().map(|x| x.into()),
-            &self.resolution().map(|x| x.into()),
+            &self.resolution(),
             &self.hdcp_level().map(|x| x.into()),
             &self.allowed_cpc().map(|x| x.into()),
             &self.video_range().map(|x| x.into()),
@@ -432,7 +432,7 @@ const VIDEO: &str = "VIDEO";
 const PATHWAY_ID: &str = "PATHWAY-ID";
 
 fn calculate_line<'a>(
-    uri: &Cow<'a, str>,
+    uri: &str,
     bandwidth: &u64,
     average_bandwidth: &Option<u64>,
     score: &Option<f64>,

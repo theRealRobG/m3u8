@@ -114,7 +114,7 @@ impl<'a> Map<'a> {
     }
 
     fn recalculate_output_line(&mut self) {
-        self.output_line = Cow::Owned(calculate_line(&self.uri().into(), self.byterange()));
+        self.output_line = Cow::Owned(calculate_line(self.uri(), self.byterange()));
         self.output_line_is_dirty = false;
     }
 }
@@ -122,7 +122,7 @@ impl<'a> Map<'a> {
 const URI: &str = "URI";
 const BYTERANGE: &str = "BYTERANGE";
 
-fn calculate_line<'a>(uri: &Cow<'a, str>, byterange: Option<MapByterange>) -> String {
+fn calculate_line(uri: &str, byterange: Option<MapByterange>) -> String {
     let mut line = format!("#EXT-X-MAP:{URI}=\"{uri}\"");
     if let Some(byterange) = byterange {
         line.push_str(format!(",{BYTERANGE}=\"{byterange}\"").as_str());

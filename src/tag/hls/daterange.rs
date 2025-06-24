@@ -100,11 +100,11 @@ impl<'a> Daterange<'a> {
         end_on_next: bool,
     ) -> Self {
         let id = Cow::Owned(id);
-        let class = class.map(|x| Cow::Owned(x));
-        let cue = cue.map(|x| Cow::Owned(x));
-        let scte35_cmd = scte35_cmd.map(|x| Cow::Owned(x));
-        let scte35_out = scte35_out.map(|x| Cow::Owned(x));
-        let scte35_in = scte35_in.map(|x| Cow::Owned(x));
+        let class = class.map(Cow::Owned);
+        let cue = cue.map(Cow::Owned);
+        let scte35_cmd = scte35_cmd.map(Cow::Owned);
+        let scte35_out = scte35_out.map(Cow::Owned);
+        let scte35_in = scte35_in.map(Cow::Owned);
         let output_line = Cow::Owned(calculate_line(
             &id,
             &class,
@@ -133,11 +133,9 @@ impl<'a> Daterange<'a> {
                     if !key.starts_with("X-") {
                         return None;
                     }
-                    if let Some(value) = InternalExtensionAttributeValue::try_from(value).ok() {
-                        Some((Cow::Owned(key), value))
-                    } else {
-                        None
-                    }
+                    InternalExtensionAttributeValue::try_from(value)
+                        .ok()
+                        .map(|value| (Cow::Owned(key), value))
                 })
                 .collect(),
             end_on_next: Some(end_on_next),
@@ -228,7 +226,7 @@ impl<'a> Daterange<'a> {
         let mut map = HashMap::new();
         for (key, value) in &self.attribute_list {
             if key.starts_with("X-") {
-                if let Some(value) = ExtensionAttributeValue::try_from(*value).ok() {
+                if let Ok(value) = ExtensionAttributeValue::try_from(*value) {
                     map.insert(*key, value);
                 }
             }
@@ -316,7 +314,7 @@ impl<'a> Daterange<'a> {
 
     pub fn set_class(&mut self, class: Option<String>) {
         self.attribute_list.remove(CLASS);
-        self.class = class.map(|class| Cow::Owned(class));
+        self.class = class.map(Cow::Owned);
         self.output_line_is_dirty = true;
     }
 
@@ -328,7 +326,7 @@ impl<'a> Daterange<'a> {
 
     pub fn set_cue(&mut self, cue: Option<String>) {
         self.attribute_list.remove(CUE);
-        self.cue = cue.map(|cue| Cow::Owned(cue));
+        self.cue = cue.map(Cow::Owned);
         self.output_line_is_dirty = true;
     }
 
@@ -359,7 +357,7 @@ impl<'a> Daterange<'a> {
             return;
         }
         if let Some(value) = value {
-            if let Some(value) = InternalExtensionAttributeValue::try_from(value).ok() {
+            if let Ok(value) = InternalExtensionAttributeValue::try_from(value) {
                 self.attribute_list.remove(name.as_str());
                 self.extension_attributes.insert(Cow::Owned(name), value);
                 self.output_line_is_dirty = true;
@@ -379,25 +377,25 @@ impl<'a> Daterange<'a> {
 
     pub fn set_scte35_cmd(&mut self, scte35_cmd: Option<String>) {
         self.attribute_list.remove(SCTE35_CMD);
-        self.scte35_cmd = scte35_cmd.map(|scte35_cmd| Cow::Owned(scte35_cmd));
+        self.scte35_cmd = scte35_cmd.map(Cow::Owned);
         self.output_line_is_dirty = true;
     }
 
     pub fn set_scte35_out(&mut self, scte35_out: Option<String>) {
         self.attribute_list.remove(SCTE35_OUT);
-        self.scte35_out = scte35_out.map(|scte35_out| Cow::Owned(scte35_out));
+        self.scte35_out = scte35_out.map(Cow::Owned);
         self.output_line_is_dirty = true;
     }
 
     pub fn set_scte35_in(&mut self, scte35_in: Option<String>) {
         self.attribute_list.remove(SCTE35_IN);
-        self.scte35_in = scte35_in.map(|scte35_in| Cow::Owned(scte35_in));
+        self.scte35_in = scte35_in.map(Cow::Owned);
         self.output_line_is_dirty = true;
     }
 
     fn recalculate_output_line(&mut self) {
         self.output_line = Cow::Owned(calculate_line(
-            &self.id().into(),
+            self.id(),
             &self.class().map(|x| x.into()),
             self.start_date(),
             &self.cue().map(|x| x.into()),
@@ -478,9 +476,9 @@ impl<'a> TryFrom<ParsedAttributeValue<'a>> for ExtensionAttributeValue<'a> {
 impl<'a> From<&'a InternalExtensionAttributeValue<'a>> for ExtensionAttributeValue<'a> {
     fn from(value: &'a InternalExtensionAttributeValue) -> Self {
         match value {
-            InternalExtensionAttributeValue::QuotedString(cow) => Self::QuotedString(&cow),
+            InternalExtensionAttributeValue::QuotedString(cow) => Self::QuotedString(cow),
             InternalExtensionAttributeValue::HexadecimalSequence(cow) => {
-                Self::HexadecimalSequence(&cow)
+                Self::HexadecimalSequence(cow)
             }
             InternalExtensionAttributeValue::SignedDecimalFloatingPoint(n) => {
                 Self::SignedDecimalFloatingPoint(*n)
@@ -538,7 +536,7 @@ const END_ON_NEXT: &str = "END-ON-NEXT";
 const YES: &str = "YES";
 
 fn calculate_line<'a>(
-    id: &Cow<'a, str>,
+    id: &str,
     class: &Option<Cow<'a, str>>,
     start_date: DateTime,
     cue: &Option<Cow<'a, str>>,
@@ -575,17 +573,17 @@ fn calculate_line<'a>(
         line.push_str(format!(",{}={}", PLANNED_DURATION, planned_duration).as_str());
     }
     for (key, value) in client_attributes {
-        line.push_str(",");
-        line.push_str(&key);
-        line.push_str("=");
+        line.push(',');
+        line.push_str(key);
+        line.push('=');
         match value {
             ExtensionAttributeValue::HexadecimalSequence(s) => {
-                line.push_str(&s);
+                line.push_str(s);
             }
             ExtensionAttributeValue::QuotedString(s) => {
-                line.push_str("\"");
-                line.push_str(&s);
-                line.push_str("\"");
+                line.push('"');
+                line.push_str(s);
+                line.push('"');
             }
             ExtensionAttributeValue::SignedDecimalFloatingPoint(d) => {
                 line.push_str(format!("{}", d).as_str());

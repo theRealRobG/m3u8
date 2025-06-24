@@ -150,8 +150,9 @@ impl<'a> PreloadHint<'a> {
             self.hint_type(),
             self.uri(),
             byterange_start,
-            self.byterange_length,
-        ))
+            self.byterange_length(),
+        ));
+        self.output_line_is_dirty = false;
     }
 }
 

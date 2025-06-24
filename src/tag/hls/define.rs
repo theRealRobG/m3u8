@@ -60,14 +60,11 @@ impl<'a> Name<'a> {
     }
 
     fn recalculate_output_line(&mut self) {
-        self.output_line = Cow::Owned(Self::calculate_line(
-            &self.name().into(),
-            &self.value().into(),
-        ));
+        self.output_line = Cow::Owned(Self::calculate_line(self.name(), self.value()));
         self.output_line_is_dirty = false;
     }
 
-    fn calculate_line<'b>(name: &Cow<'b, str>, value: &Cow<'b, str>) -> String {
+    fn calculate_line(name: &str, value: &str) -> String {
         format!("#EXT-X-DEFINE:{NAME}=\"{name}\",{VALUE}=\"{value}\"")
     }
 }
@@ -115,11 +112,11 @@ impl<'a> Import<'a> {
     }
 
     fn recalculate_output_line(&mut self) {
-        self.output_line = Cow::Owned(Self::calculate_line(&self.import().into()));
+        self.output_line = Cow::Owned(Self::calculate_line(self.import()));
         self.output_line_is_dirty = false;
     }
 
-    fn calculate_line<'b>(import: &'b Cow<'b, str>) -> String {
+    fn calculate_line(import: &str) -> String {
         format!("#EXT-X-DEFINE:{IMPORT}=\"{import}\"")
     }
 }
@@ -167,11 +164,11 @@ impl<'a> Queryparam<'a> {
     }
 
     fn recalculate_output_line(&mut self) {
-        self.output_line = Cow::Owned(Self::calculate_line(&self.queryparam().into()));
+        self.output_line = Cow::Owned(Self::calculate_line(self.queryparam()));
         self.output_line_is_dirty = false;
     }
 
-    fn calculate_line<'b>(queryparam: &'b Cow<'b, str>) -> String {
+    fn calculate_line(queryparam: &str) -> String {
         format!("#EXT-X-DEFINE:{QUERYPARAM}=\"{queryparam}\"")
     }
 }
