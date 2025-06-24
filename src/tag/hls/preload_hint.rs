@@ -1,19 +1,29 @@
-use crate::{
-    tag::{
-        known::ParsedTag,
-        value::{ParsedAttributeValue, ParsedTagValue},
-    },
-    utils::{split_by_first_lf, str_from},
+use crate::tag::{
+    hls::TagInner,
+    known::ParsedTag,
+    value::{ParsedAttributeValue, ParsedTagValue},
 };
 use std::{borrow::Cow, collections::HashMap};
 
 /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.5.3
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub struct PreloadHint<'a> {
-    hint_type: &'a str,
-    uri: &'a str,
+    hint_type: Cow<'a, str>,
+    uri: Cow<'a, str>,
+    byterange_start: Option<u64>,
+    byterange_length: Option<u64>,
     attribute_list: HashMap<&'a str, ParsedAttributeValue<'a>>, // Original attribute list
-    output_line: Cow<'a, [u8]>,                                 // Used with Writer
+    output_line: Cow<'a, str>,                                  // Used with Writer
+    output_line_is_dirty: bool,                                 // If should recalculate output_line
+}
+
+impl<'a> PartialEq for PreloadHint<'a> {
+    fn eq(&self, other: &Self) -> bool {
+        self.hint_type() == other.hint_type()
+            && self.uri() == other.uri()
+            && self.byterange_start() == other.byterange_start()
+            && self.byterange_length() == other.byterange_length()
+    }
 }
 
 impl<'a> TryFrom<ParsedTag<'a>> for PreloadHint<'a> {
@@ -30,70 +40,118 @@ impl<'a> TryFrom<ParsedTag<'a>> for PreloadHint<'a> {
             return Err(super::ValidationError::missing_required_attribute());
         };
         Ok(Self {
-            hint_type,
-            uri,
+            hint_type: Cow::Borrowed(hint_type),
+            uri: Cow::Borrowed(uri),
+            byterange_start: None,
+            byterange_length: None,
             attribute_list,
-            output_line: Cow::Borrowed(tag.original_input.as_bytes()),
+            output_line: Cow::Borrowed(tag.original_input),
+            output_line_is_dirty: false,
         })
     }
 }
 
 impl<'a> PreloadHint<'a> {
     pub fn new(
-        hint_type: &'a str,
-        uri: &'a str,
+        hint_type: String,
+        uri: String,
         byterange_start: Option<u64>,
         byterange_length: Option<u64>,
     ) -> Self {
-        let mut attribute_list = HashMap::new();
-        attribute_list.insert(TYPE, ParsedAttributeValue::UnquotedString(hint_type));
-        attribute_list.insert(URI, ParsedAttributeValue::QuotedString(uri));
-        if let Some(byterange_start) = byterange_start {
-            attribute_list.insert(
-                BYTERANGE_START,
-                ParsedAttributeValue::DecimalInteger(byterange_start),
-            );
-        }
-        if let Some(byterange_length) = byterange_length {
-            attribute_list.insert(
-                BYTERANGE_LENGTH,
-                ParsedAttributeValue::DecimalInteger(byterange_length),
-            );
-        }
+        let hint_type = Cow::Owned(hint_type);
+        let uri = Cow::Owned(uri);
+        let output_line = Cow::Owned(calculate_line(
+            &hint_type,
+            &uri,
+            byterange_start,
+            byterange_length,
+        ));
         Self {
             hint_type,
             uri,
-            attribute_list,
-            output_line: Cow::Owned(
-                calculate_line(hint_type, uri, byterange_start, byterange_length).into_bytes(),
-            ),
+            byterange_start,
+            byterange_length,
+            attribute_list: HashMap::new(),
+            output_line,
+            output_line_is_dirty: false,
         }
     }
 
-    pub fn hint_type(&self) -> &'a str {
-        self.hint_type
+    pub(crate) fn into_inner(mut self) -> TagInner<'a> {
+        if self.output_line_is_dirty {
+            self.recalculate_output_line();
+        }
+        TagInner {
+            output_line: self.output_line,
+        }
     }
 
-    pub fn uri(&self) -> &'a str {
-        self.uri
+    pub fn hint_type(&self) -> &str {
+        &self.hint_type
+    }
+
+    pub fn uri(&self) -> &str {
+        &self.uri
     }
 
     pub fn byterange_start(&self) -> u64 {
-        match self.attribute_list.get(BYTERANGE_START) {
-            Some(ParsedAttributeValue::DecimalInteger(start)) => *start,
-            _ => 0,
+        if let Some(byterange_start) = self.byterange_start {
+            byterange_start
+        } else {
+            match self.attribute_list.get(BYTERANGE_START) {
+                Some(ParsedAttributeValue::DecimalInteger(start)) => *start,
+                _ => 0,
+            }
         }
     }
 
     pub fn byterange_length(&self) -> Option<u64> {
-        match self.attribute_list.get(BYTERANGE_LENGTH) {
-            Some(ParsedAttributeValue::DecimalInteger(length)) => Some(*length),
-            _ => None,
+        if let Some(byterange_length) = self.byterange_length {
+            Some(byterange_length)
+        } else {
+            match self.attribute_list.get(BYTERANGE_LENGTH) {
+                Some(ParsedAttributeValue::DecimalInteger(length)) => Some(*length),
+                _ => None,
+            }
         }
     }
 
-    pub fn as_str(&self) -> &str {
-        split_by_first_lf(str_from(&self.output_line)).parsed
+    pub fn set_hint_type(&mut self, hint_type: String) {
+        self.attribute_list.remove(TYPE);
+        self.hint_type = Cow::Owned(hint_type);
+        self.output_line_is_dirty = true;
+    }
+
+    pub fn set_uri(&mut self, uri: String) {
+        self.attribute_list.remove(URI);
+        self.uri = Cow::Owned(uri);
+        self.output_line_is_dirty = true;
+    }
+
+    pub fn set_byterange_start(&mut self, byterange_start: Option<u64>) {
+        self.attribute_list.remove(BYTERANGE_START);
+        self.byterange_start = byterange_start;
+        self.output_line_is_dirty = true;
+    }
+
+    pub fn set_byterange_length(&mut self, byterange_length: Option<u64>) {
+        self.attribute_list.remove(BYTERANGE_LENGTH);
+        self.byterange_length = byterange_length;
+        self.output_line_is_dirty = true;
+    }
+
+    fn recalculate_output_line(&mut self) {
+        let byterange_start = if self.byterange_start() == 0 {
+            None
+        } else {
+            Some(self.byterange_start())
+        };
+        self.output_line = Cow::Owned(calculate_line(
+            self.hint_type(),
+            self.uri(),
+            byterange_start,
+            self.byterange_length,
+        ))
     }
 }
 
@@ -127,7 +185,9 @@ mod tests {
     fn as_str_with_no_options_should_be_valid() {
         assert_eq!(
             "#EXT-X-PRELOAD-HINT:TYPE=PART,URI=\"part.2.mp4\"",
-            PreloadHint::new("PART", "part.2.mp4", None, None).as_str()
+            PreloadHint::new("PART".to_string(), "part.2.mp4".to_string(), None, None)
+                .into_inner()
+                .value()
         )
     }
 
@@ -135,7 +195,14 @@ mod tests {
     fn as_str_with_options_should_be_valid() {
         assert_eq!(
             "#EXT-X-PRELOAD-HINT:TYPE=PART,URI=\"part.2.mp4\",BYTERANGE-START=512,BYTERANGE-LENGTH=1024",
-            PreloadHint::new("PART", "part.2.mp4", Some(512), Some(1024)).as_str()
+            PreloadHint::new(
+                "PART".to_string(),
+                "part.2.mp4".to_string(),
+                Some(512),
+                Some(1024)
+            )
+            .into_inner()
+            .value()
         )
     }
 }

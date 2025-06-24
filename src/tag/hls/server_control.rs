@@ -1,17 +1,31 @@
-use crate::{
-    tag::{
-        known::ParsedTag,
-        value::{ParsedAttributeValue, ParsedTagValue},
-    },
-    utils::{split_by_first_lf, str_from},
+use crate::tag::{
+    hls::TagInner,
+    known::ParsedTag,
+    value::{ParsedAttributeValue, ParsedTagValue},
 };
 use std::{borrow::Cow, collections::HashMap};
 
 /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.3.8
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub struct ServerControl<'a> {
+    can_skip_until: Option<f64>,
+    can_skip_dateranges: Option<bool>,
+    hold_back: Option<f64>,
+    part_hold_back: Option<f64>,
+    can_block_reload: Option<bool>,
     attribute_list: HashMap<&'a str, ParsedAttributeValue<'a>>, // Original attribute list
-    output_line: Cow<'a, [u8]>,                                 // Used with Writer
+    output_line: Cow<'a, str>,                                  // Used with Writer
+    output_line_is_dirty: bool,                                 // If should recalculate output_line
+}
+
+impl<'a> PartialEq for ServerControl<'a> {
+    fn eq(&self, other: &Self) -> bool {
+        self.can_skip_until() == other.can_skip_until()
+            && self.can_skip_dateranges() == other.can_skip_dateranges()
+            && self.hold_back() == other.hold_back()
+            && self.part_hold_back() == other.part_hold_back()
+            && self.can_block_reload() == other.can_block_reload()
+    }
 }
 
 impl<'a> TryFrom<ParsedTag<'a>> for ServerControl<'a> {
@@ -22,8 +36,14 @@ impl<'a> TryFrom<ParsedTag<'a>> for ServerControl<'a> {
             return Err(super::ValidationError::unexpected_value_type());
         };
         Ok(Self {
+            can_skip_until: None,
+            can_skip_dateranges: None,
+            hold_back: None,
+            part_hold_back: None,
+            can_block_reload: None,
             attribute_list,
-            output_line: Cow::Borrowed(tag.original_input.as_bytes()),
+            output_line: Cow::Borrowed(tag.original_input),
+            output_line_is_dirty: false,
         })
     }
 }
@@ -36,90 +56,135 @@ impl<'a> ServerControl<'a> {
         part_hold_back: Option<f64>,
         can_block_reload: bool,
     ) -> Self {
-        let mut attribute_list = HashMap::new();
-        if let Some(can_skip_until) = can_skip_until {
-            attribute_list.insert(
-                CAN_SKIP_UNTIL,
-                ParsedAttributeValue::SignedDecimalFloatingPoint(can_skip_until),
-            );
-        }
-        if can_skip_dateranges {
-            attribute_list.insert(
-                CAN_SKIP_DATERANGES,
-                ParsedAttributeValue::UnquotedString(YES),
-            );
-        }
-        if let Some(hold_back) = hold_back {
-            attribute_list.insert(
-                HOLD_BACK,
-                ParsedAttributeValue::SignedDecimalFloatingPoint(hold_back),
-            );
-        }
-        if let Some(part_hold_back) = part_hold_back {
-            attribute_list.insert(
-                PART_HOLD_BACK,
-                ParsedAttributeValue::SignedDecimalFloatingPoint(part_hold_back),
-            );
-        }
-        if can_block_reload {
-            attribute_list.insert(CAN_BLOCK_RELOAD, ParsedAttributeValue::UnquotedString(YES));
-        }
+        let output_line = Cow::Owned(calculate_line(
+            can_skip_until,
+            can_skip_dateranges,
+            hold_back,
+            part_hold_back,
+            can_block_reload,
+        ));
+        let can_skip_dateranges = Some(can_skip_dateranges);
+        let can_block_reload = Some(can_block_reload);
         Self {
-            attribute_list,
-            output_line: Cow::Owned(
-                calculate_line(
-                    can_skip_until,
-                    can_skip_dateranges,
-                    hold_back,
-                    part_hold_back,
-                    can_block_reload,
-                )
-                .into_bytes(),
-            ),
+            can_skip_until,
+            can_skip_dateranges,
+            hold_back,
+            part_hold_back,
+            can_block_reload,
+            attribute_list: HashMap::new(),
+            output_line,
+            output_line_is_dirty: false,
+        }
+    }
+
+    pub(crate) fn into_inner(mut self) -> TagInner<'a> {
+        if self.output_line_is_dirty {
+            self.recalculate_output_line();
+        }
+        TagInner {
+            output_line: self.output_line,
         }
     }
 
     pub fn can_skip_until(&self) -> Option<f64> {
-        match self.attribute_list.get(CAN_SKIP_UNTIL) {
-            Some(ParsedAttributeValue::SignedDecimalFloatingPoint(can_skip_until)) => {
-                Some(*can_skip_until)
+        if let Some(can_skip_until) = self.can_skip_until {
+            Some(can_skip_until)
+        } else {
+            match self.attribute_list.get(CAN_SKIP_UNTIL) {
+                Some(ParsedAttributeValue::SignedDecimalFloatingPoint(can_skip_until)) => {
+                    Some(*can_skip_until)
+                }
+                _ => None,
             }
-            _ => None,
         }
     }
 
     pub fn can_skip_dateranges(&self) -> bool {
-        matches!(
-            self.attribute_list.get(CAN_SKIP_DATERANGES),
-            Some(ParsedAttributeValue::UnquotedString(YES))
-        )
-    }
-
-    pub fn hold_back(&self) -> Option<f64> {
-        match self.attribute_list.get(HOLD_BACK) {
-            Some(ParsedAttributeValue::SignedDecimalFloatingPoint(hold_back)) => Some(*hold_back),
-            _ => None,
+        if let Some(can_skip_dateranges) = self.can_skip_dateranges {
+            can_skip_dateranges
+        } else {
+            matches!(
+                self.attribute_list.get(CAN_SKIP_DATERANGES),
+                Some(ParsedAttributeValue::UnquotedString(YES))
+            )
         }
     }
 
-    pub fn part_hold_back(&self) -> Option<f64> {
-        match self.attribute_list.get(PART_HOLD_BACK) {
-            Some(ParsedAttributeValue::SignedDecimalFloatingPoint(part_hold_back)) => {
-                Some(*part_hold_back)
+    pub fn hold_back(&self) -> Option<f64> {
+        if let Some(hold_back) = self.hold_back {
+            Some(hold_back)
+        } else {
+            match self.attribute_list.get(HOLD_BACK) {
+                Some(ParsedAttributeValue::SignedDecimalFloatingPoint(hold_back)) => {
+                    Some(*hold_back)
+                }
+                _ => None,
             }
-            _ => None,
+        }
+    }
+    pub fn part_hold_back(&self) -> Option<f64> {
+        if let Some(part_hold_back) = self.part_hold_back {
+            Some(part_hold_back)
+        } else {
+            match self.attribute_list.get(PART_HOLD_BACK) {
+                Some(ParsedAttributeValue::SignedDecimalFloatingPoint(part_hold_back)) => {
+                    Some(*part_hold_back)
+                }
+                _ => None,
+            }
         }
     }
 
     pub fn can_block_reload(&self) -> bool {
-        matches!(
-            self.attribute_list.get(CAN_BLOCK_RELOAD),
-            Some(ParsedAttributeValue::UnquotedString(YES))
-        )
+        if let Some(can_block_reload) = self.can_block_reload {
+            can_block_reload
+        } else {
+            matches!(
+                self.attribute_list.get(CAN_BLOCK_RELOAD),
+                Some(ParsedAttributeValue::UnquotedString(YES))
+            )
+        }
     }
 
-    pub fn as_str(&self) -> &str {
-        split_by_first_lf(str_from(&self.output_line)).parsed
+    pub fn set_can_skip_until(&mut self, can_skip_until: Option<f64>) {
+        self.attribute_list.remove(CAN_SKIP_UNTIL);
+        self.can_skip_until = can_skip_until;
+        self.output_line_is_dirty = true;
+    }
+
+    pub fn set_can_skip_dateranges(&mut self, can_skip_dateranges: bool) {
+        self.attribute_list.remove(CAN_SKIP_DATERANGES);
+        self.can_skip_dateranges = Some(can_skip_dateranges);
+        self.output_line_is_dirty = true;
+    }
+
+    pub fn set_hold_back(&mut self, hold_back: Option<f64>) {
+        self.attribute_list.remove(HOLD_BACK);
+        self.hold_back = hold_back;
+        self.output_line_is_dirty = true;
+    }
+
+    pub fn set_part_hold_back(&mut self, part_hold_back: Option<f64>) {
+        self.attribute_list.remove(PART_HOLD_BACK);
+        self.part_hold_back = part_hold_back;
+        self.output_line_is_dirty = true;
+    }
+
+    pub fn set_can_block_reload(&mut self, can_block_reload: bool) {
+        self.attribute_list.remove(CAN_BLOCK_RELOAD);
+        self.can_block_reload = Some(can_block_reload);
+        self.output_line_is_dirty = true;
+    }
+
+    fn recalculate_output_line(&mut self) {
+        self.output_line = Cow::Owned(calculate_line(
+            self.can_skip_until(),
+            self.can_skip_dateranges(),
+            self.hold_back(),
+            self.part_hold_back(),
+            self.can_block_reload(),
+        ));
+        self.output_line_is_dirty = false;
     }
 }
 
@@ -170,7 +235,9 @@ mod tests {
     fn as_str_with_one_value_should_be_valid() {
         assert_eq!(
             "#EXT-X-SERVER-CONTROL:CAN-SKIP-UNTIL=36",
-            ServerControl::new(Some(36.0), false, None, None, false).as_str()
+            ServerControl::new(Some(36.0), false, None, None, false)
+                .into_inner()
+                .value()
         );
     }
 
@@ -178,7 +245,9 @@ mod tests {
     fn as_str_with_bools_should_be_valid() {
         assert_eq!(
             "#EXT-X-SERVER-CONTROL:CAN-SKIP-DATERANGES=YES,CAN-BLOCK-RELOAD=YES",
-            ServerControl::new(None, true, None, None, true).as_str()
+            ServerControl::new(None, true, None, None, true)
+                .into_inner()
+                .value()
         );
     }
 
@@ -189,7 +258,9 @@ mod tests {
                 "#EXT-X-SERVER-CONTROL:CAN-SKIP-UNTIL=36,CAN-SKIP-DATERANGES=YES,HOLD-BACK=18,",
                 "PART-HOLD-BACK=1.5,CAN-BLOCK-RELOAD=YES",
             ),
-            ServerControl::new(Some(36.0), true, Some(18.0), Some(1.5), true).as_str()
+            ServerControl::new(Some(36.0), true, Some(18.0), Some(1.5), true)
+                .into_inner()
+                .value()
         );
     }
 }

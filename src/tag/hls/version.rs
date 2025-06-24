@@ -1,15 +1,18 @@
+use crate::tag::{hls::TagInner, known::ParsedTag, value::ParsedTagValue};
 use std::borrow::Cow;
 
-use crate::{
-    tag::{known::ParsedTag, value::ParsedTagValue},
-    utils::{split_by_first_lf, str_from},
-};
-
 /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.1.2
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub struct Version<'a> {
     version: u64,
-    output_line: Cow<'a, [u8]>, // Used with Writer
+    output_line: Cow<'a, str>,  // Used with Writer
+    output_line_is_dirty: bool, // If should recalculate output_line
+}
+
+impl<'a> PartialEq for Version<'a> {
+    fn eq(&self, other: &Self) -> bool {
+        self.version() == other.version()
+    }
 }
 
 impl<'a> TryFrom<ParsedTag<'a>> for Version<'a> {
@@ -21,7 +24,8 @@ impl<'a> TryFrom<ParsedTag<'a>> for Version<'a> {
         };
         Ok(Self {
             version,
-            output_line: Cow::Borrowed(tag.original_input.as_bytes()),
+            output_line: Cow::Borrowed(tag.original_input),
+            output_line_is_dirty: false,
         })
     }
 }
@@ -30,7 +34,17 @@ impl<'a> Version<'a> {
     pub fn new(version: u64) -> Self {
         Self {
             version,
-            output_line: Cow::Owned(calculate_line(version).into_bytes()),
+            output_line: Cow::Owned(calculate_line(version)),
+            output_line_is_dirty: false,
+        }
+    }
+
+    pub(crate) fn into_inner(mut self) -> TagInner<'a> {
+        if self.output_line_is_dirty {
+            self.recalculate_output_line();
+        }
+        TagInner {
+            output_line: self.output_line,
         }
     }
 
@@ -38,8 +52,14 @@ impl<'a> Version<'a> {
         self.version
     }
 
-    pub fn as_str(&self) -> &str {
-        split_by_first_lf(str_from(&self.output_line)).parsed
+    pub fn set_version(&mut self, version: u64) {
+        self.version = version;
+        self.output_line_is_dirty = true;
+    }
+
+    fn recalculate_output_line(&mut self) {
+        self.output_line = Cow::Owned(calculate_line(self.version()));
+        self.output_line_is_dirty = false;
     }
 }
 
@@ -54,6 +74,6 @@ mod tests {
 
     #[test]
     fn as_str_should_be_valid() {
-        assert_eq!("#EXT-X-VERSION:10", Version::new(10).as_str());
+        assert_eq!("#EXT-X-VERSION:10", Version::new(10).into_inner().value());
     }
 }

@@ -1,7 +1,9 @@
 use crate::tag::{
+    hls::TagInner,
     known::ParsedTag,
     value::{HlsPlaylistType, ParsedTagValue},
 };
+use std::borrow::Cow;
 
 /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.3.5
 #[derive(Debug, PartialEq)]
@@ -23,15 +25,23 @@ impl PlaylistType {
         Self(playlist_type)
     }
 
+    pub(crate) fn into_inner(self) -> TagInner<'static> {
+        match self.0 {
+            HlsPlaylistType::Event => TagInner {
+                output_line: Cow::Borrowed("#EXT-X-PLAYLIST-TYPE:EVENT"),
+            },
+            HlsPlaylistType::Vod => TagInner {
+                output_line: Cow::Borrowed("#EXT-X-PLAYLIST-TYPE:VOD"),
+            },
+        }
+    }
+
     pub fn playlist_type(&self) -> HlsPlaylistType {
         self.0
     }
 
-    pub fn as_str(&self) -> &'static str {
-        match self.0 {
-            HlsPlaylistType::Event => "#EXT-X-PLAYLIST-TYPE:EVENT",
-            HlsPlaylistType::Vod => "#EXT-X-PLAYLIST-TYPE:VOD",
-        }
+    pub fn set_playlist_type(&mut self, playlist_type: HlsPlaylistType) {
+        self.0 = playlist_type;
     }
 }
 
@@ -44,7 +54,7 @@ mod tests {
     fn event_as_str_should_be_valid() {
         assert_eq!(
             "#EXT-X-PLAYLIST-TYPE:EVENT",
-            PlaylistType(HlsPlaylistType::Event).as_str()
+            PlaylistType(HlsPlaylistType::Event).into_inner().value()
         );
     }
 
@@ -52,7 +62,7 @@ mod tests {
     fn vod_as_str_should_be_valid() {
         assert_eq!(
             "#EXT-X-PLAYLIST-TYPE:VOD",
-            PlaylistType(HlsPlaylistType::Vod).as_str()
+            PlaylistType(HlsPlaylistType::Vod).into_inner().value()
         );
     }
 }

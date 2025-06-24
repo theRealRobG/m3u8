@@ -181,36 +181,36 @@ impl<'a> Tag<'a> {
     pub(crate) fn into_inner(self) -> TagInner<'a> {
         match self {
             Tag::M3u(t) => t.into_inner(),
-            Tag::Version(t) => todo!(),
+            Tag::Version(t) => t.into_inner(),
             Tag::IndependentSegments(t) => t.into_inner(),
-            Tag::Start(t) => todo!(),
+            Tag::Start(t) => t.into_inner(),
             Tag::Define(t) => t.into_inner(),
-            Tag::Targetduration(t) => todo!(),
+            Tag::Targetduration(t) => t.into_inner(),
             Tag::MediaSequence(t) => t.into_inner(),
             Tag::DiscontinuitySequence(t) => t.into_inner(),
             Tag::Endlist(t) => t.into_inner(),
-            Tag::PlaylistType(t) => todo!(),
+            Tag::PlaylistType(t) => t.into_inner(),
             Tag::IFramesOnly(t) => t.into_inner(),
             Tag::PartInf(t) => t.into_inner(),
-            Tag::ServerControl(t) => todo!(),
+            Tag::ServerControl(t) => t.into_inner(),
             Tag::Inf(t) => t.into_inner(),
             Tag::Byterange(t) => t.into_inner(),
             Tag::Discontinuity(t) => t.into_inner(),
             Tag::Key(t) => t.into_inner(),
             Tag::Map(t) => t.into_inner(),
-            Tag::ProgramDateTime(t) => todo!(),
+            Tag::ProgramDateTime(t) => t.into_inner(),
             Tag::Gap(t) => t.into_inner(),
             Tag::Bitrate(t) => t.into_inner(),
             Tag::Part(t) => t.into_inner(),
             Tag::Daterange(t) => t.into_inner(),
-            Tag::Skip(t) => todo!(),
-            Tag::PreloadHint(t) => todo!(),
-            Tag::RenditionReport(t) => todo!(),
+            Tag::Skip(t) => t.into_inner(),
+            Tag::PreloadHint(t) => t.into_inner(),
+            Tag::RenditionReport(t) => t.into_inner(),
             Tag::Media(t) => t.into_inner(),
-            Tag::StreamInf(t) => todo!(),
+            Tag::StreamInf(t) => t.into_inner(),
             Tag::IFrameStreamInf(t) => t.into_inner(),
-            Tag::SessionData(t) => todo!(),
-            Tag::SessionKey(t) => todo!(),
+            Tag::SessionData(t) => t.into_inner(),
+            Tag::SessionKey(t) => t.into_inner(),
             Tag::ContentSteering(t) => t.into_inner(),
         }
     }
@@ -1101,7 +1101,7 @@ mod tests {
     #[test]
     fn skip() {
         assert_eq!(
-            Ok(Tag::Skip(Skip::new(100, Some("1234\tabcd"),))),
+            Ok(Tag::Skip(Skip::new(100, Some("1234\tabcd".to_string())))),
             Tag::try_from(ParsedTag {
                 name: "-X-SKIP",
                 value: ParsedTagValue::AttributeList(HashMap::from([
@@ -1134,8 +1134,8 @@ mod tests {
     fn preload_hint() {
         assert_eq!(
             Ok(Tag::PreloadHint(PreloadHint::new(
-                "PART",
-                "part.2.mp4",
+                "PART".to_string(),
+                "part.2.mp4".to_string(),
                 Some(512),
                 Some(1024),
             ))),
@@ -1155,8 +1155,8 @@ mod tests {
         );
         assert_eq!(
             Ok(Tag::PreloadHint(PreloadHint::new(
-                "PART",
-                "part.2.mp4",
+                "PART".to_string(),
+                "part.2.mp4".to_string(),
                 None,
                 None,
             ))),
@@ -1175,7 +1175,7 @@ mod tests {
     fn rendition_report() {
         assert_eq!(
             Ok(Tag::RenditionReport(RenditionReport::new(
-                "high.m3u8",
+                "high.m3u8".to_string(),
                 1000,
                 Some(2),
             ))),
@@ -1191,7 +1191,7 @@ mod tests {
         );
         assert_eq!(
             Ok(Tag::RenditionReport(RenditionReport::new(
-                "high.m3u8",
+                "high.m3u8".to_string(),
                 1000,
                 None,
             ))),
@@ -1319,23 +1319,23 @@ mod tests {
                 10000000,
                 Some(9000000),
                 Some(2.0),
-                Some("hvc1.2.4.L153.b0,ec-3"),
-                Some("dvh1.08.07/db4h"),
+                Some("hvc1.2.4.L153.b0,ec-3".to_string()),
+                Some("dvh1.08.07/db4h".to_string()),
                 Some(DecimalResolution {
                     width: 3840,
                     height: 2160
                 }),
                 Some(23.976),
-                Some("TYPE-1"),
-                Some("com.example.drm1:SMART-TV/PC"),
-                Some("PQ"),
-                Some("CH-STEREO,CH-MONO"),
-                Some("1234"),
-                Some("surround"),
-                Some("alternate-view"),
-                Some("subs"),
-                Some("cc"),
-                Some("1234"),
+                Some("TYPE-1".to_string()),
+                Some("com.example.drm1:SMART-TV/PC".to_string()),
+                Some("PQ".to_string()),
+                Some("CH-STEREO,CH-MONO".to_string()),
+                Some("1234".to_string()),
+                Some("surround".to_string()),
+                Some("alternate-view".to_string()),
+                Some("subs".to_string()),
+                Some("cc".to_string()),
+                Some("1234".to_string()),
             ))),
             Tag::try_from(ParsedTag {
                 name: "-X-STREAM-INF",
@@ -1585,11 +1585,11 @@ mod tests {
     fn session_data() {
         assert_eq!(
             Ok(Tag::SessionData(SessionData::new(
-                "1234",
-                Some("test"),
+                "1234".to_string(),
+                Some("test".to_string()),
                 None,
                 None,
-                Some("en"),
+                Some("en".to_string()),
             ))),
             Tag::try_from(ParsedTag {
                 name: "-X-SESSION-DATA",
@@ -1603,10 +1603,10 @@ mod tests {
         );
         assert_eq!(
             Ok(Tag::SessionData(SessionData::new(
-                "1234",
+                "1234".to_string(),
                 None,
-                Some("test.bin"),
-                Some("RAW"),
+                Some("test.bin".to_string()),
+                Some("RAW".to_string()),
                 None,
             ))),
             Tag::try_from(ParsedTag {
@@ -1625,11 +1625,11 @@ mod tests {
     fn session_key() {
         assert_eq!(
             Ok(Tag::SessionKey(SessionKey::new(
-                "SAMPLE-AES",
-                "skd://some-key-id",
-                Some("0xABCD"),
-                Some("com.apple.streamingkeydelivery"),
-                Some("1"),
+                "SAMPLE-AES".to_string(),
+                "skd://some-key-id".to_string(),
+                Some("0xABCD".to_string()),
+                Some("com.apple.streamingkeydelivery".to_string()),
+                Some("1".to_string()),
             ))),
             Tag::try_from(ParsedTag {
                 name: "-X-SESSION-KEY",
@@ -1651,8 +1651,8 @@ mod tests {
         );
         assert_eq!(
             Ok(Tag::SessionKey(SessionKey::new(
-                "AES-128",
-                "skd://some-key-id",
+                "AES-128".to_string(),
+                "skd://some-key-id".to_string(),
                 None,
                 None,
                 None,

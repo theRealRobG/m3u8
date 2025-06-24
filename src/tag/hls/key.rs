@@ -62,9 +62,7 @@ impl<'a> Key<'a> {
         let method = Cow::Owned(method);
         let uri = uri.map(|x| Cow::Owned(x));
         let iv = iv.map(|x| Cow::Owned(x));
-        let keyformat = keyformat
-            .map(|x| Cow::Owned(x))
-            .unwrap_or(Cow::Borrowed("identity"));
+        let keyformat = keyformat.map(|x| Cow::Owned(x));
         let keyformatversions = keyformatversions.map(|x| Cow::Owned(x));
         let output_line = Cow::Owned(calculate_line(
             &method,
@@ -77,7 +75,7 @@ impl<'a> Key<'a> {
             method,
             uri,
             iv,
-            keyformat: Some(keyformat),
+            keyformat,
             keyformatversions,
             attribute_list: HashMap::new(),
             output_line,
@@ -175,11 +173,17 @@ impl<'a> Key<'a> {
     }
 
     fn recalculate_output_line(&mut self) {
+        let keyformat = self.keyformat();
+        let keyformat = if keyformat == "identity" {
+            None
+        } else {
+            Some(keyformat)
+        };
         self.output_line = Cow::Owned(calculate_line(
             &self.method().into(),
             &self.uri().map(|x| x.into()),
             &self.iv().map(|x| x.into()),
-            &self.keyformat().into(),
+            &keyformat.map(|x| x.into()),
             &self.keyformatversions().map(|x| x.into()),
         ));
         self.output_line_is_dirty = false;
@@ -196,7 +200,7 @@ fn calculate_line<'a>(
     method: &Cow<'a, str>,
     uri: &Option<Cow<'a, str>>,
     iv: &Option<Cow<'a, str>>,
-    keyformat: &Cow<'a, str>,
+    keyformat: &Option<Cow<'a, str>>,
     keyformatversions: &Option<Cow<'a, str>>,
 ) -> String {
     let mut line = format!("#EXT-X-KEY:{METHOD}={method}");
@@ -206,7 +210,9 @@ fn calculate_line<'a>(
     if let Some(iv) = iv {
         line.push_str(format!(",{IV}={iv}").as_str());
     }
-    line.push_str(format!(",{KEYFORMAT}=\"{keyformat}\"").as_str());
+    if let Some(keyformat) = keyformat {
+        line.push_str(format!(",{KEYFORMAT}=\"{keyformat}\"").as_str());
+    }
     if let Some(keyformatversions) = keyformatversions {
         line.push_str(format!(",{KEYFORMATVERSIONS}=\"{keyformatversions}\"").as_str());
     }

@@ -1,15 +1,21 @@
 use crate::{
     date::DateTime,
-    tag::{known::ParsedTag, value::ParsedTagValue},
-    utils::{split_by_first_lf, str_from},
+    tag::{hls::TagInner, known::ParsedTag, value::ParsedTagValue},
 };
 use std::borrow::Cow;
 
 /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.4.6
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub struct ProgramDateTime<'a> {
     program_date_time: DateTime,
-    output_line: Cow<'a, [u8]>, // Used with Writer
+    output_line: Cow<'a, str>,  // Used with Writer
+    output_line_is_dirty: bool, // If should recalculate output_line
+}
+
+impl<'a> PartialEq for ProgramDateTime<'a> {
+    fn eq(&self, other: &Self) -> bool {
+        self.program_date_time() == other.program_date_time()
+    }
 }
 
 impl<'a> TryFrom<ParsedTag<'a>> for ProgramDateTime<'a> {
@@ -21,7 +27,8 @@ impl<'a> TryFrom<ParsedTag<'a>> for ProgramDateTime<'a> {
         };
         Ok(Self {
             program_date_time: date_time,
-            output_line: Cow::Borrowed(tag.original_input.as_bytes()),
+            output_line: Cow::Borrowed(tag.original_input),
+            output_line_is_dirty: false,
         })
     }
 }
@@ -30,7 +37,17 @@ impl<'a> ProgramDateTime<'a> {
     pub fn new(program_date_time: DateTime) -> Self {
         Self {
             program_date_time,
-            output_line: Cow::Owned(calculate_line(program_date_time).into_bytes()),
+            output_line: Cow::Owned(calculate_line(program_date_time)),
+            output_line_is_dirty: false,
+        }
+    }
+
+    pub(crate) fn into_inner(mut self) -> TagInner<'a> {
+        if self.output_line_is_dirty {
+            self.recalculate_output_line();
+        }
+        TagInner {
+            output_line: self.output_line,
         }
     }
 
@@ -38,14 +55,20 @@ impl<'a> ProgramDateTime<'a> {
         self.program_date_time
     }
 
-    pub fn as_str(&self) -> &str {
-        split_by_first_lf(str_from(&self.output_line)).parsed
+    pub fn set_program_date_time(&mut self, program_date_time: DateTime) {
+        self.program_date_time = program_date_time;
+        self.output_line_is_dirty = true;
+    }
+
+    fn recalculate_output_line(&mut self) {
+        self.output_line = Cow::Owned(calculate_line(self.program_date_time()));
+        self.output_line_is_dirty = false;
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::date::DateTimeTimezoneOffset;
+    use crate::{date::DateTimeTimezoneOffset, date_time};
 
     use super::*;
     use pretty_assertions::assert_eq;
@@ -54,19 +77,9 @@ mod tests {
     fn as_str_should_be_valid() {
         assert_eq!(
             "#EXT-X-PROGRAM-DATE-TIME:2025-06-16T21:52:08.010-05:00",
-            ProgramDateTime::new(DateTime {
-                date_fullyear: 2025,
-                date_month: 6,
-                date_mday: 16,
-                time_hour: 21,
-                time_minute: 52,
-                time_second: 8.01,
-                timezone_offset: DateTimeTimezoneOffset {
-                    time_hour: -5,
-                    time_minute: 0
-                }
-            })
-            .as_str()
+            ProgramDateTime::new(date_time!(2025-06-16 T 21:52:08.010 -05:00))
+                .into_inner()
+                .value()
         )
     }
 }
