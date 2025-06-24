@@ -205,7 +205,7 @@ fn calculate_line(
     let mut line = String::from("#EXT-X-SERVER-CONTROL:");
     let mut separator = "";
     if let Some(can_skip_until) = can_skip_until {
-        line.push_str(format!("{separator}{CAN_SKIP_UNTIL}={can_skip_until}").as_str());
+        line.push_str(format!("{separator}{CAN_SKIP_UNTIL}={can_skip_until:?}").as_str());
         separator = ",";
     }
     if can_skip_dateranges {
@@ -213,11 +213,11 @@ fn calculate_line(
         separator = ",";
     }
     if let Some(hold_back) = hold_back {
-        line.push_str(format!("{separator}{HOLD_BACK}={hold_back}").as_str());
+        line.push_str(format!("{separator}{HOLD_BACK}={hold_back:?}").as_str());
         separator = ",";
     }
     if let Some(part_hold_back) = part_hold_back {
-        line.push_str(format!("{separator}{PART_HOLD_BACK}={part_hold_back}").as_str());
+        line.push_str(format!("{separator}{PART_HOLD_BACK}={part_hold_back:?}").as_str());
         separator = ",";
     }
     if can_block_reload {
@@ -234,7 +234,7 @@ mod tests {
     #[test]
     fn as_str_with_one_value_should_be_valid() {
         assert_eq!(
-            "#EXT-X-SERVER-CONTROL:CAN-SKIP-UNTIL=36",
+            "#EXT-X-SERVER-CONTROL:CAN-SKIP-UNTIL=36.0",
             ServerControl::new(Some(36.0), false, None, None, false)
                 .into_inner()
                 .value()
@@ -255,7 +255,7 @@ mod tests {
     fn as_str_with_all_options_should_be_valid() {
         assert_eq!(
             concat!(
-                "#EXT-X-SERVER-CONTROL:CAN-SKIP-UNTIL=36,CAN-SKIP-DATERANGES=YES,HOLD-BACK=18,",
+                "#EXT-X-SERVER-CONTROL:CAN-SKIP-UNTIL=36.0,CAN-SKIP-DATERANGES=YES,HOLD-BACK=18.0,",
                 "PART-HOLD-BACK=1.5,CAN-BLOCK-RELOAD=YES",
             ),
             ServerControl::new(Some(36.0), true, Some(18.0), Some(1.5), true)
