@@ -196,7 +196,7 @@ where
             let input = str_from(bytes.as_slice());
             let tag = tag::unknown::parse_assuming_ext_taken(input, original_input)?;
             if options.is_known_name(tag.parsed.name) || CustomTag::is_known_name(tag.parsed.name) {
-                let value_slice = match tag.remaining {
+                let value_slice = match tag.parsed.value {
                     None => ParsedLineSlice {
                         parsed: tag::value::ParsedTagValue::Empty,
                         remaining: None,
@@ -210,7 +210,7 @@ where
                 };
                 Ok(ParsedLineSlice {
                     parsed: HlsLine::KnownTag(known::Tag::try_from(parsed_tag)?),
-                    remaining: value_slice.remaining,
+                    remaining: tag.remaining,
                 })
             } else {
                 Ok(ParsedLineSlice {
@@ -377,7 +377,7 @@ mod tests {
         assert_eq!(
             Ok(HlsLine::UnknownTag(unknown::Tag {
                 name: "-X-START",
-                remaining: Some("TIME-OFFSET=-18"),
+                value: Some("TIME-OFFSET=-18"),
                 original_input: "#EXT-X-START:TIME-OFFSET=-18",
             })),
             parse(

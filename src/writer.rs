@@ -261,6 +261,7 @@ where
 #[cfg(test)]
 mod tests {
     use crate::{
+        config::ParsingOptionsBuilder,
         date::{DateTime, DateTimeTimezoneOffset},
         tag::hls::{
             self, inf::Inf, m3u::M3u, media_sequence::MediaSequence,
@@ -481,6 +482,27 @@ mod tests {
                     "PTS:0.0".to_string()
                 ))))
                 .unwrap()
+        );
+    }
+
+    #[test]
+    fn writing_with_no_manipulation_should_leave_output_unchaged_except_for_new_lines() {
+        let mut writer = Writer::new(Vec::new());
+        let options = ParsingOptionsBuilder::new()
+            .with_parsing_for_m3u()
+            .with_parsing_for_version()
+            .build();
+        let mut remaining = Some(EXPECTED_WRITE_OUTPUT);
+        while let Some(line) = remaining {
+            let slice = crate::line::parse(line, &options).unwrap();
+            remaining = slice.remaining;
+            writer.write_line(slice.parsed).unwrap();
+        }
+        let mut expected = EXPECTED_WRITE_OUTPUT.to_string();
+        expected.push('\n');
+        assert_eq!(
+            expected.as_str(),
+            std::str::from_utf8(&writer.into_inner()).unwrap()
         );
     }
 }
