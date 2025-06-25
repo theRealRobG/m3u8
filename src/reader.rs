@@ -118,6 +118,7 @@ mod tests {
                 endlist::Endlist, inf::Inf, m3u::M3u, targetduration::Targetduration,
                 version::Version,
             },
+            unknown,
             value::{ParsedAttributeValue, ParsedTagValue},
         },
     };
@@ -127,30 +128,31 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     macro_rules! reader_test {
-        ($reader:tt, $method:tt $(, $buf:ident)?) => {
-            for i in 0..=10 {
+        ($reader:tt, $method:tt, $expectation:expr $(, $buf:ident)?) => {
+            for i in 0..=11 {
                 let line = $reader.$method($(&mut $buf)?).unwrap();
                 match i {
                     0 => assert_eq!(Some(HlsLine::from(M3u)), line),
                     1 => assert_eq!(Some(HlsLine::from(Targetduration::new(10))), line),
                     2 => assert_eq!(Some(HlsLine::from(Version::new(3))), line),
-                    3 => assert_eq!(Some(HlsLine::from(Inf::new(9.009, String::new()))), line),
-                    4 => assert_eq!(
+                    3 => assert_eq!($expectation, line),
+                    4 => assert_eq!(Some(HlsLine::from(Inf::new(9.009, String::new()))), line),
+                    5 => assert_eq!(
                         Some(HlsLine::Uri("http://media.example.com/first.ts")),
                         line
                     ),
-                    5 => assert_eq!(Some(HlsLine::from(Inf::new(9.009, String::new()))), line),
-                    6 => assert_eq!(
+                    6 => assert_eq!(Some(HlsLine::from(Inf::new(9.009, String::new()))), line),
+                    7 => assert_eq!(
                         Some(HlsLine::Uri("http://media.example.com/second.ts")),
                         line
                     ),
-                    7 => assert_eq!(Some(HlsLine::from(Inf::new(3.003, String::new()))), line),
-                    8 => assert_eq!(
+                    8 => assert_eq!(Some(HlsLine::from(Inf::new(3.003, String::new()))), line),
+                    9 => assert_eq!(
                         Some(HlsLine::Uri("http://media.example.com/third.ts")),
                         line
                     ),
-                    9 => assert_eq!(Some(HlsLine::from(Endlist)), line),
-                    10 => assert_eq!(None, line),
+                    10 => assert_eq!(Some(HlsLine::from(Endlist)), line),
+                    11 => assert_eq!(None, line),
                     _ => panic!(),
                 }
             }
@@ -165,7 +167,15 @@ mod tests {
                 .with_parsing_for_all_tags()
                 .build(),
         );
-        reader_test!(reader, read_line);
+        reader_test!(
+            reader,
+            read_line,
+            Some(HlsLine::from(unknown::Tag {
+                name: "-X-EXAMPLE-TAG",
+                value: Some("MEANING-OF-LIFE=42,QUESTION=\"UNKNOWN\""),
+                original_input: &EXAMPLE_MANIFEST[50..],
+            }))
+        );
     }
 
     #[test]
@@ -178,9 +188,53 @@ mod tests {
                 .build(),
         );
         let mut string = String::new();
-        reader_test!(reader, read_line_into, string);
+        reader_test!(
+            reader,
+            read_line_into,
+            Some(HlsLine::from(unknown::Tag {
+                name: "-X-EXAMPLE-TAG",
+                value: Some("MEANING-OF-LIFE=42,QUESTION=\"UNKNOWN\""),
+                original_input: &EXAMPLE_MANIFEST[50..],
+            })),
+            string
+        );
     }
 
+    #[test]
+    fn reader_from_str_with_custom_should_read_as_expected() {
+        let mut reader = Reader::from_str_with_custom_tag_parsing(
+            EXAMPLE_MANIFEST,
+            ParsingOptionsBuilder::new()
+                .with_parsing_for_all_tags()
+                .build(),
+            PhantomData::<ExampleTag>,
+        );
+        reader_test!(
+            reader,
+            read_line,
+            Some(HlsLine::from(ExampleTag::new(42, "UNKNOWN")))
+        );
+    }
+
+    #[test]
+    fn reader_from_buf_with_custom_read_should_read_as_expected() {
+        let inner = EXAMPLE_MANIFEST.as_bytes();
+        let mut reader = Reader::from_reader(
+            inner,
+            ParsingOptionsBuilder::new()
+                .with_parsing_for_all_tags()
+                .build(),
+        );
+        let mut string = String::new();
+        reader_test!(
+            reader,
+            read_line_into_custom,
+            Some(HlsLine::from(ExampleTag::new(42, "UNKNOWN"))),
+            string
+        );
+    }
+
+    // Example custom tag implementation for the tests above.
     #[derive(Debug, PartialEq)]
     struct ExampleTag<'a> {
         answer: u64,
@@ -235,75 +289,20 @@ mod tests {
             ]))
         }
     }
-
-    macro_rules! custom_reader_test {
-        ($reader:tt, $method:tt $(, $buf:ident)?) => {
-            for i in 0..=7 {
-                let line = $reader.$method($(&mut $buf)?).unwrap();
-                match i {
-                    0 => assert_eq!(Some(HlsLine::from(M3u)), line),
-                    1 => assert_eq!(Some(HlsLine::from(Targetduration::new(10))), line),
-                    2 => assert_eq!(Some(HlsLine::from(Version::new(3))), line),
-                    3 => assert_eq!(Some(HlsLine::from(ExampleTag::new(42, "UNKNOWN"))), line),
-                    4 => assert_eq!(Some(HlsLine::from(Inf::new(9.009, String::new()))), line),
-                    5 => assert_eq!(
-                        Some(HlsLine::Uri("http://media.example.com/first.ts")),
-                        line
-                    ),
-                    6 => assert_eq!(Some(HlsLine::from(Endlist)), line),
-                    7 => assert_eq!(None, line),
-                    _ => panic!(),
-                }
-            }
-        };
-    }
-
-    #[test]
-    fn reader_from_str_with_custom_should_read_as_expected() {
-        let mut reader = Reader::from_str_with_custom_tag_parsing(
-            EXAMPLE_MANIFEST_WITH_CUSTOM_TAG,
-            ParsingOptionsBuilder::new()
-                .with_parsing_for_all_tags()
-                .build(),
-            PhantomData::<ExampleTag>,
-        );
-        custom_reader_test!(reader, read_line);
-    }
-
-    #[test]
-    fn reader_from_buf_with_custom_read_should_read_as_expected() {
-        let inner = EXAMPLE_MANIFEST_WITH_CUSTOM_TAG.as_bytes();
-        let mut reader = Reader::from_reader(
-            inner,
-            ParsingOptionsBuilder::new()
-                .with_parsing_for_all_tags()
-                .build(),
-        );
-        let mut string = String::new();
-        custom_reader_test!(reader, read_line_into_custom, string);
-    }
 }
 
 #[cfg(test)]
-/// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-9.1
+// Example taken from HLS specification with one custom tag added.
+// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-9.1
 const EXAMPLE_MANIFEST: &str = r#"#EXTM3U
 #EXT-X-TARGETDURATION:10
 #EXT-X-VERSION:3
+#EXT-X-EXAMPLE-TAG:MEANING-OF-LIFE=42,QUESTION="UNKNOWN"
 #EXTINF:9.009,
 http://media.example.com/first.ts
 #EXTINF:9.009,
 http://media.example.com/second.ts
 #EXTINF:3.003,
 http://media.example.com/third.ts
-#EXT-X-ENDLIST
-"#;
-
-#[cfg(test)]
-const EXAMPLE_MANIFEST_WITH_CUSTOM_TAG: &str = r#"#EXTM3U
-#EXT-X-TARGETDURATION:10
-#EXT-X-VERSION:3
-#EXT-X-EXAMPLE-TAG:MEANING-OF-LIFE=42,QUESTION="UNKNOWN"
-#EXTINF:9.009,
-http://media.example.com/first.ts
 #EXT-X-ENDLIST
 "#;
