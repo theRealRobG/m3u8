@@ -93,7 +93,7 @@ impl<R: BufRead> Reader<R, NoCustomTag> {
     {
         let available = loop {
             match self.inner.fill_buf() {
-                Ok(n) if n.is_empty() => return Ok(None),
+                Ok([]) => return Ok(None),
                 Ok(n) => break std::str::from_utf8(n).map_err(|_| "Not UTF-8")?,
                 Err(ref e) if e.kind() == io::ErrorKind::Interrupted => (),
                 Err(_) => return Err("IO read error"),
