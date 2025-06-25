@@ -54,22 +54,33 @@ where
         std::mem::swap(&mut self.inner, &mut remaining.unwrap_or_default());
         Ok(Some(parsed))
     }
+
+    pub fn into_inner(self) -> &'a str {
+        self.inner
+    }
 }
 
-impl<R: BufRead> Reader<R, NoCustomTag> {
-    pub fn from_reader(reader: R, options: ParsingOptions) -> Self {
-        Self {
-            inner: reader,
+pub struct BufReadHolder<R: BufRead> {
+    reader: R,
+    last_consume_count: usize,
+}
+
+impl<R: BufRead> Reader<BufReadHolder<R>, NoCustomTag> {
+    pub fn try_from_reader(mut reader: R, options: ParsingOptions) -> Result<Self, &'static str> {
+        let buf = reader.fill_buf().map_err(|_| "IO Error")?;
+        let _ = std::str::from_utf8(buf).map_err(|_| "Not UTF-8")?;
+        Ok(Self {
+            inner: BufReadHolder {
+                reader,
+                last_consume_count: 0,
+            },
             options,
             _marker: PhantomData::<NoCustomTag>,
-        }
+        })
     }
 
-    pub fn read_line_into<'b>(
-        &mut self,
-        buf: &'b mut String,
-    ) -> Result<Option<HlsLine<'b>>, &'static str> {
-        self.read_line_into_custom::<NoCustomTag>(buf)
+    pub fn read_line<'a>(&'a mut self) -> Result<Option<HlsLine<'a>>, &'static str> {
+        self.read_line_custom::<NoCustomTag>()
     }
 
     // Annoyingly, unlike when using &'a str, I can't completely infer the custom type on
@@ -80,32 +91,34 @@ impl<R: BufRead> Reader<R, NoCustomTag> {
     // tests, I cannot mutate the input String between loop iterations, because Rust expects that
     // the CustomTag could be valid as long as the Reader which would then be a problem with the
     // mutable borrow on String. There may be a better way of doing this but I don't know it yet.
-    pub fn read_line_into_custom<'b, CustomTag>(
-        &mut self,
-        buf: &'b mut String,
-    ) -> Result<Option<HlsLine<'b, CustomTag>>, &'static str>
+    pub fn read_line_custom<'a, CustomTag>(
+        &'a mut self,
+    ) -> Result<Option<HlsLine<'a, CustomTag>>, &'static str>
     where
-        CustomTag: TryFrom<ParsedTag<'b>, Error = &'static str>
+        CustomTag: TryFrom<ParsedTag<'a>, Error = &'static str>
             + IsKnownName
             + TagInformation
             + Debug
             + PartialEq,
     {
-        let available = loop {
-            match self.inner.fill_buf() {
-                Ok([]) => return Ok(None),
-                Ok(n) => break std::str::from_utf8(n).map_err(|_| "Not UTF-8")?,
-                Err(ref e) if e.kind() == io::ErrorKind::Interrupted => (),
-                Err(_) => return Err("IO read error"),
-            }
+        self.inner.reader.consume(self.inner.last_consume_count);
+        let available = match self.inner.reader.fill_buf() {
+            Ok([]) => return Ok(None),
+            Ok(n) => unsafe { std::str::from_utf8_unchecked(n) },
+            Err(ref e) if e.kind() == io::ErrorKind::Interrupted => panic!(),
+            Err(_) => return Err("IO read error"),
         };
         let total_len = available.len();
-        buf.clear();
-        buf.push_str(available);
-        let ParsedLineSlice { parsed, remaining } = parse_with_custom(buf.as_str(), &self.options)?;
+        let ParsedLineSlice { parsed, remaining } = parse_with_custom(available, &self.options)?;
         let remaining_len = remaining.map_or(0, |s| s.len());
-        self.inner.consume(total_len - remaining_len);
+        let consumed = total_len - remaining_len;
+        self.inner.last_consume_count = consumed;
         Ok(Some(parsed))
+    }
+
+    pub fn into_inner(mut self) -> R {
+        self.inner.reader.consume(self.inner.last_consume_count);
+        self.inner.reader
     }
 }
 
@@ -181,22 +194,21 @@ mod tests {
     #[test]
     fn reader_from_buf_read_should_read_as_expected() {
         let inner = EXAMPLE_MANIFEST.as_bytes();
-        let mut reader = Reader::from_reader(
+        let mut reader = Reader::try_from_reader(
             inner,
             ParsingOptionsBuilder::new()
                 .with_parsing_for_all_tags()
                 .build(),
-        );
-        let mut string = String::new();
+        )
+        .unwrap();
         reader_test!(
             reader,
-            read_line_into,
+            read_line,
             Some(HlsLine::from(unknown::Tag {
                 name: "-X-EXAMPLE-TAG",
                 value: Some("MEANING-OF-LIFE=42,QUESTION=\"UNKNOWN\""),
                 original_input: &EXAMPLE_MANIFEST[50..],
-            })),
-            string
+            }))
         );
     }
 
@@ -219,18 +231,17 @@ mod tests {
     #[test]
     fn reader_from_buf_with_custom_read_should_read_as_expected() {
         let inner = EXAMPLE_MANIFEST.as_bytes();
-        let mut reader = Reader::from_reader(
+        let mut reader = Reader::try_from_reader(
             inner,
             ParsingOptionsBuilder::new()
                 .with_parsing_for_all_tags()
                 .build(),
-        );
-        let mut string = String::new();
+        )
+        .unwrap();
         reader_test!(
             reader,
-            read_line_into_custom,
-            Some(HlsLine::from(ExampleTag::new(42, "UNKNOWN"))),
-            string
+            read_line_custom,
+            Some(HlsLine::from(ExampleTag::new(42, "UNKNOWN")))
         );
     }
 
