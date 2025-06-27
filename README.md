@@ -29,7 +29,7 @@ portion of the tag (the part after `:`) and just return the name of the tag alon
 for the rest of the line. Running locally as of commit `c28f2e776f03a446af367a153dcb2d95764186cc`
 the following benchmark shows that when parsing a large playlist, including all tags in the parse is
 about 4x slower than including no tags in the parse (`2.0689 ms` vs `495.53 µs` == `0.49553 ms`).
-```
+```sh
 Benchmarking Bench large playlist with full parsing on all known tags: Collecting 100 samples in estimated 5.1923 s (2500 iterations
 Bench large playlist with full parsing on all known tags
                         time:   [2.0669 ms 2.0689 ms 2.0719 ms]
@@ -49,15 +49,23 @@ Some basic validation can still be done on `m3u8::tag::unknown::Tag`. For exampl
 converted to a `m3u8::tag::hls::TagName` and then you can check the `TagType` for some
 generic reasoning on the tag position/semantics without parsing the values:
 ```rust
-use m3u8::tag::hls::{TagName, TagType};
-let tag_name = TagName::try_from(tag.name)?;
-match tag_name.tag_type() {
-    TagType::Basic => handle_basic_tag(tag),
-    TagType::MediaOrMultivariantPlaylist => handle_media_or_multivariant_playlist_tag(tag),
-    TagType::MediaPlaylist => handle_media_playlist_tag(tag),
-    TagType::MediaSegment => handle_media_segment_tag(tag),
-    TagType::MediaMetadata => handle_media_metadata_tag(tag),
-    TagType::MultivariantPlaylist => handle_multivariant_playlist_tag(tag),
+use m3u8::{
+    error::ValidationError,
+    tag::{
+        hls::{TagName, TagType},
+        unknown::Tag,
+    },
+};
+fn handle_unknown_tag(tag: Tag) -> Result<(), ValidationError> {
+    let tag_name = TagName::try_from(tag.name())?;
+    match tag_name.tag_type() {
+        TagType::Basic => todo!("handle_basic_tag"),
+        TagType::MediaOrMultivariantPlaylist => todo!("handle_media_or_multivariant_playlist_tag"),
+        TagType::MediaPlaylist => todo!("handle_media_playlist_tag"),
+        TagType::MediaSegment => todo!("handle_media_segment_tag"),
+        TagType::MediaMetadata => todo!("handle_media_metadata_tag"),
+        TagType::MultivariantPlaylist => todo!("handle_multivariant_playlist_tag"),
+    }
 }
 ```
 
