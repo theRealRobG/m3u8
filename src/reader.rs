@@ -2,7 +2,6 @@ use std::{
     fmt::Debug,
     io::{self, BufRead},
     marker::PhantomData,
-    str::Utf8Error,
 };
 
 use crate::{
@@ -19,6 +18,7 @@ pub struct Reader<R, CustomTag> {
 }
 
 impl<'a> Reader<&'a str, NoCustomTag> {
+    // Creates a reader.
     pub fn from_str(str: &'a str, options: ParsingOptions) -> Self {
         Self {
             inner: str,
@@ -36,6 +36,8 @@ where
         + Debug
         + PartialEq,
 {
+    /// Creates a reader that supports custom tag parsing for the type specified by the
+    /// `PhatomData`.
     pub fn from_str_with_custom_tag_parsing(
         str: &'a str,
         options: ParsingOptions,
@@ -48,6 +50,7 @@ where
         }
     }
 
+    /// Reads a single HLS line from the reference str.
     pub fn read_line(&mut self) -> Result<Option<HlsLine<'a, CustomTag>>, SyntaxError> {
         if self.inner.is_empty() {
             return Ok(None);
@@ -57,43 +60,44 @@ where
         Ok(Some(parsed))
     }
 
+    /// Returns the inner data of the reader.
     pub fn into_inner(self) -> &'a str {
         self.inner
     }
 }
 
-pub struct BufReadHolder<R: BufRead> {
-    reader: R,
-    last_consume_count: usize,
+pub struct BufReadStringData {
+    data: String,
+    last_read_index: usize,
+    total_length: usize,
 }
 
-#[derive(Debug)]
-pub enum BufReadError {
-    IO(io::Error),
-    Utf8(Utf8Error),
-    Syntax(SyntaxError),
-}
-impl From<SyntaxError> for BufReadError {
-    fn from(value: SyntaxError) -> Self {
-        Self::Syntax(value)
-    }
-}
-
-impl<R: BufRead> Reader<BufReadHolder<R>, NoCustomTag> {
-    pub fn try_from_reader(mut reader: R, options: ParsingOptions) -> Result<Self, BufReadError> {
-        let buf = reader.fill_buf().map_err(|e| BufReadError::IO(e))?;
-        let _ = std::str::from_utf8(buf).map_err(|e| BufReadError::Utf8(e))?;
+impl Reader<BufReadStringData, NoCustomTag> {
+    /// Creates a Reader from a BufRead.
+    ///
+    /// WARNING: the current implementation reads all data to a String first. This is not ideal and
+    /// in the future this will change to be more optimized. It should be possible to work with
+    /// BufRead more directly just using the `m3u8::line::parse` method if desired.
+    pub fn try_from_reader<R: BufRead>(mut reader: R, options: ParsingOptions) -> io::Result<Self> {
+        let mut buf = String::new();
+        let len = reader.read_to_string(&mut buf)?;
         Ok(Self {
-            inner: BufReadHolder {
-                reader,
-                last_consume_count: 0,
+            inner: BufReadStringData {
+                data: buf,
+                last_read_index: 0,
+                total_length: len,
             },
             options,
             _marker: PhantomData::<NoCustomTag>,
         })
     }
 
-    pub fn read_line<'a>(&'a mut self) -> Result<Option<HlsLine<'a>>, BufReadError> {
+    /// Reads a single HLS line from the buffer.
+    ///
+    /// This method assumes no custom tag parsing is desired. If the user wants to include custom
+    /// tag parsing then use the `read_line_custom` method and indicate the custom tag type via
+    /// specialization of the generic.
+    pub fn read_line<'a>(&'a mut self) -> Result<Option<HlsLine<'a>>, SyntaxError> {
         self.read_line_custom::<NoCustomTag>()
     }
 
@@ -105,9 +109,10 @@ impl<R: BufRead> Reader<BufReadHolder<R>, NoCustomTag> {
     // tests, I cannot mutate the input String between loop iterations, because Rust expects that
     // the CustomTag could be valid as long as the Reader which would then be a problem with the
     // mutable borrow on String. There may be a better way of doing this but I don't know it yet.
+    /// Reads a single HLS line from the buffer.
     pub fn read_line_custom<'a, CustomTag>(
         &'a mut self,
-    ) -> Result<Option<HlsLine<'a, CustomTag>>, BufReadError>
+    ) -> Result<Option<HlsLine<'a, CustomTag>>, SyntaxError>
     where
         CustomTag: TryFrom<ParsedTag<'a>, Error = ValidationError>
             + IsKnownName
@@ -115,23 +120,22 @@ impl<R: BufRead> Reader<BufReadHolder<R>, NoCustomTag> {
             + Debug
             + PartialEq,
     {
-        self.inner.reader.consume(self.inner.last_consume_count);
-        let available = match self.inner.reader.fill_buf() {
-            Ok([]) => return Ok(None),
-            Ok(n) => unsafe { std::str::from_utf8_unchecked(n) },
-            Err(e) => return Err(BufReadError::IO(e)),
-        };
-        let total_len = available.len();
-        let ParsedLineSlice { parsed, remaining } = parse_with_custom(available, &self.options)?;
+        let current_slice = &self.inner.data[self.inner.last_read_index..];
+        if current_slice.is_empty() {
+            return Ok(None);
+        }
+        let ParsedLineSlice { parsed, remaining } =
+            parse_with_custom(current_slice, &self.options)?;
         let remaining_len = remaining.map_or(0, |s| s.len());
-        let consumed = total_len - remaining_len;
-        self.inner.last_consume_count = consumed;
+        self.inner.last_read_index = self.inner.total_length - remaining_len;
         Ok(Some(parsed))
     }
 
-    pub fn into_inner(mut self) -> R {
-        self.inner.reader.consume(self.inner.last_consume_count);
-        self.inner.reader
+    /// Returns the inner data of the reader.
+    pub fn into_inner(self) -> String {
+        let mut data = self.inner.data;
+        data.drain(..self.inner.last_read_index);
+        data
     }
 }
 
