@@ -36,9 +36,9 @@ impl Display for GenericSyntaxError {
         match self {
             Self::CarriageReturnWithoutLineFeed => write!(
                 f,
-                "Carriage Return (U+000D) without following Line Feed (U+000A) is not supported"
+                "carriage return (U+000D) without a following line feed (U+000A) is not supported"
             ),
-            Self::UnexpectedEndOfLine => todo!(),
+            Self::UnexpectedEndOfLine => write!(f, "line ended unexpectedly during parsing"),
         }
     }
 }
@@ -51,15 +51,21 @@ impl From<GenericSyntaxError> for SyntaxError {
 
 #[derive(Debug, PartialEq)]
 pub enum UnknownTagSyntaxError {
-    UnexpectedEmptyInput,
+    UnexpectedNoTagName,
     InvalidTag,
     Generic(GenericSyntaxError),
 }
 impl Display for UnknownTagSyntaxError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::UnexpectedEmptyInput => todo!(),
-            Self::InvalidTag => todo!(),
+            Self::UnexpectedNoTagName => write!(
+                f,
+                "tag (starting with '#EXT') had no name (no more characters until new line)"
+            ),
+            Self::InvalidTag => write!(
+                f,
+                "input did not start with '#EXT' and so is not a valid tag"
+            ),
             Self::Generic(e) => e.fmt(f),
         }
     }
@@ -97,26 +103,63 @@ pub enum DateTimeSyntaxError {
     InvalidTimezoneMinute(ParseIntError),
     Generic(GenericSyntaxError),
 }
+fn option_u8_to_string(u: &Option<u8>) -> String {
+    u.map(|b| format!("{}", b as char))
+        .unwrap_or("None".to_string())
+}
 impl Display for DateTimeSyntaxError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::InvalidYear(parse_int_error) => todo!(),
-            Self::UnexpectedYearToMonthSeparator(_) => todo!(),
-            Self::InvalidMonth(parse_int_error) => todo!(),
-            Self::UnexpectedMonthToDaySeparator(_) => todo!(),
-            Self::InvalidDay(parse_int_error) => todo!(),
-            Self::UnexpectedDayHourSeparator(_) => todo!(),
-            Self::InvalidHour(parse_int_error) => todo!(),
-            Self::UnexpectedHourMinuteSeparator(_) => todo!(),
-            Self::InvalidMinute(parse_int_error) => todo!(),
-            Self::UnexpectedMinuteSecondSeparator(_) => todo!(),
-            Self::InvalidSecond(parse_float_error) => todo!(),
-            Self::UnexpectedNoTimezone => todo!(),
-            Self::UnexpectedCharactersAfterTimezone => todo!(),
-            Self::InvalidTimezone => todo!(),
-            Self::InvalidTimezoneHour(parse_int_error) => todo!(),
-            Self::UnexpectedTimezoneHourMinuteSeparator(_) => todo!(),
-            Self::InvalidTimezoneMinute(parse_int_error) => todo!(),
+            Self::InvalidYear(e) => write!(f, "invalid integer for year in date due to {}", e),
+            Self::UnexpectedYearToMonthSeparator(s) => write!(
+                f,
+                "expected '-' between year and month but was {}",
+                option_u8_to_string(s)
+            ),
+            Self::InvalidMonth(e) => write!(f, "invalid integer for month in date due to {}", e),
+            Self::UnexpectedMonthToDaySeparator(s) => write!(
+                f,
+                "expected '-' between month and day but was {}",
+                option_u8_to_string(s)
+            ),
+            Self::InvalidDay(e) => write!(f, "invalid integer for day in date due to {}", e),
+            Self::UnexpectedDayHourSeparator(s) => write!(
+                f,
+                "expected 'T' or 't' between day and hour but was {}",
+                option_u8_to_string(s)
+            ),
+            Self::InvalidHour(e) => write!(f, "invalid integer for hour in date due to {}", e),
+            Self::UnexpectedHourMinuteSeparator(s) => write!(
+                f,
+                "expected ':' between hour and minute but was {}",
+                option_u8_to_string(s)
+            ),
+            Self::InvalidMinute(e) => write!(f, "invalid integer for minute in date due to {}", e),
+            Self::UnexpectedMinuteSecondSeparator(s) => write!(
+                f,
+                "expected ':' between minute and second but was {}",
+                option_u8_to_string(s)
+            ),
+            Self::InvalidSecond(e) => write!(f, "invalid float for second in date due to {}", e),
+            Self::UnexpectedNoTimezone => write!(
+                f,
+                "no timezone in date (expect either 'Z' or full timezone)"
+            ),
+            Self::UnexpectedCharactersAfterTimezone => {
+                write!(f, "unexpected characters after timezone in date")
+            }
+            Self::InvalidTimezone => write!(f, "timezone invalid in date"),
+            Self::InvalidTimezoneHour(e) => {
+                write!(f, "invalid integer for hour in timezone due to {}", e)
+            }
+            Self::UnexpectedTimezoneHourMinuteSeparator(s) => write!(
+                f,
+                "expected ':' between hour and minute in timezone but was {}",
+                option_u8_to_string(s)
+            ),
+            Self::InvalidTimezoneMinute(e) => {
+                write!(f, "invalid integer for minute in timezone due to {}", e)
+            }
             Self::Generic(e) => e.fmt(f),
         }
     }
@@ -154,7 +197,55 @@ pub enum TagValueSyntaxError {
 }
 impl Display for TagValueSyntaxError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        todo!()
+        match self {
+            TagValueSyntaxError::UnexpectedCharacter(c) => {
+                write!(f, "unexpected character '{}'", *c as char)
+            }
+            TagValueSyntaxError::InvalidFloatForDecimalFloatingPointValue(e) => {
+                write!(f, "invalid float for decimal float value due to {}", e)
+            }
+            TagValueSyntaxError::InvalidLengthForDecimalIntegerRange(e) => {
+                write!(f, "invalid length for decimal integer range due to {}", e)
+            }
+            TagValueSyntaxError::InvalidOffsetForDecimalIntegerRange(e) => {
+                write!(f, "invalid offset for decimal integer range due to {}", e)
+            }
+            TagValueSyntaxError::InvalidDecimalInteger(e) => {
+                write!(f, "invalid integer for decimal integer value due to {}", e)
+            }
+            TagValueSyntaxError::InvalidTypeEnumValue(v) => {
+                write!(f, "invalid playlist type enum value '{}'", v)
+            }
+            TagValueSyntaxError::UnexpectedEndOfLineWhileReadingAttributeName => {
+                write!(f, "unexpected end of line reading attribute name")
+            }
+            TagValueSyntaxError::UnexpectedCharacterInAttributeName(c) => {
+                write!(f, "unexpected character '{}' in attribute name", *c as char)
+            }
+            TagValueSyntaxError::UnexpectedEmptyAttributeValue => {
+                write!(f, "attribute name had no value")
+            }
+            TagValueSyntaxError::UnexpectedEndOfLineWithinQuotedString => write!(
+                f,
+                "unexpected end of line within quoted string attribute value"
+            ),
+            TagValueSyntaxError::UnexpectedCharacterAfterQuotedString(c) => write!(
+                f,
+                "unexpected character '{}' after end of quoted attribute value (only ',' is valid)",
+                *c as char
+            ),
+            TagValueSyntaxError::UnexpectedWhitespaceInAttributeValue => {
+                write!(f, "unexpected whitespace in attribute value")
+            }
+            TagValueSyntaxError::InvalidIntegerInAttributeValue(e) => {
+                write!(f, "invalid integer for attribute value due to {}", e)
+            }
+            TagValueSyntaxError::InvalidFloatInAttributeValue(e) => {
+                write!(f, "invalid float in attribute value due to {}", e)
+            }
+            TagValueSyntaxError::Generic(e) => e.fmt(f),
+            TagValueSyntaxError::DateTime(e) => e.fmt(f),
+        }
     }
 }
 impl Error for TagValueSyntaxError {}

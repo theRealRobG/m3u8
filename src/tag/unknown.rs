@@ -53,7 +53,7 @@ pub(crate) fn parse_assuming_ext_taken<'a>(
     original_input: &'a str,
 ) -> Result<ParsedLineSlice<'a, Tag<'a>>, UnknownTagSyntaxError> {
     if input.is_empty() {
-        return Err(UnknownTagSyntaxError::UnexpectedEmptyInput);
+        return Err(UnknownTagSyntaxError::UnexpectedNoTagName);
     };
     let mut bytes = input.as_bytes().iter();
     let mut iterations = 0usize;

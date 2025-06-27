@@ -30,48 +30,6 @@ pub enum ParsedTagValue<'a> {
     AttributeList(HashMap<&'a str, ParsedAttributeValue<'a>>),
 }
 
-// pub struct ExampleSemiParsedData<'a> {
-//     pub name: &'a str,
-//     pub value: ExampleSemiParsedDataValue<'a>,
-//     pub(crate) original_source_data: &'a [u8],
-// }
-
-// pub enum ExampleSemiParsedDataValue<'a> {
-//     ValueWeNeed(HashMap<&'a str, &'a str>),
-//     OtherValue,
-// }
-
-// pub struct ExampleParsedData<'a> {
-//     required_prop: &'a str,
-//     source_value: HashMap<&'a str, &'a str>,
-// }
-// impl<'a> ExampleParsedData<'a> {
-//     pub fn required_prop(&self) -> &str {
-//         self.required_prop
-//     }
-
-//     pub fn optional_prop(&self) -> Option<&str> {
-//         self.source_value.get("optional_prop").map(|v| *v)
-//     }
-// }
-
-// pub struct ValidationError<'a> {
-//     pub semi_parsed_data: ExampleSemiParsedData<'a>,
-// }
-
-// pub enum ValidationErrorKind {
-//     UnexpectedValueType,
-//     MissingRequiredAttribute(&'static str),
-// }
-
-// impl<'a> TryFrom<ExampleSemiParsedData<'a>> for ExampleParsedData<'a> {
-//     type Error = &'static str;
-
-//     fn try_from(value: ExampleSemiParsedData<'a>) -> Result<Self, Self::Error> {
-//         todo!()
-//     }
-// }
-
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum HlsPlaylistType {
     Event,
