@@ -1,11 +1,14 @@
-use crate::tag::{hls, value::ParsedTagValue};
+use crate::{
+    error::ValidationError,
+    tag::{hls, value::ParsedTagValue},
+};
 use std::{cmp::PartialEq, fmt::Debug};
 
 #[derive(Debug, PartialEq)]
 #[allow(clippy::large_enum_variant)]
 pub enum Tag<'a, CustomTag = NoCustomTag>
 where
-    CustomTag: TryFrom<ParsedTag<'a>, Error = &'static str>
+    CustomTag: TryFrom<ParsedTag<'a>, Error = ValidationError>
         + IsKnownName
         + TagInformation
         + Debug
@@ -54,10 +57,10 @@ pub struct ParsedTag<'a> {
 #[derive(Debug, PartialEq)]
 pub struct NoCustomTag;
 impl TryFrom<ParsedTag<'_>> for NoCustomTag {
-    type Error = &'static str;
+    type Error = ValidationError;
 
-    fn try_from(_: ParsedTag<'_>) -> Result<Self, Self::Error> {
-        Err("No custom tag set.")
+    fn try_from(_: ParsedTag) -> Result<Self, Self::Error> {
+        Err(ValidationError::NotImplemented)
     }
 }
 impl IsKnownName for NoCustomTag {
@@ -77,13 +80,13 @@ impl TagInformation for NoCustomTag {
 
 impl<'a, CustomTag> TryFrom<ParsedTag<'a>> for Tag<'a, CustomTag>
 where
-    CustomTag: TryFrom<ParsedTag<'a>, Error = &'static str>
+    CustomTag: TryFrom<ParsedTag<'a>, Error = ValidationError>
         + IsKnownName
         + TagInformation
         + Debug
         + PartialEq,
 {
-    type Error = &'static str;
+    type Error = ValidationError;
 
     fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
         if CustomTag::is_known_name(tag.name) {

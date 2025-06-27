@@ -1,14 +1,16 @@
 use crate::{
+    error::{GenericSyntaxError, UnknownTagSyntaxError, ValidationError},
     line::ParsedLineSlice,
     utils::{split_by_first_lf, str_from},
 };
 use std::fmt::Debug;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub struct Tag<'a> {
     pub(crate) name: &'a str,
     pub(crate) value: Option<&'a str>,
     pub(crate) original_input: &'a str,
+    pub(crate) validation_error: Option<ValidationError>,
 }
 
 impl Tag<'_> {
@@ -20,24 +22,28 @@ impl Tag<'_> {
         self.value
     }
 
+    pub fn validation_error(&self) -> Option<ValidationError> {
+        self.validation_error
+    }
+
     pub fn as_str(&self) -> &str {
         split_by_first_lf(self.original_input).parsed
     }
 }
 
-pub fn parse(input: &str) -> Result<ParsedLineSlice<Tag>, &'static str> {
+pub fn parse(input: &str) -> Result<ParsedLineSlice<Tag>, UnknownTagSyntaxError> {
     let mut bytes = input.as_bytes().iter();
     let Some(b'#') = bytes.next() else {
-        return Err("Not a tag");
+        return Err(UnknownTagSyntaxError::InvalidTag);
     };
     let Some(b'E') = bytes.next() else {
-        return Err("Not a tag");
+        return Err(UnknownTagSyntaxError::InvalidTag);
     };
     let Some(b'X') = bytes.next() else {
-        return Err("Not a tag");
+        return Err(UnknownTagSyntaxError::InvalidTag);
     };
     let Some(b'T') = bytes.next() else {
-        return Err("Not a tag");
+        return Err(UnknownTagSyntaxError::InvalidTag);
     };
     parse_assuming_ext_taken(str_from(bytes.as_slice()), input)
 }
@@ -45,9 +51,9 @@ pub fn parse(input: &str) -> Result<ParsedLineSlice<Tag>, &'static str> {
 pub(crate) fn parse_assuming_ext_taken<'a>(
     input: &'a str,
     original_input: &'a str,
-) -> Result<ParsedLineSlice<'a, Tag<'a>>, &'static str> {
+) -> Result<ParsedLineSlice<'a, Tag<'a>>, UnknownTagSyntaxError> {
     if input.is_empty() {
-        return Err("Unexpected empty input for parsing tag name");
+        return Err(UnknownTagSyntaxError::UnexpectedEmptyInput);
     };
     let mut bytes = input.as_bytes().iter();
     let mut iterations = 0usize;
@@ -62,6 +68,7 @@ pub(crate) fn parse_assuming_ext_taken<'a>(
                     name,
                     value,
                     original_input,
+                    validation_error: None,
                 },
                 remaining,
             });
@@ -78,6 +85,7 @@ pub(crate) fn parse_assuming_ext_taken<'a>(
                         name,
                         value: Some(value),
                         original_input,
+                        validation_error: None,
                     },
                     remaining,
                 });
@@ -89,13 +97,14 @@ pub(crate) fn parse_assuming_ext_taken<'a>(
                         name,
                         value: None,
                         original_input,
+                        validation_error: None,
                     },
                     remaining: Some(str_from(bytes.as_slice())),
                 });
             }
             b'\r' => {
                 let Some(b'\n') = bytes.next() else {
-                    return Err("Unsupported carriage return without line feed");
+                    return Err(GenericSyntaxError::CarriageReturnWithoutLineFeed)?;
                 };
                 let name = &input[..(iterations - 1)];
                 return Ok(ParsedLineSlice {
@@ -103,6 +112,7 @@ pub(crate) fn parse_assuming_ext_taken<'a>(
                         name,
                         value: None,
                         original_input,
+                        validation_error: None,
                     },
                     remaining: Some(str_from(bytes.as_slice())),
                 });
@@ -123,6 +133,7 @@ mod tests {
             name: "-X-TEST",
             value: None,
             original_input: "#EXT-X-TEST",
+            validation_error: None,
         };
         assert_eq!(None, tag.value());
         assert_eq!("#EXT-X-TEST", tag.as_str());
@@ -134,6 +145,7 @@ mod tests {
             name: "-X-TEST",
             value: Some(""),
             original_input: "#EXT-X-TEST:",
+            validation_error: None,
         };
         assert_eq!(Some(""), tag.value());
         assert_eq!("#EXT-X-TEST:", tag.as_str());
@@ -145,6 +157,7 @@ mod tests {
             name: "-X-TEST",
             value: Some("42"),
             original_input: "#EXT-X-TEST:42",
+            validation_error: None,
         };
         assert_eq!(Some("42"), tag.value());
         assert_eq!("#EXT-X-TEST:42", tag.as_str());
@@ -156,6 +169,7 @@ mod tests {
             name: "-X-TEST",
             value: Some("42"),
             original_input: "#EXT-X-TEST:42\r\n#EXT-X-NEW-TEST\r\n",
+            validation_error: None,
         };
         assert_eq!(Some("42"), tag.value());
         assert_eq!("#EXT-X-TEST:42", tag.as_str());
@@ -167,6 +181,7 @@ mod tests {
             name: "-X-TEST",
             value: Some("42"),
             original_input: "#EXT-X-TEST:42\n#EXT-X-NEW-TEST\n",
+            validation_error: None,
         };
         assert_eq!(Some("42"), tag.value());
         assert_eq!("#EXT-X-TEST:42", tag.as_str());
@@ -180,6 +195,7 @@ mod tests {
                     name: "-TEST-TAG",
                     value: None,
                     original_input: "#EXT-TEST-TAG",
+                    validation_error: None,
                 },
                 remaining: None
             }),
@@ -191,6 +207,7 @@ mod tests {
                     name: "-TEST-TAG",
                     value: None,
                     original_input: "#EXT-TEST-TAG\r\n",
+                    validation_error: None,
                 },
                 remaining: Some("")
             }),
@@ -202,6 +219,7 @@ mod tests {
                     name: "-TEST-TAG",
                     value: None,
                     original_input: "#EXT-TEST-TAG\n",
+                    validation_error: None,
                 },
                 remaining: Some("")
             }),
@@ -217,6 +235,7 @@ mod tests {
                     name: "-TEST-TAG",
                     value: Some("42"),
                     original_input: "#EXT-TEST-TAG:42",
+                    validation_error: None,
                 },
                 remaining: None
             }),
@@ -228,6 +247,7 @@ mod tests {
                     name: "-TEST-TAG",
                     value: Some("42"),
                     original_input: "#EXT-TEST-TAG:42\r\n",
+                    validation_error: None,
                 },
                 remaining: Some("")
             }),
@@ -239,6 +259,7 @@ mod tests {
                     name: "-TEST-TAG",
                     value: Some("42"),
                     original_input: "#EXT-TEST-TAG:42\n",
+                    validation_error: None,
                 },
                 remaining: Some("")
             }),
@@ -254,6 +275,7 @@ mod tests {
                     name: "-X-TEST",
                     value: Some("42"),
                     original_input: "#EXT-X-TEST:42\r\n#EXT-X-NEW-TEST\r\n",
+                    validation_error: None,
                 },
                 remaining: Some("#EXT-X-NEW-TEST\r\n")
             }),
@@ -269,6 +291,7 @@ mod tests {
                     name: "-X-TEST",
                     value: Some("42"),
                     original_input: "#EXT-X-TEST:42\n#EXT-X-NEW-TEST\n",
+                    validation_error: None,
                 },
                 remaining: Some("#EXT-X-NEW-TEST\n")
             }),

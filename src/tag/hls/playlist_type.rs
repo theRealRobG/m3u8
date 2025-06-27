@@ -1,7 +1,10 @@
-use crate::tag::{
-    hls::TagInner,
-    known::ParsedTag,
-    value::{HlsPlaylistType, ParsedTagValue},
+use crate::{
+    error::{ValidationError, ValidationErrorValueKind},
+    tag::{
+        hls::TagInner,
+        known::ParsedTag,
+        value::{HlsPlaylistType, ParsedTagValue},
+    },
 };
 use std::borrow::Cow;
 
@@ -10,11 +13,13 @@ use std::borrow::Cow;
 pub struct PlaylistType(HlsPlaylistType);
 
 impl TryFrom<ParsedTag<'_>> for PlaylistType {
-    type Error = &'static str;
+    type Error = ValidationError;
 
     fn try_from(tag: ParsedTag<'_>) -> Result<Self, Self::Error> {
         let ParsedTagValue::TypeEnum(t) = tag.value else {
-            return Err(super::ValidationError::unexpected_value_type());
+            return Err(super::ValidationError::UnexpectedValueType(
+                ValidationErrorValueKind::from(&tag.value),
+            ));
         };
         Ok(Self(t))
     }

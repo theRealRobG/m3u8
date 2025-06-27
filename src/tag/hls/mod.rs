@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 
 use crate::{
+    error::ValidationError,
     tag::{
         hls::{
             bitrate::Bitrate, byterange::Byterange, content_steering::ContentSteering,
@@ -122,7 +123,7 @@ pub enum Tag<'a> {
 }
 
 impl<'a> TryFrom<ParsedTag<'a>> for Tag<'a> {
-    type Error = &'static str;
+    type Error = ValidationError;
 
     fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
         let tag_name = TagName::try_from(tag.name)?;
@@ -292,7 +293,7 @@ pub enum TagName {
 }
 
 impl TryFrom<&'_ str> for TagName {
-    type Error = &'static str;
+    type Error = ValidationError;
 
     fn try_from(value: &'_ str) -> Result<Self, Self::Error> {
         match value {
@@ -328,7 +329,7 @@ impl TryFrom<&'_ str> for TagName {
             "-X-SESSION-DATA" => Ok(Self::SessionData),
             "-X-SESSION-KEY" => Ok(Self::SessionKey),
             "-X-CONTENT-STEERING" => Ok(Self::ContentSteering),
-            _ => Err("Unkown tag name."),
+            _ => Err(ValidationError::UnexpectedTagName),
         }
     }
 }
@@ -422,17 +423,6 @@ pub enum TagType {
     MediaMetadata,
     /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.6
     MultivariantPlaylist,
-}
-
-struct ValidationError;
-impl ValidationError {
-    fn unexpected_value_type() -> &'static str {
-        "Unexpected parsed value type."
-    }
-
-    fn missing_required_attribute() -> &'static str {
-        "Missing required attribute."
-    }
 }
 
 #[cfg(test)]

@@ -1,7 +1,10 @@
-use crate::tag::{
-    hls::TagInner,
-    known::ParsedTag,
-    value::{ParsedAttributeValue, ParsedTagValue},
+use crate::{
+    error::{ValidationError, ValidationErrorValueKind},
+    tag::{
+        hls::TagInner,
+        known::ParsedTag,
+        value::{ParsedAttributeValue, ParsedTagValue},
+    },
 };
 use std::{borrow::Cow, collections::HashMap};
 
@@ -27,17 +30,19 @@ impl<'a> PartialEq for PreloadHint<'a> {
 }
 
 impl<'a> TryFrom<ParsedTag<'a>> for PreloadHint<'a> {
-    type Error = &'static str;
+    type Error = ValidationError;
 
     fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
         let ParsedTagValue::AttributeList(attribute_list) = tag.value else {
-            return Err(super::ValidationError::unexpected_value_type());
+            return Err(ValidationError::UnexpectedValueType(
+                ValidationErrorValueKind::from(&tag.value),
+            ));
         };
         let Some(ParsedAttributeValue::UnquotedString(hint_type)) = attribute_list.get(TYPE) else {
-            return Err(super::ValidationError::missing_required_attribute());
+            return Err(ValidationError::MissingRequiredAttribute(TYPE));
         };
         let Some(ParsedAttributeValue::QuotedString(uri)) = attribute_list.get(URI) else {
-            return Err(super::ValidationError::missing_required_attribute());
+            return Err(ValidationError::MissingRequiredAttribute(URI));
         };
         Ok(Self {
             hint_type: Cow::Borrowed(hint_type),

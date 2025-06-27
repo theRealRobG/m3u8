@@ -1,5 +1,6 @@
 use crate::{
     date::DateTime,
+    error::{ValidationError, ValidationErrorValueKind},
     tag::{hls::TagInner, known::ParsedTag, value::ParsedTagValue},
 };
 use std::borrow::Cow;
@@ -19,11 +20,13 @@ impl<'a> PartialEq for ProgramDateTime<'a> {
 }
 
 impl<'a> TryFrom<ParsedTag<'a>> for ProgramDateTime<'a> {
-    type Error = &'static str;
+    type Error = ValidationError;
 
     fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
         let ParsedTagValue::DateTimeMsec(date_time) = tag.value else {
-            return Err(super::ValidationError::unexpected_value_type());
+            return Err(super::ValidationError::UnexpectedValueType(
+                ValidationErrorValueKind::from(&tag.value),
+            ));
         };
         Ok(Self {
             program_date_time: date_time,

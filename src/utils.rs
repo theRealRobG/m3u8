@@ -1,13 +1,13 @@
 use crate::{
     date::{DateTime, DateTimeTimezoneOffset},
+    error::{DateTimeSyntaxError, GenericSyntaxError},
     line::ParsedLineSlice,
-    tag::value::ParsedTagValue,
 };
 use std::slice::Iter;
 
 pub fn take_until_end_of_bytes<'a>(
     mut bytes: Iter<'a, u8>,
-) -> Result<ParsedLineSlice<'a, &'a str>, &'static str> {
+) -> Result<ParsedLineSlice<'a, &'a str>, GenericSyntaxError> {
     let input = bytes.as_slice();
     let mut iterations = 0usize;
     loop {
@@ -37,9 +37,9 @@ pub fn take_until_end_of_bytes<'a>(
     }
 }
 
-pub fn validate_carriage_return_bytes(bytes: &mut Iter<'_, u8>) -> Result<(), &'static str> {
+pub fn validate_carriage_return_bytes(bytes: &mut Iter<'_, u8>) -> Result<(), GenericSyntaxError> {
     let Some(b'\n') = bytes.next() else {
-        return Err("Unexpected carriage return without following line feed");
+        return Err(GenericSyntaxError::CarriageReturnWithoutLineFeed);
     };
     Ok(())
 }
@@ -91,49 +91,79 @@ pub fn parse_date_time_bytes<'a>(
     input: &'a str,
     mut bytes: Iter<'a, u8>,
     break_byte: u8,
-) -> Result<ParsedLineSlice<'a, ParsedTagValue<'a>>, &'static str> {
+) -> Result<ParsedLineSlice<'a, DateTime>, DateTimeSyntaxError> {
     let date_bytes = input.as_bytes();
-    let Ok(date_fullyear) = input[..4].parse::<u32>() else {
-        return Err("Invalid year in DateTimeMsec value");
+    let date_fullyear = input[..4]
+        .parse::<u32>()
+        .map_err(|e| DateTimeSyntaxError::InvalidYear(e))?;
+    match date_bytes.get(4) {
+        Some(b'-') => (),
+        b => {
+            return Err(DateTimeSyntaxError::UnexpectedYearToMonthSeparator(
+                b.map(|b| *b),
+            ));
+        }
     };
-    let Some(b'-') = date_bytes.get(4) else {
-        return Err("Invalid DateTimeMsec value");
+    let date_month = input[5..7]
+        .parse::<u8>()
+        .map_err(|e| DateTimeSyntaxError::InvalidMonth(e))?;
+    match date_bytes.get(7) {
+        Some(b'-') => (),
+        b => {
+            return Err(DateTimeSyntaxError::UnexpectedMonthToDaySeparator(
+                b.map(|b| *b),
+            ));
+        }
     };
-    let Ok(date_month) = input[5..7].parse::<u8>() else {
-        return Err("Invalid month in DateTimeMsec value");
-    };
-    let Some(b'-') = date_bytes.get(7) else {
-        return Err("Invalid DateTimeMsec value");
-    };
-    let Ok(date_mday) = input[8..10].parse::<u8>() else {
-        return Err("Invalid day in DateTimeMsec value");
-    };
+    let date_mday = input[8..10]
+        .parse::<u8>()
+        .map_err(|e| DateTimeSyntaxError::InvalidDay(e))?;
     if break_byte == b't' {
-        let Some(b't') = date_bytes.get(10) else {
-            return Err("Invalid DateTimeMsec value");
+        match date_bytes.get(10) {
+            Some(b't') => (),
+            b => {
+                return Err(DateTimeSyntaxError::UnexpectedDayHourSeparator(
+                    b.map(|b| *b),
+                ));
+            }
         };
         bytes.next();
         bytes.next();
-        let Some(b':') = bytes.next() else {
-            return Err("Invalid DateTimeMsec value");
+        match bytes.next() {
+            Some(b':') => (),
+            b => {
+                return Err(DateTimeSyntaxError::UnexpectedHourMinuteSeparator(
+                    b.map(|b| *b),
+                ));
+            }
         };
     } else {
-        let Some(b'T') = date_bytes.get(10) else {
-            return Err("Invalid DateTimeMsec value");
+        match date_bytes.get(10) {
+            Some(b'T') => (),
+            b => {
+                return Err(DateTimeSyntaxError::UnexpectedDayHourSeparator(
+                    b.map(|b| *b),
+                ));
+            }
         };
     }
-    let Ok(time_hour) = input[11..13].parse::<u8>() else {
-        return Err("Invalid hour in DateTimeMsec value");
-    };
+    let time_hour = input[11..13]
+        .parse::<u8>()
+        .map_err(|e| DateTimeSyntaxError::InvalidHour(e))?;
     bytes.next();
     bytes.next();
-    let Some(b':') = bytes.next() else {
-        return Err("Invalid DateTimeMsec value");
+    match bytes.next() {
+        Some(b':') => (),
+        b => {
+            return Err(DateTimeSyntaxError::UnexpectedHourMinuteSeparator(
+                b.map(|b| *b),
+            ));
+        }
     };
     let mut byte_count = 17;
-    let Ok(time_minute) = input[14..16].parse::<u8>() else {
-        return Err("Invalid minute in DateTimeMsec value");
-    };
+    let time_minute = input[14..16]
+        .parse::<u8>()
+        .map_err(|e| DateTimeSyntaxError::InvalidMinute(e))?;
     let time_offset_byte = 'time_offset_loop: loop {
         let Some(&byte) = bytes.next() else {
             break 'time_offset_loop None;
@@ -141,26 +171,25 @@ pub fn parse_date_time_bytes<'a>(
         byte_count += 1;
         match byte {
             b'Z' | b'z' | b'+' | b'-' => break 'time_offset_loop Some(byte),
-            b'\r' | b'\n' => return Err("Unexpected end of line in DateTimeMsec value"),
-            b'0'..=b'9' | b'.' => (),
-            _ => return Err("Invalid second in DateTimeMsec value"),
+            b'\r' | b'\n' => return Err(GenericSyntaxError::UnexpectedEndOfLine)?,
+            _ => (),
         }
     };
     let Some(time_offset_byte) = time_offset_byte else {
-        return Err("Unexpected end of line in DateTimeMsec value");
+        return Err(GenericSyntaxError::UnexpectedEndOfLine)?;
     };
-    let Ok(time_second) = input[17..(byte_count - 1)].parse::<f64>() else {
-        return Err("Invalid second in DateTimeMsec value");
-    };
+    let time_second = input[17..(byte_count - 1)]
+        .parse::<f64>()
+        .map_err(|e| DateTimeSyntaxError::InvalidSecond(e))?;
     match time_offset_byte {
         b'Z' | b'z' => {
             let remaining = take_until_end_of_bytes(bytes)?;
             if !remaining.parsed.is_empty() {
-                return Err("Unexpected characteres after timezone in DateTimeMsec value");
+                return Err(DateTimeSyntaxError::UnexpectedCharactersAfterTimezone);
             };
             let remaining = remaining.remaining;
             Ok(ParsedLineSlice {
-                parsed: ParsedTagValue::DateTimeMsec(DateTime {
+                parsed: DateTime {
                     date_fullyear,
                     date_month,
                     date_mday,
@@ -171,7 +200,7 @@ pub fn parse_date_time_bytes<'a>(
                         time_hour: 0,
                         time_minute: 0,
                     },
-                }),
+                },
                 remaining,
             })
         }
@@ -179,26 +208,30 @@ pub fn parse_date_time_bytes<'a>(
             let multiplier = if time_offset_byte == b'-' { -1i8 } else { 1i8 };
             bytes.next();
             bytes.next();
-            let Some(b':') = bytes.next() else {
-                return Err("Invalid DateTimeMsec value");
+            match bytes.next() {
+                Some(b':') => (),
+                b => {
+                    return Err(DateTimeSyntaxError::UnexpectedTimezoneHourMinuteSeparator(
+                        b.map(|b| *b),
+                    ));
+                }
             };
-            let Ok(timeoffset_hour) = input[byte_count..(byte_count + 2)].parse::<i8>() else {
-                return Err("Invalid time offset hour in DateTimeMsec value");
-            };
+            let timeoffset_hour = input[byte_count..(byte_count + 2)]
+                .parse::<i8>()
+                .map_err(|e| DateTimeSyntaxError::InvalidTimezoneHour(e))?;
             let timeoffset_hour = multiplier * timeoffset_hour;
             bytes.next();
             bytes.next();
             let remaining = take_until_end_of_bytes(bytes)?;
             if !remaining.parsed.is_empty() {
-                return Err("Unexpected characteres after timezone in DateTimeMsec value");
+                return Err(DateTimeSyntaxError::UnexpectedCharactersAfterTimezone);
             };
             let remaining = remaining.remaining;
-            let Ok(timeoffset_minute) = input[(byte_count + 3)..(byte_count + 5)].parse::<u8>()
-            else {
-                return Err("Invalid time offset minute in DateTimeMsec value");
-            };
+            let timeoffset_minute = input[(byte_count + 3)..(byte_count + 5)]
+                .parse::<u8>()
+                .map_err(|e| DateTimeSyntaxError::InvalidTimezoneMinute(e))?;
             Ok(ParsedLineSlice {
-                parsed: ParsedTagValue::DateTimeMsec(DateTime {
+                parsed: DateTime {
                     date_fullyear,
                     date_month,
                     date_mday,
@@ -209,7 +242,7 @@ pub fn parse_date_time_bytes<'a>(
                         time_hour: timeoffset_hour,
                         time_minute: timeoffset_minute,
                     },
-                }),
+                },
                 remaining,
             })
         }

@@ -1,4 +1,5 @@
 use crate::{
+    error::ValidationError,
     line::HlsLine,
     tag::{
         known::{IsKnownName, ParsedTag, TagInformation},
@@ -110,19 +111,22 @@ where
     /// # use m3u8::Writer;
     /// # use m3u8::tag::known::{ParsedTag, IsKnownName, TagInformation};
     /// # use m3u8::tag::value::ParsedTagValue;
+    /// # use m3u8::error::{ValidationError, ValidationErrorValueKind};
     /// #[derive(Debug, PartialEq)]
     /// struct ExampleCustomTag {
     ///     answer: u64,
     /// };
     /// impl TryFrom<ParsedTag<'_>> for ExampleCustomTag {
-    ///     type Error = &'static str;
+    ///     type Error = ValidationError;
     ///     fn try_from(tag: ParsedTag) -> Result<Self, Self::Error> {
     ///         if tag.name != "-X-MEANING-OF-LIFE" {
-    ///             return Err("Unexpected tag name")
+    ///             return Err(ValidationError::UnexpectedTagName)
     ///         }
     ///         match tag.value {
     ///             ParsedTagValue::DecimalInteger(answer) => Ok(Self { answer }),
-    ///             _ => Err("Unexpected tag value")
+    ///             _ => Err(ValidationError::UnexpectedValueType(
+    ///                 ValidationErrorValueKind::from(&tag.value)
+    ///             )),
     ///         }
     ///     }
     /// }
@@ -150,7 +154,7 @@ where
     /// ```
     pub fn write_custom_tag<'a, CustomTag>(&mut self, tag: CustomTag) -> io::Result<usize>
     where
-        CustomTag: TryFrom<ParsedTag<'a>, Error = &'static str>
+        CustomTag: TryFrom<ParsedTag<'a>, Error = ValidationError>
             + IsKnownName
             + TagInformation
             + Debug
@@ -166,7 +170,7 @@ where
         line: HlsLine<'a, CustomTag>,
     ) -> io::Result<usize>
     where
-        CustomTag: TryFrom<ParsedTag<'a>, Error = &'static str>
+        CustomTag: TryFrom<ParsedTag<'a>, Error = ValidationError>
             + IsKnownName
             + TagInformation
             + Debug

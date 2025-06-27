@@ -1,7 +1,10 @@
-use crate::tag::{
-    hls::TagInner,
-    known::ParsedTag,
-    value::{ParsedAttributeValue, ParsedTagValue},
+use crate::{
+    error::{ValidationError, ValidationErrorValueKind},
+    tag::{
+        hls::TagInner,
+        known::ParsedTag,
+        value::{ParsedAttributeValue, ParsedTagValue},
+    },
 };
 use std::borrow::Cow;
 
@@ -182,14 +185,16 @@ pub enum Define<'a> {
 }
 
 impl<'a> TryFrom<ParsedTag<'a>> for Define<'a> {
-    type Error = &'static str;
+    type Error = ValidationError;
 
     fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
         let ParsedTagValue::AttributeList(attribute_list) = tag.value else {
-            return Err(super::ValidationError::unexpected_value_type());
+            return Err(ValidationError::UnexpectedValueType(
+                ValidationErrorValueKind::from(&tag.value),
+            ));
         };
-        if let Some(ParsedAttributeValue::QuotedString(name)) = attribute_list.get("NAME") {
-            if let Some(ParsedAttributeValue::QuotedString(value)) = attribute_list.get("VALUE") {
+        if let Some(ParsedAttributeValue::QuotedString(name)) = attribute_list.get(NAME) {
+            if let Some(ParsedAttributeValue::QuotedString(value)) = attribute_list.get(VALUE) {
                 Ok(Self::Name(Name {
                     name: Cow::Borrowed(name),
                     value: Cow::Borrowed(value),
@@ -197,10 +202,9 @@ impl<'a> TryFrom<ParsedTag<'a>> for Define<'a> {
                     output_line_is_dirty: false,
                 }))
             } else {
-                Err(super::ValidationError::missing_required_attribute())
+                Err(super::ValidationError::MissingRequiredAttribute(VALUE))
             }
-        } else if let Some(ParsedAttributeValue::QuotedString(import)) =
-            attribute_list.get("IMPORT")
+        } else if let Some(ParsedAttributeValue::QuotedString(import)) = attribute_list.get(IMPORT)
         {
             Ok(Self::Import(Import {
                 import: Cow::Borrowed(import),
@@ -208,7 +212,7 @@ impl<'a> TryFrom<ParsedTag<'a>> for Define<'a> {
                 output_line_is_dirty: false,
             }))
         } else if let Some(ParsedAttributeValue::QuotedString(queryparam)) =
-            attribute_list.get("QUERYPARAM")
+            attribute_list.get(QUERYPARAM)
         {
             Ok(Self::Queryparam(Queryparam {
                 queryparam: Cow::Borrowed(queryparam),
@@ -216,7 +220,7 @@ impl<'a> TryFrom<ParsedTag<'a>> for Define<'a> {
                 output_line_is_dirty: false,
             }))
         } else {
-            Err(super::ValidationError::missing_required_attribute())
+            Err(super::ValidationError::MissingRequiredAttribute(NAME))
         }
     }
 }

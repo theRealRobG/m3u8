@@ -1,4 +1,7 @@
-use crate::tag::{hls::TagInner, known::ParsedTag, value::ParsedTagValue};
+use crate::{
+    error::{ValidationError, ValidationErrorValueKind},
+    tag::{hls::TagInner, known::ParsedTag, value::ParsedTagValue},
+};
 use std::borrow::Cow;
 
 /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.3.3
@@ -16,11 +19,13 @@ impl<'a> PartialEq for DiscontinuitySequence<'a> {
 }
 
 impl<'a> TryFrom<ParsedTag<'a>> for DiscontinuitySequence<'a> {
-    type Error = &'static str;
+    type Error = ValidationError;
 
     fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
         let ParsedTagValue::DecimalInteger(d) = tag.value else {
-            return Err(super::ValidationError::unexpected_value_type());
+            return Err(super::ValidationError::UnexpectedValueType(
+                ValidationErrorValueKind::from(&tag.value),
+            ));
         };
         Ok(Self {
             discontinuity_sequence: d,

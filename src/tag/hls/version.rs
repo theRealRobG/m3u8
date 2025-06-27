@@ -1,4 +1,7 @@
-use crate::tag::{hls::TagInner, known::ParsedTag, value::ParsedTagValue};
+use crate::{
+    error::{ValidationError, ValidationErrorValueKind},
+    tag::{hls::TagInner, known::ParsedTag, value::ParsedTagValue},
+};
 use std::borrow::Cow;
 
 /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.1.2
@@ -16,11 +19,13 @@ impl<'a> PartialEq for Version<'a> {
 }
 
 impl<'a> TryFrom<ParsedTag<'a>> for Version<'a> {
-    type Error = &'static str;
+    type Error = ValidationError;
 
     fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
         let ParsedTagValue::DecimalInteger(version) = tag.value else {
-            return Err(super::ValidationError::unexpected_value_type());
+            return Err(super::ValidationError::UnexpectedValueType(
+                ValidationErrorValueKind::from(&tag.value),
+            ));
         };
         Ok(Self {
             version,

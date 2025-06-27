@@ -1,5 +1,6 @@
 use crate::{
     date::{self, DateTime},
+    error::{ValidationError, ValidationErrorValueKind},
     tag::{
         hls::{TagInner, TagName},
         known::ParsedTag,
@@ -49,20 +50,22 @@ impl<'a> PartialEq for Daterange<'a> {
 }
 
 impl<'a> TryFrom<ParsedTag<'a>> for Daterange<'a> {
-    type Error = &'static str;
+    type Error = ValidationError;
 
     fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
         let ParsedTagValue::AttributeList(attribute_list) = tag.value else {
-            return Err(super::ValidationError::unexpected_value_type());
+            return Err(ValidationError::UnexpectedValueType(
+                ValidationErrorValueKind::from(&tag.value),
+            ));
         };
         let Some(ParsedAttributeValue::QuotedString(id)) = attribute_list.get(ID) else {
-            return Err(super::ValidationError::missing_required_attribute());
+            return Err(ValidationError::MissingRequiredAttribute(ID));
         };
         let Some(start_date) = (match attribute_list.get(START_DATE) {
             Some(ParsedAttributeValue::QuotedString(date_str)) => date::parse(date_str).ok(),
             _ => None,
         }) else {
-            return Err(super::ValidationError::missing_required_attribute());
+            return Err(ValidationError::MissingRequiredAttribute(START_DATE));
         };
         Ok(Self {
             id: Cow::Borrowed(id),

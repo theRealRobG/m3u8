@@ -1,7 +1,10 @@
-use crate::tag::{
-    hls::{TagInner, TagName},
-    known::ParsedTag,
-    value::ParsedTagValue,
+use crate::{
+    error::{ValidationError, ValidationErrorValueKind},
+    tag::{
+        hls::{TagInner, TagName},
+        known::ParsedTag,
+        value::ParsedTagValue,
+    },
 };
 use std::borrow::Cow;
 
@@ -21,7 +24,7 @@ impl PartialEq for Byterange<'_> {
 }
 
 impl<'a> TryFrom<ParsedTag<'a>> for Byterange<'a> {
-    type Error = &'static str;
+    type Error = ValidationError;
 
     fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
         match tag.value {
@@ -37,7 +40,9 @@ impl<'a> TryFrom<ParsedTag<'a>> for Byterange<'a> {
                 output_line: Cow::Borrowed(tag.original_input),
                 output_line_is_dirty: false,
             }),
-            _ => Err(super::ValidationError::unexpected_value_type()),
+            _ => Err(super::ValidationError::UnexpectedValueType(
+                ValidationErrorValueKind::from(&tag.value),
+            )),
         }
     }
 }

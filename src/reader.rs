@@ -2,10 +2,12 @@ use std::{
     fmt::Debug,
     io::{self, BufRead},
     marker::PhantomData,
+    str::Utf8Error,
 };
 
 use crate::{
     config::ParsingOptions,
+    error::{SyntaxError, ValidationError},
     line::{HlsLine, ParsedLineSlice, parse_with_custom},
     tag::known::{IsKnownName, NoCustomTag, ParsedTag, TagInformation},
 };
@@ -28,7 +30,7 @@ impl<'a> Reader<&'a str, NoCustomTag> {
 
 impl<'a, CustomTag> Reader<&'a str, CustomTag>
 where
-    CustomTag: TryFrom<ParsedTag<'a>, Error = &'static str>
+    CustomTag: TryFrom<ParsedTag<'a>, Error = ValidationError>
         + IsKnownName
         + TagInformation
         + Debug
@@ -46,7 +48,7 @@ where
         }
     }
 
-    pub fn read_line(&mut self) -> Result<Option<HlsLine<'a, CustomTag>>, &'static str> {
+    pub fn read_line(&mut self) -> Result<Option<HlsLine<'a, CustomTag>>, SyntaxError> {
         if self.inner.is_empty() {
             return Ok(None);
         };
@@ -65,10 +67,22 @@ pub struct BufReadHolder<R: BufRead> {
     last_consume_count: usize,
 }
 
+#[derive(Debug)]
+pub enum BufReadError {
+    IO(io::Error),
+    Utf8(Utf8Error),
+    Syntax(SyntaxError),
+}
+impl From<SyntaxError> for BufReadError {
+    fn from(value: SyntaxError) -> Self {
+        Self::Syntax(value)
+    }
+}
+
 impl<R: BufRead> Reader<BufReadHolder<R>, NoCustomTag> {
-    pub fn try_from_reader(mut reader: R, options: ParsingOptions) -> Result<Self, &'static str> {
-        let buf = reader.fill_buf().map_err(|_| "IO Error")?;
-        let _ = std::str::from_utf8(buf).map_err(|_| "Not UTF-8")?;
+    pub fn try_from_reader(mut reader: R, options: ParsingOptions) -> Result<Self, BufReadError> {
+        let buf = reader.fill_buf().map_err(|e| BufReadError::IO(e))?;
+        let _ = std::str::from_utf8(buf).map_err(|e| BufReadError::Utf8(e))?;
         Ok(Self {
             inner: BufReadHolder {
                 reader,
@@ -79,7 +93,7 @@ impl<R: BufRead> Reader<BufReadHolder<R>, NoCustomTag> {
         })
     }
 
-    pub fn read_line<'a>(&'a mut self) -> Result<Option<HlsLine<'a>>, &'static str> {
+    pub fn read_line<'a>(&'a mut self) -> Result<Option<HlsLine<'a>>, BufReadError> {
         self.read_line_custom::<NoCustomTag>()
     }
 
@@ -93,9 +107,9 @@ impl<R: BufRead> Reader<BufReadHolder<R>, NoCustomTag> {
     // mutable borrow on String. There may be a better way of doing this but I don't know it yet.
     pub fn read_line_custom<'a, CustomTag>(
         &'a mut self,
-    ) -> Result<Option<HlsLine<'a, CustomTag>>, &'static str>
+    ) -> Result<Option<HlsLine<'a, CustomTag>>, BufReadError>
     where
-        CustomTag: TryFrom<ParsedTag<'a>, Error = &'static str>
+        CustomTag: TryFrom<ParsedTag<'a>, Error = ValidationError>
             + IsKnownName
             + TagInformation
             + Debug
@@ -105,8 +119,7 @@ impl<R: BufRead> Reader<BufReadHolder<R>, NoCustomTag> {
         let available = match self.inner.reader.fill_buf() {
             Ok([]) => return Ok(None),
             Ok(n) => unsafe { std::str::from_utf8_unchecked(n) },
-            Err(ref e) if e.kind() == io::ErrorKind::Interrupted => panic!(),
-            Err(_) => return Err("IO read error"),
+            Err(e) => return Err(BufReadError::IO(e)),
         };
         let total_len = available.len();
         let ParsedLineSlice { parsed, remaining } = parse_with_custom(available, &self.options)?;
@@ -126,6 +139,7 @@ impl<R: BufRead> Reader<BufReadHolder<R>, NoCustomTag> {
 mod tests {
     use crate::{
         config::ParsingOptionsBuilder,
+        error::ValidationErrorValueKind,
         tag::{
             hls::{
                 endlist::Endlist, inf::Inf, m3u::M3u, targetduration::Targetduration,
@@ -187,6 +201,7 @@ mod tests {
                 name: "-X-EXAMPLE-TAG",
                 value: Some("MEANING-OF-LIFE=42,QUESTION=\"UNKNOWN\""),
                 original_input: &EXAMPLE_MANIFEST[50..],
+                validation_error: None,
             }))
         );
     }
@@ -208,6 +223,7 @@ mod tests {
                 name: "-X-EXAMPLE-TAG",
                 value: Some("MEANING-OF-LIFE=42,QUESTION=\"UNKNOWN\""),
                 original_input: &EXAMPLE_MANIFEST[50..],
+                validation_error: None,
             }))
         );
     }
@@ -257,19 +273,21 @@ mod tests {
         }
     }
     impl<'a> TryFrom<ParsedTag<'a>> for ExampleTag<'a> {
-        type Error = &'static str;
+        type Error = ValidationError;
         fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
-            let ParsedTagValue::AttributeList(attribute_list) = tag.value else {
-                return Err("Unexpected value");
+            let ParsedTagValue::AttributeList(ref attribute_list) = tag.value else {
+                return Err(ValidationError::UnexpectedValueType(
+                    ValidationErrorValueKind::AttributeList,
+                ));
             };
             let Some(ParsedAttributeValue::DecimalInteger(answer)) =
                 attribute_list.get("MEANING-OF-LIFE")
             else {
-                return Err("Missing MEANING-OF-LIFE attribute");
+                return Err(ValidationError::MissingRequiredAttribute("MEANING-OF-LIFE"));
             };
             let Some(ParsedAttributeValue::QuotedString(question)) = attribute_list.get("QUESTION")
             else {
-                return Err("Missing QUESTION attribute");
+                return Err(ValidationError::MissingRequiredAttribute("QUESTION"));
             };
             Ok(Self {
                 answer: *answer,

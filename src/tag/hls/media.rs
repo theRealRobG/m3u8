@@ -1,7 +1,10 @@
-use crate::tag::{
-    hls::TagInner,
-    known::ParsedTag,
-    value::{ParsedAttributeValue, ParsedTagValue},
+use crate::{
+    error::{ValidationError, ValidationErrorValueKind},
+    tag::{
+        hls::TagInner,
+        known::ParsedTag,
+        value::{ParsedAttributeValue, ParsedTagValue},
+    },
 };
 use std::{borrow::Cow, collections::HashMap};
 
@@ -49,22 +52,24 @@ impl<'a> PartialEq for Media<'a> {
 }
 
 impl<'a> TryFrom<ParsedTag<'a>> for Media<'a> {
-    type Error = &'static str;
+    type Error = ValidationError;
 
     fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
         let ParsedTagValue::AttributeList(attribute_list) = tag.value else {
-            return Err(super::ValidationError::unexpected_value_type());
+            return Err(super::ValidationError::UnexpectedValueType(
+                ValidationErrorValueKind::from(&tag.value),
+            ));
         };
         let Some(ParsedAttributeValue::UnquotedString(media_type)) = attribute_list.get(TYPE)
         else {
-            return Err(super::ValidationError::missing_required_attribute());
+            return Err(super::ValidationError::MissingRequiredAttribute(TYPE));
         };
         let Some(ParsedAttributeValue::QuotedString(group_id)) = attribute_list.get(GROUP_ID)
         else {
-            return Err(super::ValidationError::missing_required_attribute());
+            return Err(super::ValidationError::MissingRequiredAttribute(GROUP_ID));
         };
         let Some(ParsedAttributeValue::QuotedString(name)) = attribute_list.get(NAME) else {
-            return Err(super::ValidationError::missing_required_attribute());
+            return Err(super::ValidationError::MissingRequiredAttribute(NAME));
         };
         Ok(Self {
             media_type: Cow::Borrowed(media_type),

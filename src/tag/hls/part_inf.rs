@@ -1,7 +1,10 @@
-use crate::tag::{
-    hls::TagInner,
-    known::ParsedTag,
-    value::{ParsedAttributeValue, ParsedTagValue},
+use crate::{
+    error::{ValidationError, ValidationErrorValueKind},
+    tag::{
+        hls::TagInner,
+        known::ParsedTag,
+        value::{ParsedAttributeValue, ParsedTagValue},
+    },
 };
 use std::borrow::Cow;
 
@@ -20,17 +23,21 @@ impl<'a> PartialEq for PartInf<'a> {
 }
 
 impl<'a> TryFrom<ParsedTag<'a>> for PartInf<'a> {
-    type Error = &'static str;
+    type Error = ValidationError;
 
     fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
         let ParsedTagValue::AttributeList(attribute_list) = tag.value else {
-            return Err(super::ValidationError::unexpected_value_type());
+            return Err(super::ValidationError::UnexpectedValueType(
+                ValidationErrorValueKind::from(&tag.value),
+            ));
         };
         let Some(Some(part_target)) = attribute_list
             .get(PART_TARGET)
             .map(ParsedAttributeValue::as_option_f64)
         else {
-            return Err(super::ValidationError::missing_required_attribute());
+            return Err(super::ValidationError::MissingRequiredAttribute(
+                PART_TARGET,
+            ));
         };
         Ok(Self {
             part_target,

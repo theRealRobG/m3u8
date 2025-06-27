@@ -1,5 +1,6 @@
 use crate::{
     config::ParsingOptions,
+    error::{SyntaxError, ValidationError},
     tag::{
         self, hls,
         known::{self, IsKnownName, NoCustomTag, ParsedTag, TagInformation},
@@ -13,7 +14,7 @@ use std::{cmp::PartialEq, fmt::Debug};
 #[allow(clippy::large_enum_variant)] // See comment on crate::tag::known::Tag.
 pub enum HlsLine<'a, CustomTag = NoCustomTag>
 where
-    CustomTag: TryFrom<ParsedTag<'a>, Error = &'static str>
+    CustomTag: TryFrom<ParsedTag<'a>, Error = ValidationError>
         + IsKnownName
         + TagInformation
         + Debug
@@ -28,7 +29,7 @@ where
 
 impl<'a, CustomTag> From<hls::Tag<'a>> for HlsLine<'a, CustomTag>
 where
-    CustomTag: TryFrom<ParsedTag<'a>, Error = &'static str>
+    CustomTag: TryFrom<ParsedTag<'a>, Error = ValidationError>
         + IsKnownName
         + TagInformation
         + Debug
@@ -41,7 +42,7 @@ where
 
 impl<'a, CustomTag> From<CustomTag> for HlsLine<'a, CustomTag>
 where
-    CustomTag: TryFrom<ParsedTag<'a>, Error = &'static str>
+    CustomTag: TryFrom<ParsedTag<'a>, Error = ValidationError>
         + IsKnownName
         + TagInformation
         + Debug
@@ -54,7 +55,7 @@ where
 
 impl<'a, CustomTag> From<unknown::Tag<'a>> for HlsLine<'a, CustomTag>
 where
-    CustomTag: TryFrom<ParsedTag<'a>, Error = &'static str>
+    CustomTag: TryFrom<ParsedTag<'a>, Error = ValidationError>
         + IsKnownName
         + TagInformation
         + Debug
@@ -83,7 +84,7 @@ macro_rules! impl_line_from_tag {
     ($tag_mod_path:path, $tag_name:ident) => {
         impl<'a, CustomTag> From<$tag_mod_path> for HlsLine<'a, CustomTag>
         where
-            CustomTag: TryFrom<ParsedTag<'a>, Error = &'static str>
+            CustomTag: TryFrom<ParsedTag<'a>, Error = ValidationError>
                 + IsKnownName
                 + TagInformation
                 + Debug
@@ -152,16 +153,16 @@ where
 pub fn parse<'a>(
     input: &'a str,
     options: &ParsingOptions,
-) -> Result<ParsedLineSlice<'a, HlsLine<'a>>, &'static str> {
+) -> Result<ParsedLineSlice<'a, HlsLine<'a>>, SyntaxError> {
     parse_with_custom::<NoCustomTag>(input, options)
 }
 
 pub fn parse_with_custom<'a, 'b, CustomTag>(
     input: &'a str,
     options: &'b ParsingOptions,
-) -> Result<ParsedLineSlice<'a, HlsLine<'a, CustomTag>>, &'static str>
+) -> Result<ParsedLineSlice<'a, HlsLine<'a, CustomTag>>, SyntaxError>
 where
-    CustomTag: TryFrom<ParsedTag<'a>, Error = &'static str>
+    CustomTag: TryFrom<ParsedTag<'a>, Error = ValidationError>
         + IsKnownName
         + TagInformation
         + Debug
@@ -194,7 +195,7 @@ where
             };
             let original_input = input;
             let input = str_from(bytes.as_slice());
-            let tag = tag::unknown::parse_assuming_ext_taken(input, original_input)?;
+            let mut tag = tag::unknown::parse_assuming_ext_taken(input, original_input)?;
             if options.is_known_name(tag.parsed.name) || CustomTag::is_known_name(tag.parsed.name) {
                 let value_slice = match tag.parsed.value {
                     None => ParsedLineSlice {
@@ -208,10 +209,19 @@ where
                     value: value_slice.parsed,
                     original_input,
                 };
-                Ok(ParsedLineSlice {
-                    parsed: HlsLine::KnownTag(known::Tag::try_from(parsed_tag)?),
-                    remaining: tag.remaining,
-                })
+                match known::Tag::try_from(parsed_tag) {
+                    Ok(known_tag) => Ok(ParsedLineSlice {
+                        parsed: HlsLine::KnownTag(known_tag),
+                        remaining: tag.remaining,
+                    }),
+                    Err(e) => {
+                        tag.parsed.validation_error = Some(e);
+                        Ok(ParsedLineSlice {
+                            parsed: HlsLine::UnknownTag(tag.parsed),
+                            remaining: tag.remaining,
+                        })
+                    }
+                }
             } else {
                 Ok(ParsedLineSlice {
                     parsed: HlsLine::UnknownTag(tag.parsed),
@@ -240,6 +250,7 @@ mod tests {
     use super::*;
     use crate::{
         config::ParsingOptionsBuilder,
+        error::ValidationErrorValueKind,
         tag::{
             hls::{self, m3u::M3u, start::Start},
             value::{ParsedAttributeValue, ParsedTagValue},
@@ -290,25 +301,25 @@ mod tests {
             score: Option<f64>,
         }
         impl<'a> TryFrom<ParsedTag<'a>> for TestTag<'a> {
-            type Error = &'static str;
+            type Error = ValidationError;
 
             fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
-                match tag.value {
+                match &tag.value {
                     tag::value::ParsedTagValue::AttributeList(list) => {
                         let Some(tag::value::ParsedAttributeValue::UnquotedString(greeting_type)) =
                             list.get("TYPE")
                         else {
-                            return Err("Missing TYPE attriubte.");
+                            return Err(ValidationError::MissingRequiredAttribute("TYPE"));
                         };
                         let Some(tag::value::ParsedAttributeValue::QuotedString(message)) =
                             list.get("MESSAGE")
                         else {
-                            return Err("Missing MESSAGE attriubte.");
+                            return Err(ValidationError::MissingRequiredAttribute("MESSAGE"));
                         };
                         let Some(tag::value::ParsedAttributeValue::DecimalInteger(times)) =
                             list.get("TIMES")
                         else {
-                            return Err("Missing TIMES attriubte.");
+                            return Err(ValidationError::MissingRequiredAttribute("TIMES"));
                         };
                         let score = list
                             .get("SCORE")
@@ -321,7 +332,9 @@ mod tests {
                             score,
                         })
                     }
-                    _ => Err("Unexpected tag value."),
+                    v => Err(ValidationError::UnexpectedValueType(
+                        ValidationErrorValueKind::from(v),
+                    )),
                 }
             }
         }
@@ -379,6 +392,7 @@ mod tests {
                 name: "-X-START",
                 value: Some("TIME-OFFSET=-18"),
                 original_input: "#EXT-X-START:TIME-OFFSET=-18",
+                validation_error: None,
             })),
             parse(
                 "#EXT-X-START:TIME-OFFSET=-18",

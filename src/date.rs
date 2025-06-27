@@ -1,6 +1,9 @@
 use std::fmt::Display;
 
-use crate::{tag::value::ParsedTagValue, utils::parse_date_time_bytes};
+use crate::{
+    error::{DateTimeSyntaxError, GenericSyntaxError},
+    utils::parse_date_time_bytes,
+};
 
 #[macro_export]
 macro_rules! date_time {
@@ -93,23 +96,18 @@ impl From<DateTimeTimezoneOffset> for String {
     }
 }
 
-pub fn parse(input: &str) -> Result<DateTime, &'static str> {
+pub fn parse(input: &str) -> Result<DateTime, DateTimeSyntaxError> {
     let mut bytes = input.as_bytes().iter();
     let break_byte = loop {
         let Some(byte) = bytes.next() else {
-            return Err("Unexpected end of line while parsing DateTime");
+            return Err(GenericSyntaxError::UnexpectedEndOfLine)?;
         };
         match byte {
             b't' | b':' => break byte,
             _ => (),
         }
     };
-    let ParsedTagValue::DateTimeMsec(date_time) =
-        parse_date_time_bytes(input, bytes, *break_byte)?.parsed
-    else {
-        return Err("Invalid DateTime");
-    };
-    Ok(date_time)
+    Ok(parse_date_time_bytes(input, bytes, *break_byte)?.parsed)
 }
 
 #[cfg(test)]

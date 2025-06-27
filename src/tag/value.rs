@@ -1,5 +1,6 @@
 use crate::{
     date::DateTime,
+    error::{GenericSyntaxError, TagValueSyntaxError},
     line::ParsedLineSlice,
     utils::{
         parse_date_time_bytes, str_from, take_until_end_of_bytes, validate_carriage_return_bytes,
@@ -28,6 +29,48 @@ pub enum ParsedTagValue<'a> {
     DateTimeMsec(DateTime),
     AttributeList(HashMap<&'a str, ParsedAttributeValue<'a>>),
 }
+
+// pub struct ExampleSemiParsedData<'a> {
+//     pub name: &'a str,
+//     pub value: ExampleSemiParsedDataValue<'a>,
+//     pub(crate) original_source_data: &'a [u8],
+// }
+
+// pub enum ExampleSemiParsedDataValue<'a> {
+//     ValueWeNeed(HashMap<&'a str, &'a str>),
+//     OtherValue,
+// }
+
+// pub struct ExampleParsedData<'a> {
+//     required_prop: &'a str,
+//     source_value: HashMap<&'a str, &'a str>,
+// }
+// impl<'a> ExampleParsedData<'a> {
+//     pub fn required_prop(&self) -> &str {
+//         self.required_prop
+//     }
+
+//     pub fn optional_prop(&self) -> Option<&str> {
+//         self.source_value.get("optional_prop").map(|v| *v)
+//     }
+// }
+
+// pub struct ValidationError<'a> {
+//     pub semi_parsed_data: ExampleSemiParsedData<'a>,
+// }
+
+// pub enum ValidationErrorKind {
+//     UnexpectedValueType,
+//     MissingRequiredAttribute(&'static str),
+// }
+
+// impl<'a> TryFrom<ExampleSemiParsedData<'a>> for ExampleParsedData<'a> {
+//     type Error = &'static str;
+
+//     fn try_from(value: ExampleSemiParsedData<'a>) -> Result<Self, Self::Error> {
+//         todo!()
+//     }
+// }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum HlsPlaylistType {
@@ -149,7 +192,7 @@ impl Display for DecimalResolution {
     }
 }
 
-pub fn new_parse(input: &str) -> Result<ParsedLineSlice<ParsedTagValue>, &'static str> {
+pub fn new_parse(input: &str) -> Result<ParsedLineSlice<ParsedTagValue>, TagValueSyntaxError> {
     let mut bytes = input.as_bytes().iter();
     let mut count = 0usize;
     // ParsedTagValue {
@@ -181,7 +224,7 @@ pub fn new_parse(input: &str) -> Result<ParsedLineSlice<ParsedTagValue>, &'stati
             }
             b'.' => {
                 if !parsing_float {
-                    return Err("Unexpected character in tag value");
+                    return Err(TagValueSyntaxError::UnexpectedCharacter(b'.'));
                 }
                 parsing_empty = false;
                 parsing_enum = false;
@@ -193,7 +236,7 @@ pub fn new_parse(input: &str) -> Result<ParsedLineSlice<ParsedTagValue>, &'stati
             }
             b',' => {
                 if !parsing_float {
-                    return Err("Unexpected character in tag value");
+                    return Err(TagValueSyntaxError::UnexpectedCharacter(b','));
                 }
                 parsing_empty = false;
                 parsing_enum = false;
@@ -203,7 +246,7 @@ pub fn new_parse(input: &str) -> Result<ParsedLineSlice<ParsedTagValue>, &'stati
             }
             b'@' => {
                 if !parsing_range {
-                    return Err("Unexpected character in tag value");
+                    return Err(TagValueSyntaxError::UnexpectedCharacter(b'@'));
                 }
                 parsing_empty = false;
                 parsing_enum = false;
@@ -232,7 +275,7 @@ pub fn new_parse(input: &str) -> Result<ParsedLineSlice<ParsedTagValue>, &'stati
             }
             b't' | b':' => {
                 if !parsing_date {
-                    return Err("Unexpected character in tag value");
+                    return Err(TagValueSyntaxError::UnexpectedCharacter(*byte));
                 }
                 parsing_empty = false;
                 parsing_enum = false;
@@ -242,7 +285,7 @@ pub fn new_parse(input: &str) -> Result<ParsedLineSlice<ParsedTagValue>, &'stati
             }
             b'A'..=b'Z' => {
                 if !parsing_attr_name {
-                    return Err("Unexpected character in tag value");
+                    return Err(TagValueSyntaxError::UnexpectedCharacter(*byte));
                 }
                 parsing_empty = false;
                 parsing_enum = false;
@@ -254,7 +297,7 @@ pub fn new_parse(input: &str) -> Result<ParsedLineSlice<ParsedTagValue>, &'stati
             }
             b'=' => {
                 if !parsing_attr_name {
-                    return Err("Unexpected character in tag value");
+                    return Err(TagValueSyntaxError::UnexpectedCharacter(b'='));
                 }
                 parsing_empty = false;
                 parsing_enum = false;
@@ -262,7 +305,7 @@ pub fn new_parse(input: &str) -> Result<ParsedLineSlice<ParsedTagValue>, &'stati
                 parsing_float = false;
                 break Some(byte);
             }
-            _ => return Err("Unexpected character in tag value"),
+            _ => return Err(TagValueSyntaxError::UnexpectedCharacter(*byte)),
         }
     };
 
@@ -276,7 +319,7 @@ pub fn new_parse(input: &str) -> Result<ParsedLineSlice<ParsedTagValue>, &'stati
         Some(b',') => {
             let n = input[..(count - 1)]
                 .parse::<f64>()
-                .map_err(|_| "Could not parse decimal float in tag value")?;
+                .map_err(|e| TagValueSyntaxError::InvalidFloatForDecimalFloatingPointValue(e))?;
             let title = take_until_end_of_bytes(bytes)?;
             return Ok(ParsedLineSlice {
                 parsed: ParsedTagValue::DecimalFloatingPointWithOptionalTitle(n, title.parsed),
@@ -287,18 +330,25 @@ pub fn new_parse(input: &str) -> Result<ParsedLineSlice<ParsedTagValue>, &'stati
             let rest = take_until_end_of_bytes(bytes)?;
             let length = input[..(count - 1)]
                 .parse::<u64>()
-                .map_err(|_| "Could not parse decimal integer in tag value")?;
+                .map_err(|e| TagValueSyntaxError::InvalidLengthForDecimalIntegerRange(e))?;
             let offset = rest
                 .parsed
                 .parse::<u64>()
-                .map_err(|_| "Could not parse decimal integer in tag value")?;
+                .map_err(|e| TagValueSyntaxError::InvalidOffsetForDecimalIntegerRange(e))?;
             return Ok(ParsedLineSlice {
                 parsed: ParsedTagValue::DecimalIntegerRange(length, offset),
                 remaining: rest.remaining,
             });
         }
         Some(b't') | Some(b':') => {
-            return parse_date_time_bytes(input, bytes, *break_byte.unwrap());
+            let ParsedLineSlice {
+                parsed: date_time,
+                remaining,
+            } = parse_date_time_bytes(input, bytes, *break_byte.unwrap())?;
+            return Ok(ParsedLineSlice {
+                parsed: ParsedTagValue::DateTimeMsec(date_time),
+                remaining,
+            });
         }
         Some(b'=') => {
             let mut attribute_list = HashMap::new();
@@ -321,7 +371,7 @@ pub fn new_parse(input: &str) -> Result<ParsedLineSlice<ParsedTagValue>, &'stati
                 }
             }
         }
-        _ => return Err("Unexpected character in tag value"),
+        Some(break_byte) => return Err(TagValueSyntaxError::UnexpectedCharacter(*break_byte)),
     }
     .map(str_from);
     let end_index = if remaining.is_some() {
@@ -338,7 +388,7 @@ pub fn new_parse(input: &str) -> Result<ParsedLineSlice<ParsedTagValue>, &'stati
     } else if parsing_int {
         let n = input[..end_index]
             .parse::<u64>()
-            .map_err(|_| "Could not parse decimal integer in tag value")?;
+            .map_err(|e| TagValueSyntaxError::InvalidDecimalInteger(e))?;
         Ok(ParsedLineSlice {
             parsed: ParsedTagValue::DecimalInteger(n),
             remaining,
@@ -346,7 +396,7 @@ pub fn new_parse(input: &str) -> Result<ParsedLineSlice<ParsedTagValue>, &'stati
     } else if parsing_float {
         let n = input[..end_index]
             .parse::<f64>()
-            .map_err(|_| "Could not parse decimal float in tag value")?;
+            .map_err(|e| TagValueSyntaxError::InvalidFloatForDecimalFloatingPointValue(e))?;
         Ok(ParsedLineSlice {
             parsed: ParsedTagValue::DecimalFloatingPointWithOptionalTitle(n, ""),
             remaining,
@@ -354,43 +404,51 @@ pub fn new_parse(input: &str) -> Result<ParsedLineSlice<ParsedTagValue>, &'stati
     } else if parsing_enum {
         match end_index {
             3 => {
-                if &input[..3] == "VOD" {
+                let value = &input[..3];
+                if value == "VOD" {
                     Ok(ParsedLineSlice {
                         parsed: ParsedTagValue::TypeEnum(HlsPlaylistType::Vod),
                         remaining,
                     })
                 } else {
-                    Err("Invalid tag value")
+                    Err(TagValueSyntaxError::InvalidTypeEnumValue(value.to_string()))
                 }
             }
             5 => {
-                if &input[..5] == "EVENT" {
+                let value = &input[..5];
+                if value == "EVENT" {
                     Ok(ParsedLineSlice {
                         parsed: ParsedTagValue::TypeEnum(HlsPlaylistType::Event),
                         remaining,
                     })
                 } else {
-                    Err("Invalid tag value")
+                    Err(TagValueSyntaxError::InvalidTypeEnumValue(value.to_string()))
                 }
             }
-            _ => Err("Invalid tag value"),
+            _ => Err(TagValueSyntaxError::InvalidTypeEnumValue(
+                input[..end_index].to_string(),
+            )),
         }
     } else {
-        Err("Invalid tag value")
+        Err(GenericSyntaxError::UnexpectedEndOfLine)?
     }
 }
 
-fn handle_attribute_name<'a>(bytes: &mut Iter<'a, u8>) -> Result<&'a str, &'static str> {
+fn handle_attribute_name<'a>(bytes: &mut Iter<'a, u8>) -> Result<&'a str, TagValueSyntaxError> {
     let input = str_from(bytes.as_slice());
     let mut index = 0usize;
     loop {
         let Some(char) = bytes.next() else {
-            return Err("Unexpected end of line while reading attribute name");
+            return Err(TagValueSyntaxError::UnexpectedEndOfLineWhileReadingAttributeName);
         };
         match char {
             b'=' => break,
             b'A'..=b'Z' | b'0'..=b'9' | b'-' => (),
-            _ => return Err("Unexpected char while reading attribute name"),
+            _ => {
+                return Err(TagValueSyntaxError::UnexpectedCharacterInAttributeName(
+                    *char,
+                ));
+            }
         }
         index += 1;
     }
@@ -399,11 +457,11 @@ fn handle_attribute_name<'a>(bytes: &mut Iter<'a, u8>) -> Result<&'a str, &'stat
 
 fn handle_attribute_value<'a>(
     bytes: &mut Iter<'a, u8>,
-) -> Result<(bool, ParsedLineSlice<'a, ParsedAttributeValue<'a>>), &'static str> {
+) -> Result<(bool, ParsedLineSlice<'a, ParsedAttributeValue<'a>>), TagValueSyntaxError> {
     let input = str_from(bytes.as_slice());
     match bytes.next() {
         Some(b'"') => handle_quoted_string_attribute_value(input, bytes),
-        None | Some(b'\n') | Some(b'\r') => Err("Unexpected empty attribute value"),
+        None | Some(b'\n') | Some(b'\r') => Err(TagValueSyntaxError::UnexpectedEmptyAttributeValue),
         Some(byte) => handle_not_quoted_string_attribute_value(input, bytes, byte),
     }
 }
@@ -411,14 +469,14 @@ fn handle_attribute_value<'a>(
 fn handle_quoted_string_attribute_value<'a>(
     input: &'a str,
     bytes: &mut Iter<'a, u8>,
-) -> Result<(bool, ParsedLineSlice<'a, ParsedAttributeValue<'a>>), &'static str> {
+) -> Result<(bool, ParsedLineSlice<'a, ParsedAttributeValue<'a>>), TagValueSyntaxError> {
     let mut index = 0usize;
     loop {
         index += 1;
         match bytes.next() {
             Some(b'"') => break,
             None | Some(b'\n') | Some(b'\r') => {
-                return Err("Unexpected end of line during quoted string value");
+                return Err(TagValueSyntaxError::UnexpectedEndOfLineWithinQuotedString);
             }
             _ => (),
         }
@@ -432,7 +490,11 @@ fn handle_quoted_string_attribute_value<'a>(
             validate_carriage_return_bytes(bytes)?;
             (false, Some(str_from(bytes.as_slice())))
         }
-        _ => return Err("Unexpected characters after closing quote in attribute value"),
+        Some(b) => {
+            return Err(TagValueSyntaxError::UnexpectedCharacterAfterQuotedString(
+                *b,
+            ));
+        }
     };
     Ok((
         has_more,
@@ -447,7 +509,7 @@ fn handle_not_quoted_string_attribute_value<'a>(
     input: &'a str,
     bytes: &mut Iter<'a, u8>,
     first_byte: &u8,
-) -> Result<(bool, ParsedLineSlice<'a, ParsedAttributeValue<'a>>), &'static str> {
+) -> Result<(bool, ParsedLineSlice<'a, ParsedAttributeValue<'a>>), TagValueSyntaxError> {
     // ParsedAttributeValue {
     //     DecimalInteger             - b'0'..=b'9'
     //     SignedDecimalFloatingPoint - b'0'..=b'9' | b'-' | b'.'
@@ -468,7 +530,9 @@ fn handle_not_quoted_string_attribute_value<'a>(
             b'0'..=b'9' => (),
             b'-' | b'.' => parsing_int = false,
             b',' | b'\n' | b'\r' => break Some(byte),
-            b if b.is_ascii_whitespace() => return Err("Unexpected whitespace in attribute value"),
+            b if b.is_ascii_whitespace() => {
+                return Err(TagValueSyntaxError::UnexpectedWhitespaceInAttributeValue);
+            }
             _ => {
                 parsing_int = false;
                 parsing_float = false;
@@ -488,7 +552,7 @@ fn handle_not_quoted_string_attribute_value<'a>(
     if parsing_int {
         let n = input[..index]
             .parse::<u64>()
-            .map_err(|_| "Unable to parse int in attribute value")?;
+            .map_err(|e| TagValueSyntaxError::InvalidIntegerInAttributeValue(e))?;
         Ok((
             has_more,
             ParsedLineSlice {
@@ -499,7 +563,7 @@ fn handle_not_quoted_string_attribute_value<'a>(
     } else if parsing_float {
         let n = input[..index]
             .parse::<f64>()
-            .map_err(|_| "Unable to parse float in attribute value")?;
+            .map_err(|e| TagValueSyntaxError::InvalidFloatInAttributeValue(e))?;
         Ok((
             has_more,
             ParsedLineSlice {
