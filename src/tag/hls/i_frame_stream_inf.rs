@@ -220,14 +220,11 @@ impl<'a> IFrameStreamInf<'a> {
         } else {
             match self.attribute_list.get(RESOLUTION) {
                 Some(ParsedAttributeValue::UnquotedString(r)) => {
-                    let mut split = r.split('x');
+                    let mut split = r.splitn(2, 'x');
                     let Some(Ok(width)) = split.next().map(str::parse::<u64>) else {
                         return None;
                     };
                     let Some(Ok(height)) = split.next().map(str::parse::<u64>) else {
-                        return None;
-                    };
-                    if split.next().is_some() {
                         return None;
                     };
                     Some(DecimalResolution { width, height })

@@ -89,16 +89,13 @@ impl<'a> Map<'a> {
         } else {
             match self.attribute_list.get(BYTERANGE) {
                 Some(ParsedAttributeValue::QuotedString(byterange_str)) => {
-                    let mut parts = byterange_str.split('@');
+                    let mut parts = byterange_str.splitn(2, '@');
                     let Some(Ok(length)) = parts.next().map(str::parse::<u64>) else {
                         return None;
                     };
                     let Some(Ok(offset)) = parts.next().map(str::parse::<u64>) else {
                         return None;
                     };
-                    if parts.next().is_some() {
-                        return None;
-                    }
                     Some(MapByterange { length, offset })
                 }
                 _ => None,
