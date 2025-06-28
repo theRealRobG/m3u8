@@ -1,5 +1,303 @@
 # M3U8
 
+## Basic usage
+
+`m3u8` provides a `Reader` that can be used to extract HLS lines from an input string slice. An
+example is provided below:
+```rust
+use m3u8::{
+    config::ParsingOptionsBuilder,
+    line::HlsLine,
+    tag::hls::{
+        endlist::Endlist, inf::Inf, m3u::M3u, targetduration::Targetduration, version::Version,
+    },
+    Reader,
+};
+
+const EXAMPLE_MANIFEST: &str = r#"#EXTM3U
+#EXT-X-TARGETDURATION:10
+#EXT-X-VERSION:3
+#EXTINF:9.009,
+first.ts
+#EXTINF:9.009,
+second.ts
+#EXTINF:3.003,
+third.ts
+#EXT-X-ENDLIST
+"#;
+
+let mut reader = Reader::from_str(
+    EXAMPLE_MANIFEST,
+    ParsingOptionsBuilder::new()
+        .with_parsing_for_all_tags()
+        .build(),
+);
+assert_eq!(reader.read_line(), Ok(Some(HlsLine::from(M3u))));
+assert_eq!(reader.read_line(), Ok(Some(HlsLine::from(Targetduration::new(10)))));
+assert_eq!(reader.read_line(), Ok(Some(HlsLine::from(Version::new(3)))));
+assert_eq!(reader.read_line(), Ok(Some(HlsLine::from(Inf::new(9.009, String::new())))));
+assert_eq!(reader.read_line(), Ok(Some(HlsLine::Uri("first.ts"))));
+assert_eq!(reader.read_line(), Ok(Some(HlsLine::from(Inf::new(9.009, String::new())))));
+assert_eq!(reader.read_line(), Ok(Some(HlsLine::Uri("second.ts"))));
+assert_eq!(reader.read_line(), Ok(Some(HlsLine::from(Inf::new(3.003, String::new())))));
+assert_eq!(reader.read_line(), Ok(Some(HlsLine::Uri("third.ts"))));
+assert_eq!(reader.read_line(), Ok(Some(HlsLine::from(Endlist))));
+assert_eq!(reader.read_line(), Ok(None));
+```
+
+The above example demonstrates that a `HlsLine` is an with several potential cases. As per section
+[4.1. Definition of a Playlist](https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.1):
+> Each line is a URI, is blank, or starts with the character '#'. Lines that start with the
+> character '#' are either comments or tags. Tags begin with #EXT.
+
+The `HlsLine` in `m3u8` is defined as such:
+```rust
+use m3u8::{
+    error::ValidationError,
+    tag::{
+        known::{self, IsKnownName, NoCustomTag, ParsedTag, TagInformation},
+        unknown,
+    },
+};
+use std::fmt::Debug;
+
+#[derive(Debug, PartialEq)]
+pub enum HlsLine<'a, CustomTag = NoCustomTag>
+where
+    CustomTag: TryFrom<ParsedTag<'a>, Error = ValidationError>
+        + IsKnownName
+        + TagInformation
+        + Debug
+        + PartialEq,
+{
+    KnownTag(known::Tag<'a, CustomTag>),
+    UnknownTag(unknown::Tag<'a>),
+    Comment(&'a str),
+    Uri(&'a str),
+    Blank,
+}
+```
+
+There are several things going on here so let's step through each.
+
+### Blank, Comment, and Uri
+
+These are fairly self expanatory. `HlsLine::Blank` represents a blank line that we encountered.
+These could've been ignored, but for completeness, we leave them in.
+
+Comments are lines that begin with `#` and are not followed by `EXT`. The slice refers to all
+characters after the `#` up until (and not including) the new line (either `\r\n` or just `\n`). For
+example, the line `# Hello!` would be parsed as `HlsLine::Comment(" Hello!")` (note the leading
+space).
+
+Uris are basically everything else. There is no validation during parsing that a URI line is a valid
+URI. We just consume everything up until (and not including) the new line.
+
+### UnknownTag
+
+HLS defines 32 known tags that can occur in the playlist. Unknown tags are permitted (the
+specification advises that they *SHOULD* be ignored). The presence of unknown tags are captured
+within the `HlsLine::UnknownTag` case. The name of the tag is parsed and the value portion is split
+out too, but no details other than the slice region of the value is defined. It is possible to set
+the parsing options to ignore even known HLS tags, for example to improve parsing performance where
+needed, and this is explained below.
+
+### KnownTag
+
+Known tags are broken out into two sub-cases:
+* `Hls(hls::Tag<'a>)`
+* `Custom(CustomTag)`
+
+The `Hls` case defines all 32 known tags as per the HLS specification. These are strongly typed
+structs providing access to all defined values.
+
+The `Custom` case allows for the library user to define their own custom known tag. Custom tag is
+generic but must implement `TryFrom<ParsedTag<'a>, Error = ValidationError>` (to convert from parsed
+information to the concrete known tag), `IsKnownName` (so that the parser knows if it should
+consider calling `try_from` for the parsed tag), `TagInformation` (which is used with the `Writer`),
+and `Debug` and `PartialEq` since `known::Tag` implements these.
+
+We can demonstrate the usage of `CustomTag` by implementing it for the custom image media playlist
+definition found on the Roku developer website here:
+https://developer.roku.com/docs/developer-program/media-playback/trick-mode/hls-and-dash.md
+```rust
+use m3u8::{
+    config::ParsingOptions,
+    error::{ValidationError, ValidationErrorValueKind},
+    line::HlsLine,
+    tag::{
+        hls::inf::Inf,
+        known::{IsKnownName, ParsedTag, TagInformation},
+        value::{ParsedAttributeValue, ParsedTagValue},
+    },
+    Reader,
+};
+use std::{collections::HashMap, marker::PhantomData};
+
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub struct Resolution {
+    pub width: u64,
+    pub height: u64,
+}
+
+// To support multiple custom tags the preferred strategy is to encapsulate each within a single
+// enum. For this example I am only demonstrating an implementation for the media playlist tags
+// defined in the Roku developer docs.
+#[derive(Debug, PartialEq)]
+pub enum CustomImageTag<'a> {
+    ImagesOnly,
+    Tiles(Tiles<'a>),
+}
+// Here we specialize into our own strongly typed structure what m3u8 was able to parse from the
+// input data.
+impl<'a> TryFrom<ParsedTag<'a>> for CustomImageTag<'a> {
+    type Error = ValidationError;
+
+    fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
+        match tag.name {
+            "-X-IMAGES-ONLY" => Ok(CustomImageTag::ImagesOnly),
+            "-X-TILES" => Ok(CustomImageTag::Tiles(Tiles::try_from(tag)?)),
+            _ => Err(ValidationError::UnexpectedTagName),
+        }
+    }
+}
+// This is used to know when m3u8 parsing should consider parsing the information as a known tag.
+impl IsKnownName for CustomImageTag<'_> {
+    fn is_known_name(name: &str) -> bool {
+        match name {
+            "-X-IMAGES-ONLY" | "-X-TILES" => true,
+            _ => false,
+        }
+    }
+}
+// This is used by the m3u8::Writer to handle writing of custom tag implementations.
+impl<'a> TagInformation for CustomImageTag<'a> {
+    fn name(&self) -> &str {
+        match self {
+            CustomImageTag::ImagesOnly => "-X-IMAGES-ONLY",
+            CustomImageTag::Tiles(_) => "-X-TILES",
+        }
+    }
+
+    fn value(&self) -> ParsedTagValue {
+        match self {
+            CustomImageTag::ImagesOnly => ParsedTagValue::Empty,
+            CustomImageTag::Tiles(tiles) => ParsedTagValue::AttributeList(HashMap::from([
+                (
+                    "RESOLUTION",
+                    ParsedAttributeValue::UnquotedString(tiles.original_resolution_str),
+                ),
+                (
+                    "LAYOUT",
+                    ParsedAttributeValue::UnquotedString(tiles.original_layout_str),
+                ),
+                (
+                    "DURATION",
+                    ParsedAttributeValue::SignedDecimalFloatingPoint(tiles.duration),
+                ),
+            ])),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct Tiles<'a> {
+    pub resolution: Resolution,
+    pub layout: Resolution,
+    pub duration: f64,
+    // The original slices are needed for when we convert back to ParsedTagValue in the
+    // TagInformation impl.
+    original_resolution_str: &'a str,
+    original_layout_str: &'a str,
+}
+impl<'a> TryFrom<ParsedTag<'a>> for Tiles<'a> {
+    type Error = ValidationError;
+
+    fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
+        let ParsedTagValue::AttributeList(attribute_list) = tag.value else {
+            return Err(ValidationError::UnexpectedValueType(
+                ValidationErrorValueKind::from(&tag.value),
+            ));
+        };
+        let (resolution, r_str) = try_resolution_from("RESOLUTION", &attribute_list)?;
+        let (layout, l_str) = try_resolution_from("LAYOUT", &attribute_list)?;
+        // Note, `m3u8` is not able to distinguish what *should* be an "integer" vs what *should* be
+        // a float without decimal precision, and so a number without decimals will be parsed as the
+        // DecimalInteger case. To help extract float values a helper method is provided on
+        // ParsedAttributeValue as demonstrated below:
+        let Some(duration) = attribute_list
+            .get("DURATION")
+            .map(ParsedAttributeValue::as_option_f64)
+            .flatten()
+        else {
+            return Err(ValidationError::MissingRequiredAttribute("DURATION"));
+        };
+        Ok(Self {
+            resolution,
+            layout,
+            duration,
+            original_resolution_str: r_str,
+            original_layout_str: l_str,
+        })
+    }
+}
+fn try_resolution_from<'a, 'b>(
+    attr_name: &'static str,
+    attribute_list: &'a HashMap<&'b str, ParsedAttributeValue<'b>>,
+) -> Result<(Resolution, &'b str), ValidationError> {
+    let Some(ParsedAttributeValue::UnquotedString(s)) = attribute_list.get(attr_name) else {
+        return Err(ValidationError::MissingRequiredAttribute(attr_name));
+    };
+    let mut split = s.splitn(2, 'x');
+    let Some(Ok(width)) = split.next().map(str::parse::<u64>) else {
+        return Err(ValidationError::MissingRequiredAttribute(attr_name));
+    };
+    let Some(Ok(height)) = split.next().map(str::parse::<u64>) else {
+        return Err(ValidationError::MissingRequiredAttribute(attr_name));
+    };
+    Ok((Resolution { width, height }, s))
+}
+
+// Below we can demonstrate that the correct parsing occurs.
+const EXAMPLE_LINES: &str = r#"#EXT-X-IMAGES-ONLY
+#EXT-X-TILES:RESOLUTION=320x180,LAYOUT=5x4,DURATION=3.003
+#EXTINF:60.06,Indicates 20 320x180 images (laid out 5x4) each to be displayed for 3.003s
+image.1.jpeg"#;
+
+// The `from_str_with_custom_tag_parsing` method allows you to specify the custom tag type via
+// providing the type in PhantomData as the third parameter.
+let mut reader = Reader::from_str_with_custom_tag_parsing(
+    EXAMPLE_LINES,
+    ParsingOptions::default(),
+    PhantomData::<CustomImageTag>,
+);
+assert_eq!(reader.read_line(), Ok(Some(HlsLine::from(CustomImageTag::ImagesOnly))));
+assert_eq!(
+    reader.read_line(),
+    Ok(Some(HlsLine::from(CustomImageTag::Tiles(Tiles {
+        resolution: Resolution {
+            width: 320,
+            height: 180
+        },
+        layout: Resolution {
+            width: 5,
+            height: 4
+        },
+        duration: 3.003,
+        original_resolution_str: "320x180",
+        original_layout_str: "5x4"
+    }))))
+);
+assert_eq!(
+    reader.read_line(),
+    Ok(Some(HlsLine::from(Inf::new(
+        60.06,
+        String::from("Indicates 20 320x180 images (laid out 5x4) each to be displayed for 3.003s")
+    ))))
+);
+assert_eq!(reader.read_line(), Ok(Some(HlsLine::Uri("image.1.jpeg"))));
+```
+
 ## Configuring known tags for parsing
 
 The parsing function allows the user to specify a subset of the known HLS tags that they would like
@@ -26,23 +324,22 @@ ParsingOptionsBuilder::new()
 It may be quite desirable to avoid parsing of tags that are not needed as this can add quite
 considerable performance overhead. Unknown tags make no attempt to parse or validate the value
 portion of the tag (the part after `:`) and just return the name of the tag along with the `&str`
-for the rest of the line. Running locally as of commit `c28f2e776f03a446af367a153dcb2d95764186cc`
+for the rest of the line. Running locally as of commit `ee6e14e8e78e5adfa4414bfd7b63ce4c983307a0`
 the following benchmark shows that when parsing a large playlist, including all tags in the parse is
-about 4x slower than including no tags in the parse (`2.0689 ms` vs `495.53 µs` == `0.49553 ms`).
+about 2.5x slower than including no tags in the parse (`2.3491 ms` vs `920.32 µs` == `0.92032 ms`).
 ```sh
-Benchmarking Bench large playlist with full parsing on all known tags: Collecting 100 samples in estimated 5.1923 s (2500 iterations
 Bench large playlist with full parsing on all known tags
-                        time:   [2.0669 ms 2.0689 ms 2.0719 ms]
-Found 9 outliers among 100 measurements (9.00%)
-  1 (1.00%) high mild
-  8 (8.00%) high severe
-
-Benchmarking Bench large playlist with no known tags being fully parsed: Collecting 100 samples in estimated 5.0151 s (10k iteration
-Bench large playlist with no known tags being fully parsed
-                        time:   [494.48 µs 495.53 µs 496.72 µs]
-Found 3 outliers among 100 measurements (3.00%)
-  1 (1.00%) high mild
+                        time:   [2.3486 ms 2.3491 ms 2.3497 ms]
+Found 5 outliers among 100 measurements (5.00%)
+  3 (3.00%) high mild
   2 (2.00%) high severe
+
+Bench large playlist with no known tags being fully parsed
+                        time:   [920.11 µs 920.32 µs 920.59 µs]
+Found 22 outliers among 100 measurements (22.00%)
+  10 (10.00%) low severe
+  5 (5.00%) low mild
+  7 (7.00%) high severe
 ```
 
 Some basic validation can still be done on `m3u8::tag::unknown::Tag`. For example, the name can be
@@ -73,6 +370,68 @@ If there is a specific scenario where more information on a value is desired (ot
 `&str`), then the user can use the `m3u8::tag::value::parse` method directly on the unknown
 `tag.value`. To then get the full `m3u8::tag::hls::Tag` the user can pass the result
 into `Tag::try_from`.
+
+## Writing
+
+The library provides a `Writer` to write parsed tags back into data. For example, this can be used
+to parse a playlist, mutate the data, then write back the changed tags. Below is a toy example:
+```rust
+use m3u8::{
+    config::ParsingOptions,
+    line::HlsLine,
+    tag::{hls, known},
+    Reader, Writer,
+};
+use std::io;
+
+let input_lines = concat!(
+    "#EXTINF:4.00008,\n",
+    "fileSequence268.mp4\n",
+    "#EXTINF:4.00008,\n",
+    "fileSequence269.mp4\n",
+);
+let mut reader = Reader::from_str(input_lines, ParsingOptions::default());
+let mut writer = Writer::new(Vec::new());
+
+let mut added_hello = false;
+while let Ok(Some(line)) = reader.read_line() {
+    match line {
+        HlsLine::KnownTag(tag) => match tag {
+            known::Tag::Hls(tag) => match tag {
+                hls::Tag::Inf(mut inf) => {
+                    if added_hello {
+                        inf.set_title(String::from("World!"));
+                    } else {
+                        inf.set_title(String::from("Hello,"));
+                        added_hello = true;
+                    }
+                    writer.write_hls_tag(hls::Tag::Inf(inf)).unwrap()
+                }
+                tag => writer.write_hls_tag(tag).unwrap(),
+            },
+            known::Tag::Custom(tag) => writer.write_custom_tag(tag).unwrap(),
+        },
+        line => writer.write_line(line).unwrap(),
+    };
+}
+
+let expected_output_lines = concat!(
+    "#EXTINF:4.00008,Hello,\n",
+    "fileSequence268.mp4\n",
+    "#EXTINF:4.00008,World!\n",
+    "fileSequence269.mp4\n",
+);
+assert_eq!(
+    expected_output_lines,
+    String::from_utf8_lossy(&writer.into_inner())
+);
+```
+
+Internally, all the known HLS tags (within `m3u8::tag::hls`) implement mutability using
+`std::borrow::Cow`, and only construct new strings to represent the HLS line on mutation. This means
+that if no mutation occurs then there are no string allocations when reading `from_str` and none
+directly by `m3u8` during writing (no guarantees on what the implementation of `Write` used as input
+to the `Writer::new` does). This is with the aim of optimizing reading and writing performance.
 
 # HLS Specification
 
