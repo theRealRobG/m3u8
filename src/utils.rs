@@ -95,36 +95,34 @@ pub fn parse_date_time_bytes<'a>(
     let date_bytes = input.as_bytes();
     let date_fullyear = input[..4]
         .parse::<u32>()
-        .map_err(|e| DateTimeSyntaxError::InvalidYear(e))?;
+        .map_err(DateTimeSyntaxError::InvalidYear)?;
     match date_bytes.get(4) {
         Some(b'-') => (),
         b => {
             return Err(DateTimeSyntaxError::UnexpectedYearToMonthSeparator(
-                b.map(|b| *b),
+                b.copied(),
             ));
         }
     };
     let date_month = input[5..7]
         .parse::<u8>()
-        .map_err(|e| DateTimeSyntaxError::InvalidMonth(e))?;
+        .map_err(DateTimeSyntaxError::InvalidMonth)?;
     match date_bytes.get(7) {
         Some(b'-') => (),
         b => {
             return Err(DateTimeSyntaxError::UnexpectedMonthToDaySeparator(
-                b.map(|b| *b),
+                b.copied(),
             ));
         }
     };
     let date_mday = input[8..10]
         .parse::<u8>()
-        .map_err(|e| DateTimeSyntaxError::InvalidDay(e))?;
+        .map_err(DateTimeSyntaxError::InvalidDay)?;
     if break_byte == b't' {
         match date_bytes.get(10) {
             Some(b't') => (),
             b => {
-                return Err(DateTimeSyntaxError::UnexpectedDayHourSeparator(
-                    b.map(|b| *b),
-                ));
+                return Err(DateTimeSyntaxError::UnexpectedDayHourSeparator(b.copied()));
             }
         };
         bytes.next();
@@ -133,7 +131,7 @@ pub fn parse_date_time_bytes<'a>(
             Some(b':') => (),
             b => {
                 return Err(DateTimeSyntaxError::UnexpectedHourMinuteSeparator(
-                    b.map(|b| *b),
+                    b.copied(),
                 ));
             }
         };
@@ -141,29 +139,27 @@ pub fn parse_date_time_bytes<'a>(
         match date_bytes.get(10) {
             Some(b'T') => (),
             b => {
-                return Err(DateTimeSyntaxError::UnexpectedDayHourSeparator(
-                    b.map(|b| *b),
-                ));
+                return Err(DateTimeSyntaxError::UnexpectedDayHourSeparator(b.copied()));
             }
         };
     }
     let time_hour = input[11..13]
         .parse::<u8>()
-        .map_err(|e| DateTimeSyntaxError::InvalidHour(e))?;
+        .map_err(DateTimeSyntaxError::InvalidHour)?;
     bytes.next();
     bytes.next();
     match bytes.next() {
         Some(b':') => (),
         b => {
             return Err(DateTimeSyntaxError::UnexpectedHourMinuteSeparator(
-                b.map(|b| *b),
+                b.copied(),
             ));
         }
     };
     let mut byte_count = 17;
     let time_minute = input[14..16]
         .parse::<u8>()
-        .map_err(|e| DateTimeSyntaxError::InvalidMinute(e))?;
+        .map_err(DateTimeSyntaxError::InvalidMinute)?;
     let time_offset_byte = 'time_offset_loop: loop {
         let Some(&byte) = bytes.next() else {
             break 'time_offset_loop None;
@@ -180,7 +176,7 @@ pub fn parse_date_time_bytes<'a>(
     };
     let time_second = input[17..(byte_count - 1)]
         .parse::<f64>()
-        .map_err(|e| DateTimeSyntaxError::InvalidSecond(e))?;
+        .map_err(DateTimeSyntaxError::InvalidSecond)?;
     match time_offset_byte {
         b'Z' | b'z' => {
             let remaining = take_until_end_of_bytes(bytes)?;
@@ -212,13 +208,13 @@ pub fn parse_date_time_bytes<'a>(
                 Some(b':') => (),
                 b => {
                     return Err(DateTimeSyntaxError::UnexpectedTimezoneHourMinuteSeparator(
-                        b.map(|b| *b),
+                        b.copied(),
                     ));
                 }
             };
             let timeoffset_hour = input[byte_count..(byte_count + 2)]
                 .parse::<i8>()
-                .map_err(|e| DateTimeSyntaxError::InvalidTimezoneHour(e))?;
+                .map_err(DateTimeSyntaxError::InvalidTimezoneHour)?;
             let timeoffset_hour = multiplier * timeoffset_hour;
             bytes.next();
             bytes.next();
@@ -229,7 +225,7 @@ pub fn parse_date_time_bytes<'a>(
             let remaining = remaining.remaining;
             let timeoffset_minute = input[(byte_count + 3)..(byte_count + 5)]
                 .parse::<u8>()
-                .map_err(|e| DateTimeSyntaxError::InvalidTimezoneMinute(e))?;
+                .map_err(DateTimeSyntaxError::InvalidTimezoneMinute)?;
             Ok(ParsedLineSlice {
                 parsed: DateTime {
                     date_fullyear,

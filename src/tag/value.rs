@@ -277,7 +277,7 @@ pub fn new_parse(input: &str) -> Result<ParsedLineSlice<ParsedTagValue>, TagValu
         Some(b',') => {
             let n = input[..(count - 1)]
                 .parse::<f64>()
-                .map_err(|e| TagValueSyntaxError::InvalidFloatForDecimalFloatingPointValue(e))?;
+                .map_err(TagValueSyntaxError::InvalidFloatForDecimalFloatingPointValue)?;
             let title = take_until_end_of_bytes(bytes)?;
             return Ok(ParsedLineSlice {
                 parsed: ParsedTagValue::DecimalFloatingPointWithOptionalTitle(n, title.parsed),
@@ -288,11 +288,11 @@ pub fn new_parse(input: &str) -> Result<ParsedLineSlice<ParsedTagValue>, TagValu
             let rest = take_until_end_of_bytes(bytes)?;
             let length = input[..(count - 1)]
                 .parse::<u64>()
-                .map_err(|e| TagValueSyntaxError::InvalidLengthForDecimalIntegerRange(e))?;
+                .map_err(TagValueSyntaxError::InvalidLengthForDecimalIntegerRange)?;
             let offset = rest
                 .parsed
                 .parse::<u64>()
-                .map_err(|e| TagValueSyntaxError::InvalidOffsetForDecimalIntegerRange(e))?;
+                .map_err(TagValueSyntaxError::InvalidOffsetForDecimalIntegerRange)?;
             return Ok(ParsedLineSlice {
                 parsed: ParsedTagValue::DecimalIntegerRange(length, offset),
                 remaining: rest.remaining,
@@ -346,7 +346,7 @@ pub fn new_parse(input: &str) -> Result<ParsedLineSlice<ParsedTagValue>, TagValu
     } else if parsing_int {
         let n = input[..end_index]
             .parse::<u64>()
-            .map_err(|e| TagValueSyntaxError::InvalidDecimalInteger(e))?;
+            .map_err(TagValueSyntaxError::InvalidDecimalInteger)?;
         Ok(ParsedLineSlice {
             parsed: ParsedTagValue::DecimalInteger(n),
             remaining,
@@ -354,7 +354,7 @@ pub fn new_parse(input: &str) -> Result<ParsedLineSlice<ParsedTagValue>, TagValu
     } else if parsing_float {
         let n = input[..end_index]
             .parse::<f64>()
-            .map_err(|e| TagValueSyntaxError::InvalidFloatForDecimalFloatingPointValue(e))?;
+            .map_err(TagValueSyntaxError::InvalidFloatForDecimalFloatingPointValue)?;
         Ok(ParsedLineSlice {
             parsed: ParsedTagValue::DecimalFloatingPointWithOptionalTitle(n, ""),
             remaining,
@@ -510,7 +510,7 @@ fn handle_not_quoted_string_attribute_value<'a>(
     if parsing_int {
         let n = input[..index]
             .parse::<u64>()
-            .map_err(|e| TagValueSyntaxError::InvalidIntegerInAttributeValue(e))?;
+            .map_err(TagValueSyntaxError::InvalidIntegerInAttributeValue)?;
         Ok((
             has_more,
             ParsedLineSlice {
@@ -521,7 +521,7 @@ fn handle_not_quoted_string_attribute_value<'a>(
     } else if parsing_float {
         let n = input[..index]
             .parse::<f64>()
-            .map_err(|e| TagValueSyntaxError::InvalidFloatInAttributeValue(e))?;
+            .map_err(TagValueSyntaxError::InvalidFloatInAttributeValue)?;
         Ok((
             has_more,
             ParsedLineSlice {
