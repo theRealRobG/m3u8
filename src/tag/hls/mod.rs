@@ -168,18 +168,18 @@ impl<'a> TryFrom<ParsedTag<'a>> for Tag<'a> {
     }
 }
 
-pub(crate) struct TagInner<'a> {
+pub struct TagInner<'a> {
     output_line: Cow<'a, str>,
 }
 
 impl<'a> TagInner<'a> {
-    pub(crate) fn value(&self) -> &str {
+    pub fn value(&self) -> &str {
         split_by_first_lf(&self.output_line).parsed
     }
 }
 
 impl<'a> Tag<'a> {
-    pub(crate) fn into_inner(self) -> TagInner<'a> {
+    pub fn into_inner(self) -> TagInner<'a> {
         match self {
             Tag::M3u(t) => t.into_inner(),
             Tag::Version(t) => t.into_inner(),

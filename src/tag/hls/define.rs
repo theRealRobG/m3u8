@@ -8,7 +8,7 @@ use crate::{
 };
 use std::borrow::Cow;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Name<'a> {
     name: Cow<'a, str>,
     value: Cow<'a, str>,
@@ -35,7 +35,7 @@ impl<'a> Name<'a> {
         }
     }
 
-    pub(crate) fn into_inner(mut self) -> TagInner<'a> {
+    pub fn into_inner(mut self) -> TagInner<'a> {
         if self.output_line_is_dirty {
             self.recalculate_output_line();
         }
@@ -72,7 +72,7 @@ impl<'a> Name<'a> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Import<'a> {
     import: Cow<'a, str>,
     output_line: Cow<'a, str>,  // Used with Writer
@@ -96,7 +96,7 @@ impl<'a> Import<'a> {
         }
     }
 
-    pub(crate) fn into_inner(mut self) -> TagInner<'a> {
+    pub fn into_inner(mut self) -> TagInner<'a> {
         if self.output_line_is_dirty {
             self.recalculate_output_line();
         }
@@ -124,7 +124,7 @@ impl<'a> Import<'a> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Queryparam<'a> {
     queryparam: Cow<'a, str>,
     output_line: Cow<'a, str>,  // Used with Writer
@@ -148,7 +148,7 @@ impl<'a> Queryparam<'a> {
         }
     }
 
-    pub(crate) fn into_inner(mut self) -> TagInner<'a> {
+    pub fn into_inner(mut self) -> TagInner<'a> {
         if self.output_line_is_dirty {
             self.recalculate_output_line();
         }
@@ -177,7 +177,7 @@ impl<'a> Queryparam<'a> {
 }
 
 /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.2.3
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Define<'a> {
     Name(Name<'a>),
     Import(Import<'a>),
@@ -278,7 +278,7 @@ impl<'a> Define<'a> {
         *self = Self::new_queryparam(queryparam);
     }
 
-    pub(crate) fn into_inner(self) -> TagInner<'a> {
+    pub fn into_inner(self) -> TagInner<'a> {
         match self {
             Define::Name(name) => name.into_inner(),
             Define::Import(import) => import.into_inner(),

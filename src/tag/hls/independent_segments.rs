@@ -5,7 +5,7 @@ use crate::{
 use std::borrow::Cow;
 
 /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.2.1
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub struct IndependentSegments;
 
 impl TryFrom<ParsedTag<'_>> for IndependentSegments {
@@ -17,7 +17,7 @@ impl TryFrom<ParsedTag<'_>> for IndependentSegments {
 }
 
 impl IndependentSegments {
-    pub(crate) fn into_inner(self) -> TagInner<'static> {
+    pub fn into_inner(self) -> TagInner<'static> {
         TagInner {
             output_line: Cow::Borrowed("#EXT-X-INDEPENDENT-SEGMENTS"),
         }

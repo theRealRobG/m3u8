@@ -9,7 +9,7 @@ use crate::{
 use std::{borrow::Cow, collections::HashMap};
 
 /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.6.1
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Media<'a> {
     media_type: Cow<'a, str>,
     group_id: Cow<'a, str>,
@@ -161,7 +161,7 @@ impl<'a> Media<'a> {
         }
     }
 
-    pub(crate) fn into_inner(mut self) -> TagInner<'a> {
+    pub fn into_inner(mut self) -> TagInner<'a> {
         if self.output_line_is_dirty {
             self.recalculate_output_line();
         }

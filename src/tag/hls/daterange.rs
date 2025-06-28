@@ -151,7 +151,7 @@ impl<'a> Daterange<'a> {
         }
     }
 
-    pub(crate) fn into_inner(mut self) -> TagInner<'a> {
+    pub fn into_inner(mut self) -> TagInner<'a> {
         if self.output_line_is_dirty {
             self.recalculate_output_line();
         }

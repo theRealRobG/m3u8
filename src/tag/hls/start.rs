@@ -9,7 +9,7 @@ use crate::{
 use std::{borrow::Cow, collections::HashMap};
 
 /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.2.2
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Start<'a> {
     time_offset: f64,
     precise: Option<bool>,
@@ -62,7 +62,7 @@ impl<'a> Start<'a> {
         }
     }
 
-    pub(crate) fn into_inner(mut self) -> TagInner<'a> {
+    pub fn into_inner(mut self) -> TagInner<'a> {
         if self.output_line_is_dirty {
             self.recalculate_output_line();
         }

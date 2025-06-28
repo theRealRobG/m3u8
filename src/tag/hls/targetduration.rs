@@ -5,7 +5,7 @@ use crate::{
 use std::borrow::Cow;
 
 /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.3.1
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Targetduration<'a> {
     target_duration: u64,
     output_line: Cow<'a, str>,  // Used with Writer
@@ -44,7 +44,7 @@ impl<'a> Targetduration<'a> {
         }
     }
 
-    pub(crate) fn into_inner(mut self) -> TagInner<'a> {
+    pub fn into_inner(mut self) -> TagInner<'a> {
         if self.output_line_is_dirty {
             self.recalculate_output_line();
         }
