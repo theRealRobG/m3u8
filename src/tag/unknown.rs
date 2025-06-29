@@ -1,15 +1,16 @@
 use crate::{
-    error::{GenericSyntaxError, UnknownTagSyntaxError, ValidationError},
-    line::ParsedLineSlice,
-    utils::{split_by_first_lf, str_from},
+    error::{UnknownTagSyntaxError, ValidationError},
+    line::{ParsedByteSlice, ParsedLineSlice},
+    utils::{split_on_new_line, str_from},
 };
+use memchr::memchr2;
 use std::fmt::Debug;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct Tag<'a> {
     pub(crate) name: &'a str,
-    pub(crate) value: Option<&'a str>,
-    pub(crate) original_input: &'a str,
+    pub(crate) value: Option<&'a [u8]>,
+    pub(crate) original_input: &'a [u8],
     pub(crate) validation_error: Option<ValidationError>,
 }
 
@@ -18,7 +19,7 @@ impl Tag<'_> {
         self.name
     }
 
-    pub fn value(&self) -> Option<&str> {
+    pub fn value(&self) -> Option<&[u8]> {
         self.value
     }
 
@@ -26,98 +27,68 @@ impl Tag<'_> {
         self.validation_error
     }
 
-    pub fn as_str(&self) -> &str {
-        split_by_first_lf(self.original_input).parsed
+    pub fn as_bytes(&self) -> &[u8] {
+        split_on_new_line(self.original_input).parsed
     }
 }
 
 pub fn parse(input: &str) -> Result<ParsedLineSlice<Tag>, UnknownTagSyntaxError> {
-    let mut bytes = input.as_bytes().iter();
-    let Some(b'#') = bytes.next() else {
-        return Err(UnknownTagSyntaxError::InvalidTag);
-    };
-    let Some(b'E') = bytes.next() else {
-        return Err(UnknownTagSyntaxError::InvalidTag);
-    };
-    let Some(b'X') = bytes.next() else {
-        return Err(UnknownTagSyntaxError::InvalidTag);
-    };
-    let Some(b'T') = bytes.next() else {
-        return Err(UnknownTagSyntaxError::InvalidTag);
-    };
-    parse_assuming_ext_taken(str_from(bytes.as_slice()), input)
+    let input = input.as_bytes();
+    if input.get(3) == Some(&b'T') && &input[..3] == b"#EX" {
+        let ParsedByteSlice { parsed, remaining } = parse_assuming_ext_taken(&input[4..], input)?;
+        Ok(ParsedLineSlice {
+            parsed,
+            remaining: remaining.map(str_from),
+        })
+    } else {
+        Err(UnknownTagSyntaxError::InvalidTag)
+    }
 }
 
 pub(crate) fn parse_assuming_ext_taken<'a>(
-    input: &'a str,
-    original_input: &'a str,
-) -> Result<ParsedLineSlice<'a, Tag<'a>>, UnknownTagSyntaxError> {
-    if input.is_empty() {
+    input: &'a [u8],
+    original_input: &'a [u8],
+) -> Result<ParsedByteSlice<'a, Tag<'a>>, UnknownTagSyntaxError> {
+    if input.is_empty() || input[0] == b'\n' || input[0] == b'\r' {
         return Err(UnknownTagSyntaxError::UnexpectedNoTagName);
     };
-    let mut bytes = input.as_bytes().iter();
-    let mut iterations = 0usize;
-    loop {
-        iterations += 1;
-        let Some(byte) = bytes.next() else {
-            let name = &input[..(iterations - 1)];
-            let value = None;
-            let remaining = None;
-            return Ok(ParsedLineSlice {
+    match memchr2(b':', b'\n', input) {
+        Some(n) if input[n] == b':' => {
+            let name = std::str::from_utf8(input)?;
+            let ParsedByteSlice { parsed, remaining } = split_on_new_line(&input[(n + 1)..]);
+            Ok(ParsedByteSlice {
                 parsed: Tag {
                     name,
-                    value,
+                    value: Some(parsed),
                     original_input,
                     validation_error: None,
                 },
                 remaining,
-            });
-        };
-        match byte {
-            b':' => {
-                let name = &input[..(iterations - 1)];
-                let ParsedLineSlice {
-                    parsed: value,
-                    remaining,
-                } = split_by_first_lf(str_from(bytes.as_slice()));
-                return Ok(ParsedLineSlice {
-                    parsed: Tag {
-                        name,
-                        value: Some(value),
-                        original_input,
-                        validation_error: None,
-                    },
-                    remaining,
-                });
-            }
-            b'\n' => {
-                let name = &input[..(iterations - 1)];
-                return Ok(ParsedLineSlice {
-                    parsed: Tag {
-                        name,
-                        value: None,
-                        original_input,
-                        validation_error: None,
-                    },
-                    remaining: Some(str_from(bytes.as_slice())),
-                });
-            }
-            b'\r' => {
-                let Some(b'\n') = bytes.next() else {
-                    return Err(GenericSyntaxError::CarriageReturnWithoutLineFeed)?;
-                };
-                let name = &input[..(iterations - 1)];
-                return Ok(ParsedLineSlice {
-                    parsed: Tag {
-                        name,
-                        value: None,
-                        original_input,
-                        validation_error: None,
-                    },
-                    remaining: Some(str_from(bytes.as_slice())),
-                });
-            }
-            _ => (),
+            })
+        }
+        Some(n) => {
+            let name = std::str::from_utf8(input)?;
+            Ok(ParsedByteSlice {
+                parsed: Tag {
+                    name,
+                    value: None,
+                    original_input,
+                    validation_error: None,
+                },
+                remaining: Some(&input[(n + 1)..]),
+            })
+        }
+        None => {
+            let name = std::str::from_utf8(input)?;
+            Ok(ParsedByteSlice {
+                parsed: Tag {
+                    name,
+                    value: None,
+                    original_input,
+                    validation_error: None,
+                },
+                remaining: None,
+            })
         }
     }
 }
@@ -132,59 +103,59 @@ mod tests {
         let tag = Tag {
             name: "-X-TEST",
             value: None,
-            original_input: "#EXT-X-TEST",
+            original_input: b"#EXT-X-TEST",
             validation_error: None,
         };
         assert_eq!(None, tag.value());
-        assert_eq!("#EXT-X-TEST", tag.as_str());
+        assert_eq!(b"#EXT-X-TEST", tag.as_bytes());
     }
 
     #[test]
     fn tag_value_empty_when_remaining_is_empty() {
         let tag = Tag {
             name: "-X-TEST",
-            value: Some(""),
-            original_input: "#EXT-X-TEST:",
+            value: Some(b""),
+            original_input: b"#EXT-X-TEST:",
             validation_error: None,
         };
-        assert_eq!(Some(""), tag.value());
-        assert_eq!("#EXT-X-TEST:", tag.as_str());
+        assert_eq!(Some(b"" as &[u8]), tag.value());
+        assert_eq!(b"#EXT-X-TEST:", tag.as_bytes());
     }
 
     #[test]
     fn tag_value_some_when_remaining_is_some() {
         let tag = Tag {
             name: "-X-TEST",
-            value: Some("42"),
-            original_input: "#EXT-X-TEST:42",
+            value: Some(b"42"),
+            original_input: b"#EXT-X-TEST:42",
             validation_error: None,
         };
-        assert_eq!(Some("42"), tag.value());
-        assert_eq!("#EXT-X-TEST:42", tag.as_str());
+        assert_eq!(Some(b"42" as &[u8]), tag.value());
+        assert_eq!(b"#EXT-X-TEST:42", tag.as_bytes());
     }
 
     #[test]
     fn tag_value_remaining_is_some_when_split_by_crlf() {
         let tag = Tag {
             name: "-X-TEST",
-            value: Some("42"),
-            original_input: "#EXT-X-TEST:42\r\n#EXT-X-NEW-TEST\r\n",
+            value: Some(b"42"),
+            original_input: b"#EXT-X-TEST:42\r\n#EXT-X-NEW-TEST\r\n",
             validation_error: None,
         };
-        assert_eq!(Some("42"), tag.value());
-        assert_eq!("#EXT-X-TEST:42", tag.as_str());
+        assert_eq!(Some(b"42" as &[u8]), tag.value());
+        assert_eq!(b"#EXT-X-TEST:42", tag.as_bytes());
     }
 
     #[test]
     fn tag_value_remaining_is_some_when_split_by_lf() {
         let tag = Tag {
             name: "-X-TEST",
-            value: Some("42"),
-            original_input: "#EXT-X-TEST:42\n#EXT-X-NEW-TEST\n",
+            value: Some(b"42"),
+            original_input: b"#EXT-X-TEST:42\n#EXT-X-NEW-TEST\n",
             validation_error: None,
         };
-        assert_eq!(Some("42"), tag.value());
-        assert_eq!("#EXT-X-TEST:42", tag.as_str());
+        assert_eq!(Some(b"42" as &[u8]), tag.value());
+        assert_eq!(b"#EXT-X-TEST:42", tag.as_bytes());
     }
 
     #[test]
@@ -194,7 +165,7 @@ mod tests {
                 parsed: Tag {
                     name: "-TEST-TAG",
                     value: None,
-                    original_input: "#EXT-TEST-TAG",
+                    original_input: b"#EXT-TEST-TAG",
                     validation_error: None,
                 },
                 remaining: None
@@ -206,7 +177,7 @@ mod tests {
                 parsed: Tag {
                     name: "-TEST-TAG",
                     value: None,
-                    original_input: "#EXT-TEST-TAG\r\n",
+                    original_input: b"#EXT-TEST-TAG\r\n",
                     validation_error: None,
                 },
                 remaining: Some("")
@@ -218,7 +189,7 @@ mod tests {
                 parsed: Tag {
                     name: "-TEST-TAG",
                     value: None,
-                    original_input: "#EXT-TEST-TAG\n",
+                    original_input: b"#EXT-TEST-TAG\n",
                     validation_error: None,
                 },
                 remaining: Some("")
@@ -233,8 +204,8 @@ mod tests {
             Ok(ParsedLineSlice {
                 parsed: Tag {
                     name: "-TEST-TAG",
-                    value: Some("42"),
-                    original_input: "#EXT-TEST-TAG:42",
+                    value: Some(b"42"),
+                    original_input: b"#EXT-TEST-TAG:42",
                     validation_error: None,
                 },
                 remaining: None
@@ -245,8 +216,8 @@ mod tests {
             Ok(ParsedLineSlice {
                 parsed: Tag {
                     name: "-TEST-TAG",
-                    value: Some("42"),
-                    original_input: "#EXT-TEST-TAG:42\r\n",
+                    value: Some(b"42"),
+                    original_input: b"#EXT-TEST-TAG:42\r\n",
                     validation_error: None,
                 },
                 remaining: Some("")
@@ -257,8 +228,8 @@ mod tests {
             Ok(ParsedLineSlice {
                 parsed: Tag {
                     name: "-TEST-TAG",
-                    value: Some("42"),
-                    original_input: "#EXT-TEST-TAG:42\n",
+                    value: Some(b"42"),
+                    original_input: b"#EXT-TEST-TAG:42\n",
                     validation_error: None,
                 },
                 remaining: Some("")
@@ -273,8 +244,8 @@ mod tests {
             Ok(ParsedLineSlice {
                 parsed: Tag {
                     name: "-X-TEST",
-                    value: Some("42"),
-                    original_input: "#EXT-X-TEST:42\r\n#EXT-X-NEW-TEST\r\n",
+                    value: Some(b"42"),
+                    original_input: b"#EXT-X-TEST:42\r\n#EXT-X-NEW-TEST\r\n",
                     validation_error: None,
                 },
                 remaining: Some("#EXT-X-NEW-TEST\r\n")
@@ -289,8 +260,8 @@ mod tests {
             Ok(ParsedLineSlice {
                 parsed: Tag {
                     name: "-X-TEST",
-                    value: Some("42"),
-                    original_input: "#EXT-X-TEST:42\n#EXT-X-NEW-TEST\n",
+                    value: Some(b"42"),
+                    original_input: b"#EXT-X-TEST:42\n#EXT-X-NEW-TEST\n",
                     validation_error: None,
                 },
                 remaining: Some("#EXT-X-NEW-TEST\n")

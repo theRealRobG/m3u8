@@ -3,7 +3,7 @@ use crate::{
     tag::{
         hls::{TagInner, TagName},
         known::ParsedTag,
-        value::ParsedTagValue,
+        value::SemiParsedTagValue,
     },
 };
 use std::borrow::Cow;
@@ -26,13 +26,14 @@ impl<'a> TryFrom<ParsedTag<'a>> for Bitrate<'a> {
     type Error = ValidationError;
 
     fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
-        let ParsedTagValue::DecimalInteger(rate) = tag.value else {
+        let SemiParsedTagValue::Unparsed(bytes) = tag.value else {
             return Err(super::ValidationError::UnexpectedValueType(
                 ValidationErrorValueKind::from(&tag.value),
             ));
         };
+        let bitrate = bytes.try_as_decimal_integer()?;
         Ok(Self {
-            bitrate: rate,
+            bitrate,
             output_line: Cow::Borrowed(tag.original_input),
             output_line_is_dirty: false,
         })

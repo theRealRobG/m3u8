@@ -150,7 +150,7 @@ mod tests {
                 version::Version,
             },
             unknown,
-            value::{ParsedAttributeValue, ParsedTagValue},
+            value::{ParsedAttributeValue, SemiParsedTagValue},
         },
     };
     use std::collections::HashMap;
@@ -203,8 +203,8 @@ mod tests {
             read_line,
             Some(HlsLine::from(unknown::Tag {
                 name: "-X-EXAMPLE-TAG",
-                value: Some("MEANING-OF-LIFE=42,QUESTION=\"UNKNOWN\""),
-                original_input: &EXAMPLE_MANIFEST[50..],
+                value: Some(b"MEANING-OF-LIFE=42,QUESTION=\"UNKNOWN\""),
+                original_input: &EXAMPLE_MANIFEST.as_bytes()[50..],
                 validation_error: None,
             }))
         );
@@ -225,8 +225,8 @@ mod tests {
             read_line,
             Some(HlsLine::from(unknown::Tag {
                 name: "-X-EXAMPLE-TAG",
-                value: Some("MEANING-OF-LIFE=42,QUESTION=\"UNKNOWN\""),
-                original_input: &EXAMPLE_MANIFEST[50..],
+                value: Some(b"MEANING-OF-LIFE=42,QUESTION=\"UNKNOWN\""),
+                original_input: &EXAMPLE_MANIFEST.as_bytes()[50..],
                 validation_error: None,
             }))
         );
@@ -279,7 +279,7 @@ mod tests {
     impl<'a> TryFrom<ParsedTag<'a>> for ExampleTag<'a> {
         type Error = ValidationError;
         fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
-            let ParsedTagValue::AttributeList(ref attribute_list) = tag.value else {
+            let SemiParsedTagValue::AttributeList(ref attribute_list) = tag.value else {
                 return Err(ValidationError::UnexpectedValueType(
                     ValidationErrorValueKind::AttributeList,
                 ));
@@ -309,8 +309,8 @@ mod tests {
             "-X-EXAMPLE-TAG"
         }
 
-        fn value(&self) -> ParsedTagValue {
-            ParsedTagValue::AttributeList(HashMap::from([
+        fn value(&self) -> SemiParsedTagValue {
+            SemiParsedTagValue::AttributeList(HashMap::from([
                 (
                     "MEANING-OF-LIFE",
                     ParsedAttributeValue::DecimalInteger(self.answer),

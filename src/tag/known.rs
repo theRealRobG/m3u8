@@ -1,6 +1,6 @@
 use crate::{
     error::ValidationError,
-    tag::{hls, value::ParsedTagValue},
+    tag::{hls, value::SemiParsedTagValue},
 };
 use std::{cmp::PartialEq, fmt::Debug};
 
@@ -44,13 +44,13 @@ pub trait IsKnownName {
 
 pub trait TagInformation {
     fn name(&self) -> &str;
-    fn value(&self) -> ParsedTagValue;
+    fn value(&self) -> SemiParsedTagValue;
 }
 
 #[derive(Debug, PartialEq)]
 pub struct ParsedTag<'a> {
     pub name: &'a str,
-    pub value: ParsedTagValue<'a>,
+    pub value: SemiParsedTagValue<'a>,
     pub(crate) original_input: &'a str,
 }
 
@@ -73,8 +73,8 @@ impl TagInformation for NoCustomTag {
         "-NO-TAG"
     }
 
-    fn value(&self) -> ParsedTagValue {
-        ParsedTagValue::Empty
+    fn value(&self) -> SemiParsedTagValue {
+        SemiParsedTagValue::Empty
     }
 }
 

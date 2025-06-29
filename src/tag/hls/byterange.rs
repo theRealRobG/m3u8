@@ -3,7 +3,7 @@ use crate::{
     tag::{
         hls::{TagInner, TagName},
         known::ParsedTag,
-        value::ParsedTagValue,
+        value::SemiParsedTagValue,
     },
 };
 use std::borrow::Cow;
@@ -28,18 +28,15 @@ impl<'a> TryFrom<ParsedTag<'a>> for Byterange<'a> {
 
     fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
         match tag.value {
-            ParsedTagValue::DecimalInteger(length) => Ok(Self {
-                length,
-                offset: None,
-                output_line: Cow::Borrowed(tag.original_input),
-                output_line_is_dirty: false,
-            }),
-            ParsedTagValue::DecimalIntegerRange(length, offset) => Ok(Self {
-                length,
-                offset: Some(offset),
-                output_line: Cow::Borrowed(tag.original_input),
-                output_line_is_dirty: false,
-            }),
+            SemiParsedTagValue::Unparsed(bytes) => {
+                let (length, offset) = bytes.try_as_decimal_integer_range()?;
+                Ok(Self {
+                    length,
+                    offset,
+                    output_line: Cow::Borrowed(tag.original_input),
+                    output_line_is_dirty: false,
+                })
+            }
             _ => Err(super::ValidationError::UnexpectedValueType(
                 ValidationErrorValueKind::from(&tag.value),
             )),

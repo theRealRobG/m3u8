@@ -1,9 +1,5 @@
+use crate::{error::DateTimeSyntaxError, utils::parse_date_time_bytes};
 use std::fmt::Display;
-
-use crate::{
-    error::{DateTimeSyntaxError, GenericSyntaxError},
-    utils::parse_date_time_bytes,
-};
 
 #[macro_export]
 macro_rules! date_time {
@@ -97,17 +93,11 @@ impl From<DateTimeTimezoneOffset> for String {
 }
 
 pub fn parse(input: &str) -> Result<DateTime, DateTimeSyntaxError> {
-    let mut bytes = input.as_bytes().iter();
-    let break_byte = loop {
-        let Some(byte) = bytes.next() else {
-            return Err(GenericSyntaxError::UnexpectedEndOfLine)?;
-        };
-        match byte {
-            b't' | b':' => break byte,
-            _ => (),
-        }
-    };
-    Ok(parse_date_time_bytes(input, bytes, *break_byte)?.parsed)
+    parse_bytes(input.as_bytes())
+}
+
+pub fn parse_bytes(input: &[u8]) -> Result<DateTime, DateTimeSyntaxError> {
+    Ok(parse_date_time_bytes(input)?.parsed)
 }
 
 #[cfg(test)]

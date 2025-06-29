@@ -1,6 +1,6 @@
 use crate::{
     error::{ValidationError, ValidationErrorValueKind},
-    tag::{hls::TagInner, known::ParsedTag, value::ParsedTagValue},
+    tag::{hls::TagInner, known::ParsedTag, value::SemiParsedTagValue},
 };
 use std::borrow::Cow;
 
@@ -24,18 +24,20 @@ impl<'a> TryFrom<ParsedTag<'a>> for Inf<'a> {
 
     fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
         match tag.value {
-            ParsedTagValue::DecimalInteger(d) => Ok(Self {
-                duration: d as f64,
+            SemiParsedTagValue::Unparsed(bytes) => Ok(Self {
+                duration: bytes.try_as_float()?,
                 title: Cow::Borrowed(""),
                 output_line: Cow::Borrowed(tag.original_input),
                 output_line_is_dirty: false,
             }),
-            ParsedTagValue::DecimalFloatingPointWithOptionalTitle(duration, title) => Ok(Self {
-                duration,
-                title: Cow::Borrowed(title),
-                output_line: Cow::Borrowed(tag.original_input),
-                output_line_is_dirty: false,
-            }),
+            SemiParsedTagValue::DecimalFloatingPointWithOptionalTitle(duration, title) => {
+                Ok(Self {
+                    duration,
+                    title: Cow::Borrowed(title),
+                    output_line: Cow::Borrowed(tag.original_input),
+                    output_line_is_dirty: false,
+                })
+            }
             _ => Err(super::ValidationError::UnexpectedValueType(
                 ValidationErrorValueKind::from(&tag.value),
             )),

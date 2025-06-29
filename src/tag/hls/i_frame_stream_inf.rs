@@ -3,7 +3,7 @@ use crate::{
     tag::{
         hls::TagInner,
         known::ParsedTag,
-        value::{DecimalResolution, ParsedAttributeValue, ParsedTagValue},
+        value::{DecimalResolution, ParsedAttributeValue, SemiParsedTagValue},
     },
 };
 use std::{borrow::Cow, collections::HashMap};
@@ -53,7 +53,7 @@ impl<'a> TryFrom<ParsedTag<'a>> for IFrameStreamInf<'a> {
     type Error = ValidationError;
 
     fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
-        let ParsedTagValue::AttributeList(attribute_list) = tag.value else {
+        let SemiParsedTagValue::AttributeList(attribute_list) = tag.value else {
             return Err(super::ValidationError::UnexpectedValueType(
                 ValidationErrorValueKind::from(&tag.value),
             ));

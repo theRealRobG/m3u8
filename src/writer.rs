@@ -3,7 +3,7 @@ use crate::{
     line::HlsLine,
     tag::{
         known::{IsKnownName, ParsedTag, TagInformation},
-        value::{HlsPlaylistType, ParsedAttributeValue, ParsedTagValue},
+        value::{ParsedAttributeValue, SemiParsedTagValue},
     },
 };
 use std::{
@@ -184,7 +184,7 @@ where
                 count += self.write(c.as_bytes())?;
             }
             HlsLine::Uri(u) => count += self.write(u.as_bytes())?,
-            HlsLine::UnknownTag(t) => count += self.write(t.as_str().as_bytes())?,
+            HlsLine::UnknownTag(t) => count += self.write(t.as_bytes())?,
             HlsLine::KnownTag(t) => match t {
                 crate::tag::known::Tag::Hls(tag) => {
                     count += self.write(tag.into_inner().value().as_bytes())?;
@@ -225,28 +225,15 @@ where
     T: TagInformation,
 {
     match custom_tag.value() {
-        ParsedTagValue::Empty => format!("#EXT{}", custom_tag.name()),
-        ParsedTagValue::TypeEnum(hls_playlist_type) => match hls_playlist_type {
-            HlsPlaylistType::Event => format!("#EXT{}:EVENT", custom_tag.name()),
-            HlsPlaylistType::Vod => format!("#EXT{}:VOD", custom_tag.name()),
-        },
-        ParsedTagValue::DecimalInteger(n) => {
-            format!("#EXT{}:{}", custom_tag.name(), n)
-        }
-        ParsedTagValue::DecimalIntegerRange(n, r) => {
-            format!("#EXT{}:{}@{}", custom_tag.name(), n, r)
-        }
-        ParsedTagValue::DecimalFloatingPointWithOptionalTitle(n, t) => {
+        SemiParsedTagValue::Empty => format!("#EXT{}", custom_tag.name()),
+        SemiParsedTagValue::DecimalFloatingPointWithOptionalTitle(n, t) => {
             if t.is_empty() {
                 format!("#EXT{}:{}", custom_tag.name(), n)
             } else {
                 format!("#EXT{}:{},{}", custom_tag.name(), n, t)
             }
         }
-        ParsedTagValue::DateTimeMsec(date_time) => {
-            format!("#EXT{}:{}", custom_tag.name(), date_time)
-        }
-        ParsedTagValue::AttributeList(list) => {
+        SemiParsedTagValue::AttributeList(list) => {
             let attrs = list
                 .iter()
                 .map(|(k, v)| match v {
@@ -259,6 +246,11 @@ where
             let value = attrs.join(",");
             format!("#EXT{}:{}", custom_tag.name(), value)
         }
+        SemiParsedTagValue::Unparsed(bytes) => format!(
+            "#EXT{}:{}",
+            custom_tag.name(),
+            String::from_utf8_lossy(bytes.0)
+        ),
     }
 }
 
@@ -266,10 +258,12 @@ where
 mod tests {
     use crate::{
         config::ParsingOptionsBuilder,
-        date::{DateTime, DateTimeTimezoneOffset},
-        tag::hls::{
-            self, inf::Inf, m3u::M3u, media_sequence::MediaSequence,
-            targetduration::Targetduration, version::Version,
+        tag::{
+            hls::{
+                self, inf::Inf, m3u::M3u, media_sequence::MediaSequence,
+                targetduration::Targetduration, version::Version,
+            },
+            value::UnparsedTagValue,
         },
     };
     use std::collections::HashMap;
@@ -292,28 +286,19 @@ mod tests {
             "-X-TEST-TAG"
         }
 
-        fn value(&self) -> ParsedTagValue {
+        fn value(&self) -> SemiParsedTagValue {
             match self {
-                TestTag::Empty => ParsedTagValue::Empty,
-                TestTag::Type => ParsedTagValue::TypeEnum(HlsPlaylistType::Vod),
-                TestTag::Int => ParsedTagValue::DecimalInteger(42),
-                TestTag::Range => ParsedTagValue::DecimalIntegerRange(1024, 512),
+                TestTag::Empty => SemiParsedTagValue::Empty,
+                TestTag::Type => SemiParsedTagValue::Unparsed(UnparsedTagValue(b"VOD")),
+                TestTag::Int => SemiParsedTagValue::Unparsed(UnparsedTagValue(b"42")),
+                TestTag::Range => SemiParsedTagValue::Unparsed(UnparsedTagValue(b"1024@512")),
                 TestTag::Float { title } => {
-                    ParsedTagValue::DecimalFloatingPointWithOptionalTitle(42.42, title)
+                    SemiParsedTagValue::DecimalFloatingPointWithOptionalTitle(42.42, title)
                 }
-                TestTag::Date => ParsedTagValue::DateTimeMsec(DateTime {
-                    date_fullyear: 2025,
-                    date_month: 6,
-                    date_mday: 17,
-                    time_hour: 1,
-                    time_minute: 37,
-                    time_second: 15.129,
-                    timezone_offset: DateTimeTimezoneOffset {
-                        time_hour: -5,
-                        time_minute: 0,
-                    },
-                }),
-                TestTag::List => ParsedTagValue::AttributeList(HashMap::from([
+                TestTag::Date => {
+                    SemiParsedTagValue::Unparsed(UnparsedTagValue(b"2025-06-17T01:37:15.129-05:00"))
+                }
+                TestTag::List => SemiParsedTagValue::AttributeList(HashMap::from([
                     ("TEST-INT", ParsedAttributeValue::DecimalInteger(42)),
                     (
                         "TEST-FLOAT",

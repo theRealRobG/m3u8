@@ -4,7 +4,7 @@ use crate::{
     tag::{
         hls::{TagInner, TagName},
         known::ParsedTag,
-        value::{ParsedAttributeValue, ParsedTagValue},
+        value::{ParsedAttributeValue, SemiParsedTagValue},
     },
 };
 use std::{
@@ -53,7 +53,7 @@ impl<'a> TryFrom<ParsedTag<'a>> for Daterange<'a> {
     type Error = ValidationError;
 
     fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
-        let ParsedTagValue::AttributeList(attribute_list) = tag.value else {
+        let SemiParsedTagValue::AttributeList(attribute_list) = tag.value else {
             return Err(ValidationError::UnexpectedValueType(
                 ValidationErrorValueKind::from(&tag.value),
             ));

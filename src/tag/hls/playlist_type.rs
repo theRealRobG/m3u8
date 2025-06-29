@@ -3,7 +3,7 @@ use crate::{
     tag::{
         hls::TagInner,
         known::ParsedTag,
-        value::{HlsPlaylistType, ParsedTagValue},
+        value::{HlsPlaylistType, SemiParsedTagValue},
     },
 };
 use std::borrow::Cow;
@@ -16,12 +16,12 @@ impl TryFrom<ParsedTag<'_>> for PlaylistType {
     type Error = ValidationError;
 
     fn try_from(tag: ParsedTag<'_>) -> Result<Self, Self::Error> {
-        let ParsedTagValue::TypeEnum(t) = tag.value else {
+        let SemiParsedTagValue::Unparsed(bytes) = tag.value else {
             return Err(super::ValidationError::UnexpectedValueType(
                 ValidationErrorValueKind::from(&tag.value),
             ));
         };
-        Ok(Self(t))
+        Ok(Self(bytes.try_as_hls_playlist_type()?))
     }
 }
 

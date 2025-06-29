@@ -6,9 +6,13 @@ use crate::{
         known::{self, IsKnownName, NoCustomTag, ParsedTag, TagInformation},
         unknown,
     },
-    utils::{str_from, take_until_end_of_bytes},
+    utils::{split_on_new_line, str_from},
 };
-use std::{cmp::PartialEq, fmt::Debug};
+use std::{
+    any::Any,
+    cmp::PartialEq,
+    fmt::{Debug, Display},
+};
 
 #[derive(Debug, PartialEq)]
 #[allow(clippy::large_enum_variant)] // See comment on crate::tag::known::Tag.
@@ -149,6 +153,45 @@ where
     pub parsed: T,
     pub remaining: Option<&'a str>,
 }
+#[derive(PartialEq)]
+#[cfg_attr(not(test), derive(Debug))]
+pub struct ParsedByteSlice<'a, T>
+where
+    T: Debug + PartialEq,
+{
+    pub parsed: T,
+    pub remaining: Option<&'a [u8]>,
+}
+// Just for tests - this helps byte slices that are actually string slices be more readable when
+// assertions are failing.
+#[cfg(test)]
+impl<T: Debug + PartialEq + Any> Debug for ParsedByteSlice<'_, T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut result = f.debug_struct("ParsedByteSlice");
+        let any_parsed = &self.parsed as &dyn Any;
+        let parsed: Box<dyn Debug> = if let Some(bytes) = any_parsed.downcast_ref::<&[u8]>() {
+            if let Ok(parsed) = std::str::from_utf8(bytes) {
+                Box::new(parsed)
+            } else {
+                Box::new(&self.parsed)
+            }
+        } else {
+            Box::new(&self.parsed)
+        };
+        let remaining: Box<dyn Debug> = if let Some(parsed) = self
+            .remaining
+            .map_or(Some("None"), |r| std::str::from_utf8(r).ok())
+        {
+            Box::new(parsed)
+        } else {
+            Box::new(self.remaining)
+        };
+        result
+            .field("parsed", &*parsed)
+            .field("remaining", &*remaining)
+            .finish()
+    }
+}
 
 pub fn parse<'a>(
     input: &'a str,
@@ -168,38 +211,43 @@ where
         + Debug
         + PartialEq,
 {
-    // Attempt to parse tag, and if failed, pass back input for further parsing.
-    let mut bytes = input.as_bytes().iter();
-    match bytes.next() {
-        Some(b'#') => {
-            let Some(b'E') = bytes.next() else {
-                let comment = take_until_end_of_bytes(input.as_bytes()[1..].iter())?;
-                return Ok(ParsedLineSlice {
-                    parsed: HlsLine::Comment(comment.parsed),
-                    remaining: comment.remaining,
-                });
-            };
-            let Some(b'X') = bytes.next() else {
-                let comment = take_until_end_of_bytes(input.as_bytes()[1..].iter())?;
-                return Ok(ParsedLineSlice {
-                    parsed: HlsLine::Comment(comment.parsed),
-                    remaining: comment.remaining,
-                });
-            };
-            let Some(b'T') = bytes.next() else {
-                let comment = take_until_end_of_bytes(input.as_bytes()[1..].iter())?;
-                return Ok(ParsedLineSlice {
-                    parsed: HlsLine::Comment(comment.parsed),
-                    remaining: comment.remaining,
-                });
-            };
-            let original_input = input;
-            let input = str_from(bytes.as_slice());
-            let mut tag = tag::unknown::parse_assuming_ext_taken(input, original_input)?;
+    parse_bytes_with_custom(input.as_bytes(), options).map(|r| ParsedLineSlice {
+        parsed: r.parsed,
+        remaining: r.remaining.map(|b| str_from(b)),
+    })
+}
+
+pub fn parse_bytes<'a>(
+    input: &'a [u8],
+    options: &ParsingOptions,
+) -> Result<ParsedByteSlice<'a, HlsLine<'a>>, SyntaxError> {
+    parse_bytes_with_custom::<NoCustomTag>(input, options)
+}
+
+pub fn parse_bytes_with_custom<'a, 'b, CustomTag>(
+    input: &'a [u8],
+    options: &'b ParsingOptions,
+) -> Result<ParsedByteSlice<'a, HlsLine<'a, CustomTag>>, SyntaxError>
+where
+    CustomTag: TryFrom<ParsedTag<'a>, Error = ValidationError>
+        + IsKnownName
+        + TagInformation
+        + Debug
+        + PartialEq,
+{
+    if input.is_empty() {
+        Ok(ParsedByteSlice {
+            parsed: HlsLine::Blank,
+            remaining: None,
+        })
+    } else if input[0] == b'#' {
+        if input.get(3) == Some(&b'T') && &input[..3] == b"#EX" {
+            let tag_rest = &input[4..];
+            let mut tag = tag::unknown::parse_assuming_ext_taken(tag_rest, input)?;
             if options.is_known_name(tag.parsed.name) || CustomTag::is_known_name(tag.parsed.name) {
                 let value_slice = match tag.parsed.value {
-                    None => ParsedLineSlice {
-                        parsed: tag::value::ParsedTagValue::Empty,
+                    None => ParsedByteSlice {
+                        parsed: tag::value::SemiParsedTagValue::Empty,
                         remaining: None,
                     },
                     Some(remaining) => tag::value::new_parse(remaining)?,
@@ -207,39 +255,42 @@ where
                 let parsed_tag = ParsedTag {
                     name: tag.parsed.name,
                     value: value_slice.parsed,
-                    original_input,
+                    original_input: input,
                 };
                 match known::Tag::try_from(parsed_tag) {
-                    Ok(known_tag) => Ok(ParsedLineSlice {
+                    Ok(known_tag) => Ok(ParsedByteSlice {
                         parsed: HlsLine::KnownTag(known_tag),
                         remaining: tag.remaining,
                     }),
                     Err(e) => {
                         tag.parsed.validation_error = Some(e);
-                        Ok(ParsedLineSlice {
+                        Ok(ParsedByteSlice {
                             parsed: HlsLine::UnknownTag(tag.parsed),
                             remaining: tag.remaining,
                         })
                     }
                 }
             } else {
-                Ok(ParsedLineSlice {
+                Ok(ParsedByteSlice {
                     parsed: HlsLine::UnknownTag(tag.parsed),
                     remaining: tag.remaining,
                 })
             }
-        }
-        None => Ok(ParsedLineSlice {
-            parsed: HlsLine::Blank,
-            remaining: None,
-        }),
-        _ => {
-            let rest_of_line = take_until_end_of_bytes(input.as_bytes().iter())?;
-            Ok(ParsedLineSlice {
-                parsed: HlsLine::Uri(rest_of_line.parsed),
-                remaining: rest_of_line.remaining,
+        } else {
+            let ParsedByteSlice { parsed, remaining } = split_on_new_line(&input[1..]);
+            let comment = std::str::from_utf8(parsed)?;
+            Ok(ParsedByteSlice {
+                parsed: HlsLine::Comment(comment),
+                remaining,
             })
         }
+    } else {
+        let ParsedByteSlice { parsed, remaining } = split_on_new_line(input);
+        let uri = std::str::from_utf8(parsed)?;
+        Ok(ParsedByteSlice {
+            parsed: HlsLine::Uri(uri),
+            remaining,
+        })
     }
 }
 
@@ -253,7 +304,7 @@ mod tests {
         error::ValidationErrorValueKind,
         tag::{
             hls::{self, m3u::M3u, start::Start},
-            value::{ParsedAttributeValue, ParsedTagValue},
+            value::{ParsedAttributeValue, SemiParsedTagValue},
         },
     };
     use pretty_assertions::assert_eq;
@@ -305,7 +356,7 @@ mod tests {
 
             fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
                 match &tag.value {
-                    tag::value::ParsedTagValue::AttributeList(list) => {
+                    tag::value::SemiParsedTagValue::AttributeList(list) => {
                         let Some(tag::value::ParsedAttributeValue::UnquotedString(greeting_type)) =
                             list.get("TYPE")
                         else {
@@ -348,7 +399,7 @@ mod tests {
                 "-X-TEST-TAG"
             }
 
-            fn value(&self) -> tag::value::ParsedTagValue {
+            fn value(&self) -> tag::value::SemiParsedTagValue {
                 let mut attribute_list = HashMap::new();
                 attribute_list.insert(
                     "TYPE",
@@ -362,7 +413,7 @@ mod tests {
                         ParsedAttributeValue::SignedDecimalFloatingPoint(score),
                     );
                 }
-                ParsedTagValue::AttributeList(attribute_list)
+                SemiParsedTagValue::AttributeList(attribute_list)
             }
         }
         // Test
@@ -390,8 +441,8 @@ mod tests {
         assert_eq!(
             Ok(HlsLine::UnknownTag(unknown::Tag {
                 name: "-X-START",
-                value: Some("TIME-OFFSET=-18"),
-                original_input: "#EXT-X-START:TIME-OFFSET=-18",
+                value: Some(b"TIME-OFFSET=-18"),
+                original_input: b"#EXT-X-START:TIME-OFFSET=-18",
                 validation_error: None,
             })),
             parse(

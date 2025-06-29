@@ -3,7 +3,7 @@ use crate::{
     tag::{
         hls::TagInner,
         known::ParsedTag,
-        value::{ParsedAttributeValue, ParsedTagValue},
+        value::{ParsedAttributeValue, SemiParsedTagValue},
     },
 };
 use std::{borrow::Cow, collections::HashMap, fmt::Display};
@@ -39,7 +39,7 @@ impl<'a> TryFrom<ParsedTag<'a>> for Map<'a> {
     type Error = ValidationError;
 
     fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
-        let ParsedTagValue::AttributeList(mut attribute_list) = tag.value else {
+        let SemiParsedTagValue::AttributeList(mut attribute_list) = tag.value else {
             return Err(super::ValidationError::UnexpectedValueType(
                 ValidationErrorValueKind::from(&tag.value),
             ));

@@ -1,7 +1,7 @@
 use crate::{
     date::DateTime,
     error::{ValidationError, ValidationErrorValueKind},
-    tag::{hls::TagInner, known::ParsedTag, value::ParsedTagValue},
+    tag::{hls::TagInner, known::ParsedTag, value::SemiParsedTagValue},
 };
 use std::borrow::Cow;
 
@@ -23,13 +23,14 @@ impl<'a> TryFrom<ParsedTag<'a>> for ProgramDateTime<'a> {
     type Error = ValidationError;
 
     fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
-        let ParsedTagValue::DateTimeMsec(date_time) = tag.value else {
+        let SemiParsedTagValue::Unparsed(bytes) = tag.value else {
             return Err(super::ValidationError::UnexpectedValueType(
                 ValidationErrorValueKind::from(&tag.value),
             ));
         };
+        let program_date_time = bytes.try_as_date_time()?;
         Ok(Self {
-            program_date_time: date_time,
+            program_date_time,
             output_line: Cow::Borrowed(tag.original_input),
             output_line_is_dirty: false,
         })
