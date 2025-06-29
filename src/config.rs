@@ -36,6 +36,7 @@ pub const ALL_KNOWN_HLS_TAG_NAMES: [TagName; 32] = [
     TagName::ContentSteering,
 ];
 
+#[derive(Debug, PartialEq, Clone)]
 pub struct ParsingOptions {
     pub hls_tag_names_to_parse: HashSet<TagName>,
 }
