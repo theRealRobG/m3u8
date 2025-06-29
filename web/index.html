@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en-US">
+
+<head>
+  <meta charset="utf-8" />
+  <title>View M3U8 playlist</title>
+  <style>
+    div {
+      margin: 25px;
+      padding: 25px;
+    }
+    #m3u8-output {
+      background-color: rgb(31, 31, 31);
+      color: rgb(204, 204, 204);
+      text-wrap-mode: wrap;
+      overflow: scroll;
+      padding: 10px;
+      margin: 0;
+      font-family: monospace;
+    }
+    #m3u8-output .attr, #m3u8-output .uri {
+      color: aqua;
+      text-decoration-line: underline;
+      cursor: pointer;
+    }
+    #m3u8-output .uri {
+      display: block;
+      padding-top: 2px;
+      padding-bottom: 2px;
+    }
+    #m3u8-output span.tag {
+      display: block;
+      color: lightpink;
+      text-decoration-line: none;
+      cursor: default;
+      padding-top: 2px;
+      padding-bottom: 2px;
+    }
+    #m3u8-output span.comment {
+      display: block;
+      color: darkgreen;
+      text-decoration-line: none;
+      cursor: default;
+      padding-top: 2px;
+      padding-bottom: 2px;
+    }
+  </style>
+</head>
+
+<body>
+  <script type="module" src="index.js"></script>
+  <form id="m3u8-form" style="margin: 50px;">
+    <input id="m3u8-input-url" name="m3u8-url" type="url" placeholder="Playlist URL" required autofocus
+      style="width: 100%;" />
+    <input id="m3u8-submit" type="submit" value="Submit" disabled style="margin-top: 10px;" />
+  </form>
+  <div hidden id="progress">
+    <p id="progress-loading">Loading Playlist</p>
+    <p id="progress-parsing">Parsing Playlist</p>
+  </div>
+  <div hidden id="error" style="background-color: red;">
+    <h1>Error <span id="error-location-span"></span></h1>
+    <div id="error-message-container"></div>
+  </div>
+  <div hidden id="m3u8-output-container">
+    <div id="m3u8-output"></pre>
+  </div>
+</body>
+
+</html>
