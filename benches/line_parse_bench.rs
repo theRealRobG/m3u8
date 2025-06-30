@@ -5,34 +5,35 @@ use m3u8::{
     line::{self, HlsLine},
     tag::{hls, known},
 };
+use std::hint::black_box;
 
 const LONG_MEDIA_PLAYLIST: &'static str = include_str!("long_media_playlist.m3u8");
 
 macro_rules! reader_match {
     (MUTATE, $reader:ident, $writer:ident) => {
-        match $reader.read_line() {
+        match black_box($reader.read_line()) {
             Ok(Some(HlsLine::KnownTag(known::Tag::Hls(hls::Tag::Inf(mut tag))))) => {
                 tag.set_title(String::from("TEST"));
-                $writer.write_line(HlsLine::from(tag)).unwrap();
+                black_box($writer.write_line(HlsLine::from(tag)).unwrap());
             }
             Ok(Some(line)) => {
-                $writer.write_line(line).unwrap();
+                black_box($writer.write_line(line).unwrap());
             }
             Ok(None) => break,
             Err(e) => panic!("{}", e),
         }
     };
     (NO_MUTATE, $reader:ident, $writer:ident) => {
-        match $reader.read_line() {
+        match black_box($reader.read_line()) {
             Ok(Some(line)) => {
-                $writer.write_line(line).unwrap();
+                black_box($writer.write_line(line).unwrap());
             }
             Ok(None) => break,
             Err(e) => panic!("{}", e),
         }
     };
     (NO_WRITE, $reader:ident) => {
-        match $reader.read_line() {
+        match black_box($reader.read_line()) {
             Ok(Some(_)) => (),
             Ok(None) => break,
             Err(e) => panic!("{}", e),
@@ -45,7 +46,7 @@ macro_rules! reader_bench {
         $c.bench_function($id, |b| {
             b.iter(|| {
                 let options = $options.clone();
-                let mut reader = Reader::$method(LONG_MEDIA_PLAYLIST$(.$as_bytes())?, options)$(.$unwrap())?;
+                let mut reader = Reader::$method((black_box(LONG_MEDIA_PLAYLIST$(.$as_bytes())?)), options)$(.$unwrap())?;
                 let mut writer = Writer::new(Vec::new());
                 loop {
                     reader_match!($mutate, reader, writer)
@@ -57,7 +58,7 @@ macro_rules! reader_bench {
         $c.bench_function($id, |b| {
             b.iter(|| {
                 let options = $options.clone();
-                let mut reader = Reader::$method(LONG_MEDIA_PLAYLIST$(.$as_bytes())?, options)$(.$unwrap())?;
+                let mut reader = Reader::$method(black_box(LONG_MEDIA_PLAYLIST$(.$as_bytes())?), options)$(.$unwrap())?;
                 loop {
                     reader_match!(NO_WRITE, reader)
                 }
