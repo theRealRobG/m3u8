@@ -3,6 +3,10 @@ name = "m3u8"
 version = "0.1.0"
 edition = "2024"
 
+[dependencies]
+fast-float2 = "0.2"
+memchr = "2.7"
+
 [dev-dependencies]
 criterion = "0.6"
 pretty_assertions = "1.4.1"
@@ -10,7 +14,3 @@ pretty_assertions = "1.4.1"
 [[bench]]
 name = "line_parse_bench"
 harness = false
-
-[dependencies]
-fast-float2 = "0.2"
-memchr = "2.7"
