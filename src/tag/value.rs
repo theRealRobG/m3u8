@@ -242,7 +242,7 @@ pub fn new_parse(input: &[u8]) -> Result<ParsedByteSlice<SemiParsedTagValue>, Ta
                 }
                 Ok(ParsedByteSlice {
                     parsed: SemiParsedTagValue::AttributeList(attribute_list),
-                    remaining: remaining,
+                    remaining,
                 })
             } else if needle == b',' {
                 let duration = fast_float2::parse(&input[..n])?;

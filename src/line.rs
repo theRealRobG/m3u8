@@ -211,7 +211,7 @@ where
 {
     parse_bytes_with_custom(input.as_bytes(), options).map(|r| ParsedLineSlice {
         parsed: r.parsed,
-        remaining: r.remaining.map(|b| str_from(b)),
+        remaining: r.remaining.map(str_from),
     })
 }
 

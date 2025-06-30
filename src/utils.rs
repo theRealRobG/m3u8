@@ -198,19 +198,17 @@ pub fn f64_to_u64(f: f64) -> Option<u64> {
                 let left_shift = exponent as i64 - (F64_EXPONENT_BIAS + F64_FRACTION_BITS) as i64;
                 if left_shift < 0 {
                     let right_shift = (-left_shift) as u64;
-                    if mantissa & (1 << right_shift - 1) != 0 {
+                    if mantissa & (1 << (right_shift - 1)) != 0 {
                         debug_assert!(f.fract() != 0.0);
                         None
                     } else {
                         Some(mantissa >> right_shift)
                     }
+                } else if left_shift > (F64_BITS - F64_FRACTION_BITS - 1) as i64 {
+                    debug_assert!(f > 2.0f64.powi(63));
+                    None
                 } else {
-                    if left_shift > (F64_BITS - F64_FRACTION_BITS - 1) as i64 {
-                        debug_assert!(f > 2.0f64.powi(63));
-                        None
-                    } else {
-                        Some(mantissa << left_shift)
-                    }
+                    Some(mantissa << left_shift)
                 }
             }
         }
