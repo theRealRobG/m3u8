@@ -14,7 +14,7 @@ pub struct ContentSteering<'a> {
     server_uri: Cow<'a, str>,
     pathway_id: Option<Cow<'a, str>>,
     attribute_list: HashMap<&'a str, ParsedAttributeValue<'a>>, // Original attribute list
-    output_line: Cow<'a, str>,                                  // Used with Writer
+    output_line: Cow<'a, [u8]>,                                 // Used with Writer
     output_line_is_dirty: bool,                                 // If should recalculate output_line
 }
 
@@ -109,7 +109,7 @@ impl<'a> ContentSteering<'a> {
 const SERVER_URI: &str = "SERVER-URI";
 const PATHWAY_ID: &str = "PATHWAY-ID";
 
-fn calculate_line<'a>(server_uri: &str, pathway_id: &Option<Cow<'a, str>>) -> String {
+fn calculate_line<'a>(server_uri: &str, pathway_id: &Option<Cow<'a, str>>) -> Vec<u8> {
     let mut line = format!(
         "#EXT{}:{}=\"{}\"",
         TagName::ContentSteering.as_str(),
@@ -119,7 +119,7 @@ fn calculate_line<'a>(server_uri: &str, pathway_id: &Option<Cow<'a, str>>) -> St
     if let Some(pathway_id) = pathway_id {
         line.push_str(format!(",{}=\"{}\"", PATHWAY_ID, pathway_id).as_str());
     }
-    line
+    line.into_bytes()
 }
 
 #[cfg(test)]
@@ -131,7 +131,7 @@ mod tests {
     fn new_without_pathway_id_should_be_valid_line() {
         let tag = ContentSteering::new("example.json".to_string(), None);
         assert_eq!(
-            "#EXT-X-CONTENT-STEERING:SERVER-URI=\"example.json\"",
+            b"#EXT-X-CONTENT-STEERING:SERVER-URI=\"example.json\"",
             tag.into_inner().value()
         );
     }
@@ -140,7 +140,7 @@ mod tests {
     fn new_with_pathway_id_should_be_valid_line() {
         let tag = ContentSteering::new("example.json".to_string(), Some("1234".to_string()));
         assert_eq!(
-            "#EXT-X-CONTENT-STEERING:SERVER-URI=\"example.json\",PATHWAY-ID=\"1234\"",
+            b"#EXT-X-CONTENT-STEERING:SERVER-URI=\"example.json\",PATHWAY-ID=\"1234\"",
             tag.into_inner().value()
         );
     }

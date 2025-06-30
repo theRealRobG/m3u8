@@ -12,7 +12,7 @@ use std::borrow::Cow;
 pub struct Name<'a> {
     name: Cow<'a, str>,
     value: Cow<'a, str>,
-    output_line: Cow<'a, str>,  // Used with Writer
+    output_line: Cow<'a, [u8]>, // Used with Writer
     output_line_is_dirty: bool, // If should recalculate output_line
 }
 
@@ -67,15 +67,15 @@ impl<'a> Name<'a> {
         self.output_line_is_dirty = false;
     }
 
-    fn calculate_line(name: &str, value: &str) -> String {
-        format!("#EXT-X-DEFINE:{NAME}=\"{name}\",{VALUE}=\"{value}\"")
+    fn calculate_line(name: &str, value: &str) -> Vec<u8> {
+        format!("#EXT-X-DEFINE:{NAME}=\"{name}\",{VALUE}=\"{value}\"").into_bytes()
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct Import<'a> {
     import: Cow<'a, str>,
-    output_line: Cow<'a, str>,  // Used with Writer
+    output_line: Cow<'a, [u8]>, // Used with Writer
     output_line_is_dirty: bool, // If should recalculate output_line
 }
 
@@ -119,15 +119,15 @@ impl<'a> Import<'a> {
         self.output_line_is_dirty = false;
     }
 
-    fn calculate_line(import: &str) -> String {
-        format!("#EXT-X-DEFINE:{IMPORT}=\"{import}\"")
+    fn calculate_line(import: &str) -> Vec<u8> {
+        format!("#EXT-X-DEFINE:{IMPORT}=\"{import}\"").into_bytes()
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct Queryparam<'a> {
     queryparam: Cow<'a, str>,
-    output_line: Cow<'a, str>,  // Used with Writer
+    output_line: Cow<'a, [u8]>, // Used with Writer
     output_line_is_dirty: bool, // If should recalculate output_line
 }
 
@@ -171,8 +171,8 @@ impl<'a> Queryparam<'a> {
         self.output_line_is_dirty = false;
     }
 
-    fn calculate_line(queryparam: &str) -> String {
-        format!("#EXT-X-DEFINE:{QUERYPARAM}=\"{queryparam}\"")
+    fn calculate_line(queryparam: &str) -> Vec<u8> {
+        format!("#EXT-X-DEFINE:{QUERYPARAM}=\"{queryparam}\"").into_bytes()
     }
 }
 

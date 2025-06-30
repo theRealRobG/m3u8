@@ -17,7 +17,7 @@ pub struct SessionKey<'a> {
     keyformat: Option<Cow<'a, str>>,
     keyformatversions: Option<Cow<'a, str>>,
     attribute_list: HashMap<&'a str, ParsedAttributeValue<'a>>, // Original attribute list
-    output_line: Cow<'a, str>,                                  // Used with Writer
+    output_line: Cow<'a, [u8]>,                                 // Used with Writer
     output_line_is_dirty: bool,                                 // If should recalculate output_line
 }
 
@@ -203,7 +203,7 @@ fn calculate_line<'a>(
     iv: &Option<Cow<'a, str>>,
     keyformat: &Option<Cow<'a, str>>,
     keyformatversions: &Option<Cow<'a, str>>,
-) -> String {
+) -> Vec<u8> {
     let mut line = format!("#EXT-X-SESSION-KEY:{METHOD}={method},{URI}=\"{uri}\"");
     if let Some(iv) = iv {
         line.push_str(format!(",{IV}={iv}").as_str());
@@ -214,7 +214,7 @@ fn calculate_line<'a>(
     if let Some(keyformatversions) = keyformatversions {
         line.push_str(format!(",{KEYFORMATVERSIONS}=\"{keyformatversions}\"").as_str());
     }
-    line
+    line.into_bytes()
 }
 
 #[cfg(test)]
@@ -228,7 +228,8 @@ mod tests {
             concat!(
                 "#EXT-X-SESSION-KEY:METHOD=SAMPLE-AES,URI=\"skd://some-key-id\",IV=0xABCD,",
                 "KEYFORMAT=\"com.apple.streamingkeydelivery\",KEYFORMATVERSIONS=\"1\"",
-            ),
+            )
+            .as_bytes(),
             SessionKey::new(
                 "SAMPLE-AES".to_string(),
                 "skd://some-key-id".to_string(),
@@ -244,7 +245,7 @@ mod tests {
     #[test]
     fn as_str_with_options_should_be_valid() {
         assert_eq!(
-            "#EXT-X-SESSION-KEY:METHOD=SAMPLE-AES,URI=\"some-key-id\"",
+            b"#EXT-X-SESSION-KEY:METHOD=SAMPLE-AES,URI=\"some-key-id\"",
             SessionKey::new(
                 "SAMPLE-AES".to_string(),
                 "some-key-id".to_string(),

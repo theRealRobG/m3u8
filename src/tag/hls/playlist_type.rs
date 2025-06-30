@@ -33,10 +33,10 @@ impl PlaylistType {
     pub fn into_inner(self) -> TagInner<'static> {
         match self.0 {
             HlsPlaylistType::Event => TagInner {
-                output_line: Cow::Borrowed("#EXT-X-PLAYLIST-TYPE:EVENT"),
+                output_line: Cow::Borrowed(b"#EXT-X-PLAYLIST-TYPE:EVENT"),
             },
             HlsPlaylistType::Vod => TagInner {
-                output_line: Cow::Borrowed("#EXT-X-PLAYLIST-TYPE:VOD"),
+                output_line: Cow::Borrowed(b"#EXT-X-PLAYLIST-TYPE:VOD"),
             },
         }
     }
@@ -58,7 +58,7 @@ mod tests {
     #[test]
     fn event_as_str_should_be_valid() {
         assert_eq!(
-            "#EXT-X-PLAYLIST-TYPE:EVENT",
+            b"#EXT-X-PLAYLIST-TYPE:EVENT",
             PlaylistType(HlsPlaylistType::Event).into_inner().value()
         );
     }
@@ -66,7 +66,7 @@ mod tests {
     #[test]
     fn vod_as_str_should_be_valid() {
         assert_eq!(
-            "#EXT-X-PLAYLIST-TYPE:VOD",
+            b"#EXT-X-PLAYLIST-TYPE:VOD",
             PlaylistType(HlsPlaylistType::Vod).into_inner().value()
         );
     }

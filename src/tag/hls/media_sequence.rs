@@ -8,7 +8,7 @@ use std::borrow::Cow;
 #[derive(Debug, Clone)]
 pub struct MediaSequence<'a> {
     media_sequence: u64,
-    output_line: Cow<'a, str>,  // Used with Writer
+    output_line: Cow<'a, [u8]>, // Used with Writer
     output_line_is_dirty: bool, // If should recalculate output_line
 }
 
@@ -69,8 +69,8 @@ impl<'a> MediaSequence<'a> {
     }
 }
 
-fn calculate_line(media_sequence: u64) -> String {
-    format!("#EXT-X-MEDIA-SEQUENCE:{media_sequence}")
+fn calculate_line(media_sequence: u64) -> Vec<u8> {
+    format!("#EXT-X-MEDIA-SEQUENCE:{media_sequence}").into_bytes()
 }
 
 #[cfg(test)]
@@ -81,7 +81,7 @@ mod tests {
     #[test]
     fn as_str_should_be_valid() {
         assert_eq!(
-            "#EXT-X-MEDIA-SEQUENCE:100",
+            b"#EXT-X-MEDIA-SEQUENCE:100",
             MediaSequence::new(100).into_inner().value()
         );
     }

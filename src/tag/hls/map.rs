@@ -14,7 +14,7 @@ pub struct Map<'a> {
     uri: Cow<'a, str>,
     byterange: Option<MapByterange>,
     attribute_list: HashMap<&'a str, ParsedAttributeValue<'a>>, // Original attribute list
-    output_line: Cow<'a, str>,                                  // Used with Writer
+    output_line: Cow<'a, [u8]>,                                 // Used with Writer
     output_line_is_dirty: bool,                                 // If should recalculate output_line
 }
 
@@ -124,12 +124,12 @@ impl<'a> Map<'a> {
 const URI: &str = "URI";
 const BYTERANGE: &str = "BYTERANGE";
 
-fn calculate_line(uri: &str, byterange: Option<MapByterange>) -> String {
+fn calculate_line(uri: &str, byterange: Option<MapByterange>) -> Vec<u8> {
     let mut line = format!("#EXT-X-MAP:{URI}=\"{uri}\"");
     if let Some(byterange) = byterange {
         line.push_str(format!(",{BYTERANGE}=\"{byterange}\"").as_str());
     }
-    line
+    line.into_bytes()
 }
 
 #[cfg(test)]
@@ -140,7 +140,7 @@ mod tests {
     #[test]
     fn as_str_no_byterange_should_be_valid() {
         assert_eq!(
-            "#EXT-X-MAP:URI=\"example.mp4\"",
+            b"#EXT-X-MAP:URI=\"example.mp4\"",
             Map::new("example.mp4".to_string(), None)
                 .into_inner()
                 .value()
@@ -150,7 +150,7 @@ mod tests {
     #[test]
     fn as_str_with_byterange_should_be_valid() {
         assert_eq!(
-            "#EXT-X-MAP:URI=\"example.mp4\",BYTERANGE=\"1024@512\"",
+            b"#EXT-X-MAP:URI=\"example.mp4\",BYTERANGE=\"1024@512\"",
             Map::new(
                 "example.mp4".to_string(),
                 Some(MapByterange {

@@ -12,7 +12,7 @@ use std::borrow::Cow;
 #[derive(Debug, Clone)]
 pub struct PartInf<'a> {
     part_target: f64,
-    output_line: Cow<'a, str>,  // Used with Writer
+    output_line: Cow<'a, [u8]>, // Used with Writer
     output_line_is_dirty: bool, // If should recalculate output_line
 }
 
@@ -82,8 +82,8 @@ impl<'a> PartInf<'a> {
 
 const PART_TARGET: &str = "PART-TARGET";
 
-fn calculate_line(part_target: f64) -> String {
-    format!("#EXT-X-PART-INF:{PART_TARGET}={part_target}")
+fn calculate_line(part_target: f64) -> Vec<u8> {
+    format!("#EXT-X-PART-INF:{PART_TARGET}={part_target}").into_bytes()
 }
 
 #[cfg(test)]
@@ -94,7 +94,7 @@ mod tests {
     #[test]
     fn as_str_should_be_valid() {
         assert_eq!(
-            "#EXT-X-PART-INF:PART-TARGET=0.5",
+            b"#EXT-X-PART-INF:PART-TARGET=0.5",
             PartInf::new(0.5).into_inner().value()
         );
     }

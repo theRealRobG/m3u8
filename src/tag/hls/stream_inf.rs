@@ -29,7 +29,7 @@ pub struct StreamInf<'a> {
     closed_captions: Option<Cow<'a, str>>,
     pathway_id: Option<Cow<'a, str>>,
     attribute_list: HashMap<&'a str, ParsedAttributeValue<'a>>, // Original attribute list
-    output_line: Cow<'a, str>,                                  // Used with Writer
+    output_line: Cow<'a, [u8]>,                                 // Used with Writer
     output_line_is_dirty: bool,                                 // If should recalculate output_line
 }
 
@@ -528,7 +528,7 @@ fn calculate_line<'a>(
     subtitles: &Option<Cow<'a, str>>,
     closed_captions: &Option<Cow<'a, str>>,
     pathway_id: &Option<Cow<'a, str>>,
-) -> String {
+) -> Vec<u8> {
     let mut line = format!("#EXT-X-STREAM-INF:{BANDWIDTH}={bandwidth}");
     if let Some(average_bandwidth) = average_bandwidth {
         line.push_str(format!(",{AVERAGE_BANDWIDTH}={average_bandwidth}").as_str());
@@ -578,7 +578,7 @@ fn calculate_line<'a>(
     if let Some(pathway_id) = pathway_id {
         line.push_str(format!(",{PATHWAY_ID}=\"{pathway_id}\"").as_str());
     }
-    line
+    line.into_bytes()
 }
 
 #[cfg(test)]
@@ -589,7 +589,7 @@ mod tests {
     #[test]
     fn as_str_with_no_options_should_be_valid() {
         assert_eq!(
-            "#EXT-X-STREAM-INF:BANDWIDTH=10000000",
+            b"#EXT-X-STREAM-INF:BANDWIDTH=10000000",
             StreamInf::new(
                 10000000, None, None, None, None, None, None, None, None, None, None, None, None,
                 None, None, None, None,
@@ -621,7 +621,8 @@ mod tests {
                 "SUBTITLES=\"subs\",",
                 "CLOSED-CAPTIONS=\"cc\",",
                 "PATHWAY-ID=\"1234\"",
-            ),
+            )
+            .as_bytes(),
             StreamInf::new(
                 10000000,
                 Some(9000000),

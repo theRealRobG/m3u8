@@ -51,7 +51,7 @@ pub trait TagInformation {
 pub struct ParsedTag<'a> {
     pub name: &'a str,
     pub value: SemiParsedTagValue<'a>,
-    pub(crate) original_input: &'a str,
+    pub(crate) original_input: &'a [u8],
 }
 
 #[derive(Debug, PartialEq)]

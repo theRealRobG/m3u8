@@ -28,7 +28,7 @@ pub struct Daterange<'a> {
     scte35_out: Option<Cow<'a, str>>,
     scte35_in: Option<Cow<'a, str>>,
     attribute_list: HashMap<&'a str, ParsedAttributeValue<'a>>, // Original attribute list
-    output_line: Cow<'a, str>,                                  // Used with Writer
+    output_line: Cow<'a, [u8]>,                                 // Used with Writer
     output_line_is_dirty: bool,                                 // If should recalculate output_line
 }
 
@@ -551,7 +551,7 @@ fn calculate_line<'a>(
     scte35_out: &Option<Cow<'a, str>>,
     scte35_in: &Option<Cow<'a, str>>,
     end_on_next: bool,
-) -> String {
+) -> Vec<u8> {
     let mut line = format!(
         "#EXT{}:{}=\"{}\",{}=\"{}\"",
         TagName::Daterange.as_str(),
@@ -605,7 +605,7 @@ fn calculate_line<'a>(
     if end_on_next {
         line.push_str(",END-ON-NEXT=YES");
     }
-    line
+    line.into_bytes()
 }
 
 fn extension_attributes_from_owned(
@@ -648,7 +648,7 @@ fn extension_attributes_from_owned(
 
 #[cfg(test)]
 mod tests {
-    use crate::date::DateTimeTimezoneOffset;
+    use crate::{date::DateTimeTimezoneOffset, date_time};
 
     use super::*;
     use pretty_assertions::assert_eq;
@@ -681,7 +681,7 @@ mod tests {
             false,
         );
         assert_eq!(
-            "#EXT-X-DATERANGE:ID=\"some-id\",START-DATE=\"2025-06-14T23:41:42.000-05:00\"",
+            b"#EXT-X-DATERANGE:ID=\"some-id\",START-DATE=\"2025-06-14T23:41:42.000-05:00\"",
             tag.into_inner().value()
         );
     }
@@ -691,31 +691,9 @@ mod tests {
         let tag = Daterange::new(
             "some-id".to_string(),
             Some("com.example.class".to_string()),
-            DateTime {
-                date_fullyear: 2025,
-                date_month: 6,
-                date_mday: 14,
-                time_hour: 23,
-                time_minute: 41,
-                time_second: 42.0,
-                timezone_offset: DateTimeTimezoneOffset {
-                    time_hour: -5,
-                    time_minute: 0,
-                },
-            },
+            date_time!(2025-06-14 T 23:41:42.000 -05:00),
             Some("ONCE".to_string()),
-            Some(DateTime {
-                date_fullyear: 2025,
-                date_month: 6,
-                date_mday: 14,
-                time_hour: 23,
-                time_minute: 43,
-                time_second: 42.0,
-                timezone_offset: DateTimeTimezoneOffset {
-                    time_hour: -5,
-                    time_minute: 0,
-                },
-            }),
+            Some(date_time!(2025-06-14 T 23:43:42.000 -05:00)),
             Some(120.0),
             Some(180.0),
             HashMap::new(),
@@ -730,7 +708,8 @@ mod tests {
                 "CLASS=\"com.example.class\",CUE=\"ONCE\",",
                 "END-DATE=\"2025-06-14T23:43:42.000-05:00\",DURATION=120,PLANNED-DURATION=180,",
                 "SCTE35-CMD=0xABCD,SCTE35-OUT=0xABCD,SCTE35-IN=0xABCD,END-ON-NEXT=YES"
-            ),
+            )
+            .as_bytes(),
             tag.into_inner().value()
         );
     }
@@ -740,18 +719,7 @@ mod tests {
         let tag = Daterange::new(
             "some-id".to_string(),
             None as Option<String>,
-            DateTime {
-                date_fullyear: 2025,
-                date_month: 6,
-                date_mday: 14,
-                time_hour: 23,
-                time_minute: 41,
-                time_second: 42.0,
-                timezone_offset: DateTimeTimezoneOffset {
-                    time_hour: -5,
-                    time_minute: 0,
-                },
-            },
+            date_time!(2025-06-14 T 23:41:42.000 -05:00),
             None as Option<String>,
             None,
             None,
@@ -778,33 +746,33 @@ mod tests {
         // Client attributes can come in any order (due to it being a HashMap) so we need to be a
         // little more creative in validating the tag format.
         let tag_inner = tag.into_inner();
-        let tag_as_str = tag_inner.value();
+        let tag_as_bytes = tag_inner.value();
         let mut found_a = false;
         let mut found_b = false;
         let mut found_c = false;
-        for (index, split) in tag_as_str.split(',').enumerate() {
+        for (index, split) in tag_as_bytes.split(|b| b == &b',').enumerate() {
             match index {
-                0 => assert_eq!("#EXT-X-DATERANGE:ID=\"some-id\"", split),
-                1 => assert_eq!("START-DATE=\"2025-06-14T23:41:42.000-05:00\"", split),
+                0 => assert_eq!(b"#EXT-X-DATERANGE:ID=\"some-id\"", split),
+                1 => assert_eq!(b"START-DATE=\"2025-06-14T23:41:42.000-05:00\"", split),
                 2 | 3 | 4 => {
-                    if split.starts_with("X-COM-EXAMPLE-A") {
+                    if split.starts_with(b"X-COM-EXAMPLE-A") {
                         if found_a {
                             panic!("Already found A")
                         }
                         found_a = true;
-                        assert_eq!("X-COM-EXAMPLE-A=\"Example A\"", split);
-                    } else if split.starts_with("X-COM-EXAMPLE-B") {
+                        assert_eq!(b"X-COM-EXAMPLE-A=\"Example A\"", split);
+                    } else if split.starts_with(b"X-COM-EXAMPLE-B") {
                         if found_b {
                             panic!("Already found B")
                         }
                         found_b = true;
-                        assert_eq!("X-COM-EXAMPLE-B=42", split);
-                    } else if split.starts_with("X-COM-EXAMPLE-C") {
+                        assert_eq!(b"X-COM-EXAMPLE-B=42", split);
+                    } else if split.starts_with(b"X-COM-EXAMPLE-C") {
                         if found_c {
                             panic!("Already found C")
                         }
                         found_c = true;
-                        assert_eq!("X-COM-EXAMPLE-C=0xABCD", split);
+                        assert_eq!(b"X-COM-EXAMPLE-C=0xABCD", split);
                     } else {
                         panic!("Unexpected attribute at index {}", index);
                     }
@@ -834,7 +802,7 @@ mod tests {
             false,
         );
         assert_eq!(
-            "#EXT-X-DATERANGE:ID=\"some-id\",START-DATE=\"1970-01-01T00:00:00.000Z\",CUE=\"ONCE\"",
+            b"#EXT-X-DATERANGE:ID=\"some-id\",START-DATE=\"1970-01-01T00:00:00.000Z\",CUE=\"ONCE\"",
             daterange.clone().into_inner().value()
         );
         daterange.set_id("another-id".to_string());
@@ -850,7 +818,8 @@ mod tests {
             concat!(
                 "#EXT-X-DATERANGE:ID=\"another-id\",START-DATE=\"1970-01-01T00:00:00.000Z\",",
                 "CLASS=\"com.example.test\",X-EXAMPLE=\"TEST\"",
-            ),
+            )
+            .as_bytes(),
             daterange.into_inner().value()
         );
     }

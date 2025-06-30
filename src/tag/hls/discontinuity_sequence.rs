@@ -8,7 +8,7 @@ use std::borrow::Cow;
 #[derive(Debug, Clone)]
 pub struct DiscontinuitySequence<'a> {
     discontinuity_sequence: u64,
-    output_line: Cow<'a, str>,  // Used with Writer
+    output_line: Cow<'a, [u8]>, // Used with Writer
     output_line_is_dirty: bool, // If should recalculate output_line
 }
 
@@ -70,8 +70,8 @@ impl<'a> DiscontinuitySequence<'a> {
     }
 }
 
-fn calculate_line(discontinuity_sequence: u64) -> String {
-    format!("#EXT-X-DISCONTINUITY-SEQUENCE:{}", discontinuity_sequence)
+fn calculate_line(discontinuity_sequence: u64) -> Vec<u8> {
+    format!("#EXT-X-DISCONTINUITY-SEQUENCE:{}", discontinuity_sequence).into_bytes()
 }
 
 #[cfg(test)]
@@ -82,7 +82,7 @@ mod tests {
     #[test]
     fn as_str_should_be_valid_tag() {
         assert_eq!(
-            "#EXT-X-DISCONTINUITY-SEQUENCE:42",
+            b"#EXT-X-DISCONTINUITY-SEQUENCE:42",
             DiscontinuitySequence::new(42).into_inner().value()
         )
     }

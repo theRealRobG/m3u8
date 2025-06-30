@@ -54,7 +54,7 @@ pub(crate) fn parse_assuming_ext_taken<'a>(
     };
     match memchr2(b':', b'\n', input) {
         Some(n) if input[n] == b':' => {
-            let name = std::str::from_utf8(input)?;
+            let name = std::str::from_utf8(&input[..n])?;
             let ParsedByteSlice { parsed, remaining } = split_on_new_line(&input[(n + 1)..]);
             Ok(ParsedByteSlice {
                 parsed: Tag {
@@ -66,8 +66,20 @@ pub(crate) fn parse_assuming_ext_taken<'a>(
                 remaining,
             })
         }
+        Some(n) if input[n - 1] == b'\r' => {
+            let name = std::str::from_utf8(&input[..(n - 1)])?;
+            Ok(ParsedByteSlice {
+                parsed: Tag {
+                    name,
+                    value: None,
+                    original_input,
+                    validation_error: None,
+                },
+                remaining: Some(&input[(n + 1)..]),
+            })
+        }
         Some(n) => {
-            let name = std::str::from_utf8(input)?;
+            let name = std::str::from_utf8(&input[..n])?;
             Ok(ParsedByteSlice {
                 parsed: Tag {
                     name,

@@ -8,11 +8,7 @@ use crate::{
     },
     utils::{split_on_new_line, str_from},
 };
-use std::{
-    any::Any,
-    cmp::PartialEq,
-    fmt::{Debug, Display},
-};
+use std::{cmp::PartialEq, fmt::Debug};
 
 #[derive(Debug, PartialEq)]
 #[allow(clippy::large_enum_variant)] // See comment on crate::tag::known::Tag.
@@ -164,6 +160,8 @@ where
 }
 // Just for tests - this helps byte slices that are actually string slices be more readable when
 // assertions are failing.
+#[cfg(test)]
+use std::any::Any;
 #[cfg(test)]
 impl<T: Debug + PartialEq + Any> Debug for ParsedByteSlice<'_, T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

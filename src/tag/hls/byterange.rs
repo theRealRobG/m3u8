@@ -13,7 +13,7 @@ use std::borrow::Cow;
 pub struct Byterange<'a> {
     length: u64,
     offset: Option<u64>,
-    output_line: Cow<'a, str>,  // Used with Writer
+    output_line: Cow<'a, [u8]>, // Used with Writer
     output_line_is_dirty: bool, // If should recalculate output_line
 }
 
@@ -85,12 +85,12 @@ impl<'a> Byterange<'a> {
     }
 }
 
-fn calculate_line(length: u64, offset: Option<u64>) -> String {
+fn calculate_line(length: u64, offset: Option<u64>) -> Vec<u8> {
     let mut line = format!("#EXT{}:{}", TagName::Byterange.as_str(), length);
     if let Some(offset) = offset {
         line.push_str(format!("@{}", offset).as_str());
     }
-    line
+    line.into_bytes()
 }
 
 #[cfg(test)]
@@ -101,12 +101,12 @@ mod tests {
     #[test]
     fn new_with_no_offset_should_be_valid_line() {
         let tag = Byterange::new(1024, None);
-        assert_eq!("#EXT-X-BYTERANGE:1024", tag.into_inner().value());
+        assert_eq!(b"#EXT-X-BYTERANGE:1024", tag.into_inner().value());
     }
 
     #[test]
     fn new_with_offset_should_be_valid_line() {
         let tag = Byterange::new(1024, Some(512));
-        assert_eq!("#EXT-X-BYTERANGE:1024@512", tag.into_inner().value());
+        assert_eq!(b"#EXT-X-BYTERANGE:1024@512", tag.into_inner().value());
     }
 }

@@ -14,7 +14,7 @@ pub struct Start<'a> {
     time_offset: f64,
     precise: Option<bool>,
     attribute_list: HashMap<&'a str, ParsedAttributeValue<'a>>, // Original attribute list
-    output_line: Cow<'a, str>,                                  // Used with Writer
+    output_line: Cow<'a, [u8]>,                                 // Used with Writer
     output_line_is_dirty: bool,                                 // If should recalculate output_line
 }
 
@@ -108,11 +108,11 @@ const TIME_OFFSET: &str = "TIME-OFFSET";
 const PRECISE: &str = "PRECISE";
 const YES: &str = "YES";
 
-fn calculate_line(time_offset: f64, precise: bool) -> String {
+fn calculate_line(time_offset: f64, precise: bool) -> Vec<u8> {
     if precise {
-        format!("#EXT-X-START:{TIME_OFFSET}={time_offset},{PRECISE}={YES}")
+        format!("#EXT-X-START:{TIME_OFFSET}={time_offset},{PRECISE}={YES}").into_bytes()
     } else {
-        format!("#EXT-X-START:{TIME_OFFSET}={time_offset}")
+        format!("#EXT-X-START:{TIME_OFFSET}={time_offset}").into_bytes()
     }
 }
 
@@ -124,7 +124,7 @@ mod tests {
     #[test]
     fn as_str_without_precise_should_be_valid() {
         assert_eq!(
-            "#EXT-X-START:TIME-OFFSET=-42",
+            b"#EXT-X-START:TIME-OFFSET=-42",
             Start::new(-42.0, false).into_inner().value()
         )
     }
@@ -132,7 +132,7 @@ mod tests {
     #[test]
     fn as_str_with_precise_should_be_valid() {
         assert_eq!(
-            "#EXT-X-START:TIME-OFFSET=-42,PRECISE=YES",
+            b"#EXT-X-START:TIME-OFFSET=-42,PRECISE=YES",
             Start::new(-42.0, true).into_inner().value()
         )
     }

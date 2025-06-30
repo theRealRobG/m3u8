@@ -19,7 +19,7 @@ impl TryFrom<ParsedTag<'_>> for M3u {
 impl M3u {
     pub fn into_inner(self) -> TagInner<'static> {
         TagInner {
-            output_line: Cow::Borrowed("#EXTM3U"),
+            output_line: Cow::Borrowed(b"#EXTM3U"),
         }
     }
 }

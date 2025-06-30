@@ -17,7 +17,7 @@ pub struct ServerControl<'a> {
     part_hold_back: Option<f64>,
     can_block_reload: Option<bool>,
     attribute_list: HashMap<&'a str, ParsedAttributeValue<'a>>, // Original attribute list
-    output_line: Cow<'a, str>,                                  // Used with Writer
+    output_line: Cow<'a, [u8]>,                                 // Used with Writer
     output_line_is_dirty: bool,                                 // If should recalculate output_line
 }
 
@@ -206,7 +206,7 @@ fn calculate_line(
     hold_back: Option<f64>,
     part_hold_back: Option<f64>,
     can_block_reload: bool,
-) -> String {
+) -> Vec<u8> {
     let mut line = String::from("#EXT-X-SERVER-CONTROL:");
     let mut separator = "";
     if let Some(can_skip_until) = can_skip_until {
@@ -228,7 +228,7 @@ fn calculate_line(
     if can_block_reload {
         line.push_str(format!("{separator}{CAN_BLOCK_RELOAD}={YES}").as_str());
     }
-    line
+    line.into_bytes()
 }
 
 #[cfg(test)]
@@ -239,7 +239,7 @@ mod tests {
     #[test]
     fn as_str_with_one_value_should_be_valid() {
         assert_eq!(
-            "#EXT-X-SERVER-CONTROL:CAN-SKIP-UNTIL=36.0",
+            b"#EXT-X-SERVER-CONTROL:CAN-SKIP-UNTIL=36.0",
             ServerControl::new(Some(36.0), false, None, None, false)
                 .into_inner()
                 .value()
@@ -249,7 +249,7 @@ mod tests {
     #[test]
     fn as_str_with_bools_should_be_valid() {
         assert_eq!(
-            "#EXT-X-SERVER-CONTROL:CAN-SKIP-DATERANGES=YES,CAN-BLOCK-RELOAD=YES",
+            b"#EXT-X-SERVER-CONTROL:CAN-SKIP-DATERANGES=YES,CAN-BLOCK-RELOAD=YES",
             ServerControl::new(None, true, None, None, true)
                 .into_inner()
                 .value()
@@ -262,7 +262,8 @@ mod tests {
             concat!(
                 "#EXT-X-SERVER-CONTROL:CAN-SKIP-UNTIL=36.0,CAN-SKIP-DATERANGES=YES,HOLD-BACK=18.0,",
                 "PART-HOLD-BACK=1.5,CAN-BLOCK-RELOAD=YES",
-            ),
+            )
+            .as_bytes(),
             ServerControl::new(Some(36.0), true, Some(18.0), Some(1.5), true)
                 .into_inner()
                 .value()

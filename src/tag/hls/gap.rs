@@ -19,7 +19,7 @@ impl TryFrom<ParsedTag<'_>> for Gap {
 impl Gap {
     pub fn into_inner(self) -> TagInner<'static> {
         TagInner {
-            output_line: Cow::Borrowed("#EXT-X-GAP"),
+            output_line: Cow::Borrowed(b"#EXT-X-GAP"),
         }
     }
 }

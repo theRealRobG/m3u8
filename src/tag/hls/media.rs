@@ -27,7 +27,7 @@ pub struct Media<'a> {
     characteristics: Option<Cow<'a, str>>,
     channels: Option<Cow<'a, str>>,
     attribute_list: HashMap<&'a str, ParsedAttributeValue<'a>>, // Original attribute list
-    output_line: Cow<'a, str>,                                  // Used with Writer
+    output_line: Cow<'a, [u8]>,                                 // Used with Writer
     output_line_is_dirty: bool,                                 // If should recalculate output_line
 }
 
@@ -431,7 +431,7 @@ fn calculate_line<'a>(
     sample_rate: Option<u64>,
     characteristics: &Option<Cow<'a, str>>,
     channels: &Option<Cow<'a, str>>,
-) -> String {
+) -> Vec<u8> {
     let mut line =
         format!("#EXT-X-MEDIA:{TYPE}={media_type},{NAME}=\"{name}\",{GROUP_ID}=\"{group_id}\"");
     if let Some(uri) = uri {
@@ -470,7 +470,7 @@ fn calculate_line<'a>(
     if let Some(channels) = channels {
         line.push_str(format!(",{CHANNELS}=\"{channels}\"").as_str());
     }
-    line
+    line.into_bytes()
 }
 
 #[cfg(test)]
@@ -487,7 +487,8 @@ mod tests {
                 "NAME=\"English\",",
                 "GROUP-ID=\"cc\",",
                 "INSTREAM-ID=\"CC1\""
-            ),
+            )
+            .as_bytes(),
             Media::new(
                 "CLOSED-CAPTIONS".to_string(),
                 "English".to_string(),
@@ -529,7 +530,8 @@ mod tests {
                 "SAMPLE-RATE=48000,",
                 "CHARACTERISTICS=\"public.accessibility.describes-video\",",
                 "CHANNELS=\"2\"",
-            ),
+            )
+            .as_bytes(),
             Media::new(
                 "AUDIO".to_string(),
                 "English".to_string(),

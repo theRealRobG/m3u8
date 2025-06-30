@@ -8,7 +8,7 @@ use std::borrow::Cow;
 #[derive(Debug, Clone)]
 pub struct Targetduration<'a> {
     target_duration: u64,
-    output_line: Cow<'a, str>,  // Used with Writer
+    output_line: Cow<'a, [u8]>, // Used with Writer
     output_line_is_dirty: bool, // If should recalculate output_line
 }
 
@@ -69,8 +69,8 @@ impl<'a> Targetduration<'a> {
     }
 }
 
-fn calculate_line(target_duration: u64) -> String {
-    format!("#EXT-X-TARGETDURATION:{target_duration}")
+fn calculate_line(target_duration: u64) -> Vec<u8> {
+    format!("#EXT-X-TARGETDURATION:{target_duration}").into_bytes()
 }
 
 #[cfg(test)]
@@ -81,7 +81,7 @@ mod tests {
     #[test]
     fn as_str_should_be_valid() {
         assert_eq!(
-            "#EXT-X-TARGETDURATION:10",
+            b"#EXT-X-TARGETDURATION:10",
             Targetduration::new(10).into_inner().value()
         );
     }

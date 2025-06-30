@@ -1,7 +1,7 @@
 use crate::{
     date::{DateTime, DateTimeTimezoneOffset},
     error::{DateTimeSyntaxError, GenericSyntaxError, ParseNumberError},
-    line::{ParsedByteSlice, ParsedLineSlice},
+    line::ParsedByteSlice,
 };
 use memchr::{memchr, memchr3};
 
@@ -27,14 +27,6 @@ pub(crate) fn str_from(bytes: &[u8]) -> &str {
         // SAFETY: The input for bytes is always &str in this project, and I only break on single
         // byte characters, so this is safe to do unchecked.
         std::str::from_utf8_unchecked(bytes)
-    }
-}
-
-pub fn split_by_first_lf(str: &str) -> ParsedLineSlice<&str> {
-    let ParsedByteSlice { parsed, remaining } = split_on_new_line(str.as_bytes());
-    ParsedLineSlice {
-        parsed: str_from(parsed),
-        remaining: remaining.map(|b| str_from(b)),
     }
 }
 

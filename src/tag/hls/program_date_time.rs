@@ -9,7 +9,7 @@ use std::borrow::Cow;
 #[derive(Debug, Clone)]
 pub struct ProgramDateTime<'a> {
     program_date_time: DateTime,
-    output_line: Cow<'a, str>,  // Used with Writer
+    output_line: Cow<'a, [u8]>, // Used with Writer
     output_line_is_dirty: bool, // If should recalculate output_line
 }
 
@@ -80,7 +80,7 @@ mod tests {
     #[test]
     fn as_str_should_be_valid() {
         assert_eq!(
-            "#EXT-X-PROGRAM-DATE-TIME:2025-06-16T21:52:08.010-05:00",
+            b"#EXT-X-PROGRAM-DATE-TIME:2025-06-16T21:52:08.010-05:00",
             ProgramDateTime::new(date_time!(2025-06-16 T 21:52:08.010 -05:00))
                 .into_inner()
                 .value()
@@ -88,6 +88,6 @@ mod tests {
     }
 }
 
-fn calculate_line(date_time: DateTime) -> String {
-    format!("#EXT-X-PROGRAM-DATE-TIME:{date_time}")
+fn calculate_line(date_time: DateTime) -> Vec<u8> {
+    format!("#EXT-X-PROGRAM-DATE-TIME:{date_time}").into_bytes()
 }

@@ -110,43 +110,50 @@ where
     /// ```
     /// # use m3u8::Writer;
     /// # use m3u8::tag::known::{ParsedTag, IsKnownName, TagInformation};
-    /// # use m3u8::tag::value::ParsedTagValue;
+    /// # use m3u8::tag::value::{SemiParsedTagValue, UnparsedTagValue};
     /// # use m3u8::error::{ValidationError, ValidationErrorValueKind};
     /// #[derive(Debug, PartialEq)]
-    /// struct ExampleCustomTag {
+    /// struct ExampleCustomTag<'a> {
     ///     answer: u64,
-    /// };
-    /// impl TryFrom<ParsedTag<'_>> for ExampleCustomTag {
+    ///     original_value: &'a [u8],
+    /// }
+    /// impl<'a> TryFrom<ParsedTag<'a>> for ExampleCustomTag<'a> {
     ///     type Error = ValidationError;
-    ///     fn try_from(tag: ParsedTag) -> Result<Self, Self::Error> {
+    ///     fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
     ///         if tag.name != "-X-MEANING-OF-LIFE" {
     ///             return Err(ValidationError::UnexpectedTagName)
     ///         }
     ///         match tag.value {
-    ///             ParsedTagValue::DecimalInteger(answer) => Ok(Self { answer }),
+    ///             SemiParsedTagValue::Unparsed(value) => {
+    ///                 Ok(Self {
+    ///                     answer: value.try_as_decimal_integer()?,
+    ///                     original_value: value.0,
+    ///                 })
+    ///             }
     ///             _ => Err(ValidationError::UnexpectedValueType(
     ///                 ValidationErrorValueKind::from(&tag.value)
     ///             )),
     ///         }
     ///     }
     /// }
-    /// impl IsKnownName for ExampleCustomTag {
+    /// impl IsKnownName for ExampleCustomTag<'_> {
     ///     fn is_known_name(name: &str) -> bool {
     ///         name == "-X-MEANING-OF-LIFE"
     ///     }
     /// }
-    /// impl TagInformation for ExampleCustomTag {
+    /// impl TagInformation for ExampleCustomTag<'_> {
     ///     fn name(&self) -> &str {
     ///         "-X-MEANING-OF-LIFE"
     ///     }
     ///
-    ///     fn value(&self) -> ParsedTagValue {
-    ///         ParsedTagValue::DecimalInteger(self.answer)
+    ///     fn value(&self) -> SemiParsedTagValue {
+    ///         SemiParsedTagValue::Unparsed(UnparsedTagValue(self.original_value))
     ///     }
     /// }
     ///
     /// let mut writer = Writer::new(Vec::new());
-    /// writer.write_custom_tag(ExampleCustomTag { answer: 42 }).unwrap();
+    /// let custom_tag = ExampleCustomTag { answer: 42, original_value: b"42" };
+    /// writer.write_custom_tag(custom_tag).unwrap();
     /// assert_eq!(
     ///     "#EXT-X-MEANING-OF-LIFE:42\n".as_bytes(),
     ///     writer.into_inner()
@@ -187,7 +194,7 @@ where
             HlsLine::UnknownTag(t) => count += self.write(t.as_bytes())?,
             HlsLine::KnownTag(t) => match t {
                 crate::tag::known::Tag::Hls(tag) => {
-                    count += self.write(tag.into_inner().value().as_bytes())?;
+                    count += self.write(tag.into_inner().value())?;
                 }
                 crate::tag::known::Tag::Custom(tag) => {
                     count += self.write(string_from(tag).as_bytes())?;

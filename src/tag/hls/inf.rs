@@ -9,7 +9,7 @@ use std::borrow::Cow;
 pub struct Inf<'a> {
     duration: f64,
     title: Cow<'a, str>,
-    output_line: Cow<'a, str>,  // Used with Writer
+    output_line: Cow<'a, [u8]>, // Used with Writer
     output_line_is_dirty: bool, // If should recalculate output_line
 }
 
@@ -90,11 +90,11 @@ impl<'a> Inf<'a> {
     }
 }
 
-fn calculate_line(duration: f64, title: &str) -> String {
+fn calculate_line(duration: f64, title: &str) -> Vec<u8> {
     if title.is_empty() {
-        format!("#EXTINF:{duration}")
+        format!("#EXTINF:{duration}").into_bytes()
     } else {
-        format!("#EXTINF:{duration},{title}")
+        format!("#EXTINF:{duration},{title}").into_bytes()
     }
 }
 
@@ -106,11 +106,11 @@ mod tests {
     #[test]
     fn as_str_should_be_valid_with_empty_title() {
         assert_eq!(
-            "#EXTINF:6",
+            b"#EXTINF:6",
             Inf::new(6.0, "".to_string()).into_inner().value()
         );
         assert_eq!(
-            "#EXTINF:6.006",
+            b"#EXTINF:6.006",
             Inf::new(6.006, "".to_string()).into_inner().value()
         );
     }
@@ -118,11 +118,11 @@ mod tests {
     #[test]
     fn as_str_should_be_valid_with_some_title() {
         assert_eq!(
-            "#EXTINF:6,title",
+            b"#EXTINF:6,title",
             Inf::new(6.0, "title".to_string()).into_inner().value()
         );
         assert_eq!(
-            "#EXTINF:6.006,title",
+            b"#EXTINF:6.006,title",
             Inf::new(6.006, "title".to_string()).into_inner().value()
         );
     }

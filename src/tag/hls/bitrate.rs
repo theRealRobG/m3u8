@@ -12,7 +12,7 @@ use std::borrow::Cow;
 #[derive(Debug, Clone)]
 pub struct Bitrate<'a> {
     bitrate: u64,
-    output_line: Cow<'a, str>,  // Used with Writer
+    output_line: Cow<'a, [u8]>, // Used with Writer
     output_line_is_dirty: bool, // If should recalculate output_line
 }
 
@@ -73,8 +73,8 @@ impl<'a> Bitrate<'a> {
     }
 }
 
-fn calculate_line(bitrate: u64) -> String {
-    format!("#EXT{}:{}", TagName::Bitrate.as_str(), bitrate)
+fn calculate_line(bitrate: u64) -> Vec<u8> {
+    format!("#EXT{}:{}", TagName::Bitrate.as_str(), bitrate).into_bytes()
 }
 
 #[cfg(test)]
@@ -85,6 +85,6 @@ mod tests {
     #[test]
     fn new_should_be_valid_as_str() {
         let tag = Bitrate::new(10000000);
-        assert_eq!("#EXT-X-BITRATE:10000000", tag.into_inner().value())
+        assert_eq!(b"#EXT-X-BITRATE:10000000", tag.into_inner().value())
     }
 }

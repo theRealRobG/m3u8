@@ -17,7 +17,7 @@ pub struct SessionData<'a> {
     format: Option<Cow<'a, str>>,
     language: Option<Cow<'a, str>>,
     attribute_list: HashMap<&'a str, ParsedAttributeValue<'a>>, // Original attribute list
-    output_line: Cow<'a, str>,                                  // Used with Writer
+    output_line: Cow<'a, [u8]>,                                 // Used with Writer
     output_line_is_dirty: bool,                                 // If should recalculate output_line
 }
 
@@ -195,7 +195,7 @@ fn calculate_line<'a>(
     uri: &Option<Cow<'a, str>>,
     format: &Option<Cow<'a, str>>,
     language: &Option<Cow<'a, str>>,
-) -> String {
+) -> Vec<u8> {
     let mut line = format!("#EXT-X-SESSION-DATA:{DATA_ID}=\"{data_id}\"");
     if let Some(value) = value {
         line.push_str(format!(",{VALUE}=\"{value}\"").as_str());
@@ -209,7 +209,7 @@ fn calculate_line<'a>(
     if let Some(language) = language {
         line.push_str(format!(",{LANGUAGE}=\"{language}\"").as_str());
     }
-    line
+    line.into_bytes()
 }
 
 #[cfg(test)]
@@ -220,7 +220,7 @@ mod tests {
     #[test]
     fn as_str_with_no_options_should_be_valid() {
         assert_eq!(
-            "#EXT-X-SESSION-DATA:DATA-ID=\"1234\",VALUE=\"test\",LANGUAGE=\"en\"",
+            b"#EXT-X-SESSION-DATA:DATA-ID=\"1234\",VALUE=\"test\",LANGUAGE=\"en\"",
             SessionData::new(
                 "1234".to_string(),
                 Some("test".to_string()),
@@ -236,7 +236,7 @@ mod tests {
     #[test]
     fn as_str_with_options_should_be_valid() {
         assert_eq!(
-            "#EXT-X-SESSION-DATA:DATA-ID=\"1234\",URI=\"test.bin\",FORMAT=RAW",
+            b"#EXT-X-SESSION-DATA:DATA-ID=\"1234\",URI=\"test.bin\",FORMAT=RAW",
             SessionData::new(
                 "1234".to_string(),
                 None,

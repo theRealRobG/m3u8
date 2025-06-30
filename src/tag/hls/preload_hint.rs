@@ -16,7 +16,7 @@ pub struct PreloadHint<'a> {
     byterange_start: Option<u64>,
     byterange_length: Option<u64>,
     attribute_list: HashMap<&'a str, ParsedAttributeValue<'a>>, // Original attribute list
-    output_line: Cow<'a, str>,                                  // Used with Writer
+    output_line: Cow<'a, [u8]>,                                 // Used with Writer
     output_line_is_dirty: bool,                                 // If should recalculate output_line
 }
 
@@ -171,7 +171,7 @@ fn calculate_line(
     uri: &str,
     byterange_start: Option<u64>,
     byterange_length: Option<u64>,
-) -> String {
+) -> Vec<u8> {
     let mut line = format!("#EXT-X-PRELOAD-HINT:{TYPE}={hint_type},URI=\"{uri}\"");
     if let Some(byterange_start) = byterange_start {
         line.push_str(format!(",{BYTERANGE_START}={byterange_start}").as_str());
@@ -179,7 +179,7 @@ fn calculate_line(
     if let Some(byterange_length) = byterange_length {
         line.push_str(format!(",{BYTERANGE_LENGTH}={byterange_length}").as_str());
     }
-    line
+    line.into_bytes()
 }
 
 #[cfg(test)]
@@ -190,7 +190,7 @@ mod tests {
     #[test]
     fn as_str_with_no_options_should_be_valid() {
         assert_eq!(
-            "#EXT-X-PRELOAD-HINT:TYPE=PART,URI=\"part.2.mp4\"",
+            b"#EXT-X-PRELOAD-HINT:TYPE=PART,URI=\"part.2.mp4\"",
             PreloadHint::new("PART".to_string(), "part.2.mp4".to_string(), None, None)
                 .into_inner()
                 .value()
@@ -200,7 +200,7 @@ mod tests {
     #[test]
     fn as_str_with_options_should_be_valid() {
         assert_eq!(
-            "#EXT-X-PRELOAD-HINT:TYPE=PART,URI=\"part.2.mp4\",BYTERANGE-START=512,BYTERANGE-LENGTH=1024",
+            b"#EXT-X-PRELOAD-HINT:TYPE=PART,URI=\"part.2.mp4\",BYTERANGE-START=512,BYTERANGE-LENGTH=1024",
             PreloadHint::new(
                 "PART".to_string(),
                 "part.2.mp4".to_string(),

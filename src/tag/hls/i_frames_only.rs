@@ -19,7 +19,7 @@ impl TryFrom<ParsedTag<'_>> for IFramesOnly {
 impl IFramesOnly {
     pub fn into_inner(self) -> TagInner<'static> {
         TagInner {
-            output_line: Cow::Borrowed("#EXT-X-I-FRAMES-ONLY"),
+            output_line: Cow::Borrowed(b"#EXT-X-I-FRAMES-ONLY"),
         }
     }
 }

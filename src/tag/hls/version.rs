@@ -8,7 +8,7 @@ use std::borrow::Cow;
 #[derive(Debug, Clone)]
 pub struct Version<'a> {
     version: u64,
-    output_line: Cow<'a, str>,  // Used with Writer
+    output_line: Cow<'a, [u8]>, // Used with Writer
     output_line_is_dirty: bool, // If should recalculate output_line
 }
 
@@ -69,8 +69,8 @@ impl<'a> Version<'a> {
     }
 }
 
-fn calculate_line(version: u64) -> String {
-    format!("#EXT-X-VERSION:{version}")
+fn calculate_line(version: u64) -> Vec<u8> {
+    format!("#EXT-X-VERSION:{version}").into_bytes()
 }
 
 #[cfg(test)]
@@ -80,6 +80,6 @@ mod tests {
 
     #[test]
     fn as_str_should_be_valid() {
-        assert_eq!("#EXT-X-VERSION:10", Version::new(10).into_inner().value());
+        assert_eq!(b"#EXT-X-VERSION:10", Version::new(10).into_inner().value());
     }
 }

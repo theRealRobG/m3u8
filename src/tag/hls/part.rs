@@ -17,7 +17,7 @@ pub struct Part<'a> {
     byterange: Option<PartByterange>,
     gap: Option<bool>,
     attribute_list: HashMap<&'a str, ParsedAttributeValue<'a>>, // Original attribute list
-    output_line: Cow<'a, str>,                                  // Used with Writer
+    output_line: Cow<'a, [u8]>,                                 // Used with Writer
     output_line_is_dirty: bool,                                 // If should recalculate output_line
 }
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -210,7 +210,7 @@ fn calculate_line(
     independent: bool,
     byterange: Option<PartByterange>,
     gap: bool,
-) -> String {
+) -> Vec<u8> {
     let mut line = format!("#EXT-X-PART:{URI}=\"{uri}\",{DURATION}={duration}");
     if independent {
         line.push_str(format!(",{INDEPENDENT}={YES}").as_str());
@@ -221,7 +221,7 @@ fn calculate_line(
     if gap {
         line.push_str(format!(",{GAP}={YES}").as_str());
     }
-    line
+    line.into_bytes()
 }
 
 #[cfg(test)]
@@ -232,7 +232,7 @@ mod tests {
     #[test]
     fn as_str_with_no_options_should_be_valid() {
         assert_eq!(
-            "#EXT-X-PART:URI=\"part.1.0.mp4\",DURATION=0.5",
+            b"#EXT-X-PART:URI=\"part.1.0.mp4\",DURATION=0.5",
             Part::new("part.1.0.mp4".to_string(), 0.5, false, None, false)
                 .into_inner()
                 .value()
@@ -242,7 +242,7 @@ mod tests {
     #[test]
     fn as_str_with_options_no_byterange_offset_should_be_valid() {
         assert_eq!(
-            "#EXT-X-PART:URI=\"part.1.0.mp4\",DURATION=0.5,INDEPENDENT=YES,BYTERANGE=1024,GAP=YES",
+            b"#EXT-X-PART:URI=\"part.1.0.mp4\",DURATION=0.5,INDEPENDENT=YES,BYTERANGE=1024,GAP=YES",
             Part::new(
                 "part.1.0.mp4".to_string(),
                 0.5,
@@ -261,7 +261,7 @@ mod tests {
     #[test]
     fn as_str_with_options_with_byterange_offset_should_be_valid() {
         assert_eq!(
-            "#EXT-X-PART:URI=\"part.1.0.mp4\",DURATION=0.5,INDEPENDENT=YES,BYTERANGE=1024@512,GAP=YES",
+            b"#EXT-X-PART:URI=\"part.1.0.mp4\",DURATION=0.5,INDEPENDENT=YES,BYTERANGE=1024@512,GAP=YES",
             Part::new(
                 "part.1.0.mp4".to_string(),
                 0.5,

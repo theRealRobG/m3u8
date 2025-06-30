@@ -15,7 +15,7 @@ pub struct RenditionReport<'a> {
     last_msn: u64,
     last_part: Option<u64>,
     attribute_list: HashMap<&'a str, ParsedAttributeValue<'a>>, // Original attribute list
-    output_line: Cow<'a, str>,                                  // Used with Writer
+    output_line: Cow<'a, [u8]>,                                 // Used with Writer
     output_line_is_dirty: bool,                                 // If should recalculate output_line
 }
 
@@ -128,12 +128,12 @@ const URI: &str = "URI";
 const LAST_MSN: &str = "LAST-MSN";
 const LAST_PART: &str = "LAST-PART";
 
-fn calculate_line(uri: &str, last_msn: u64, last_part: Option<u64>) -> String {
+fn calculate_line(uri: &str, last_msn: u64, last_part: Option<u64>) -> Vec<u8> {
     let mut line = format!("#EXT-X-RENDITION-REPORT:{URI}=\"{uri}\",{LAST_MSN}={last_msn}");
     if let Some(last_part) = last_part {
         line.push_str(format!(",{LAST_PART}={last_part}").as_str());
     }
-    line
+    line.into_bytes()
 }
 
 #[cfg(test)]
@@ -144,7 +144,7 @@ mod tests {
     #[test]
     fn as_str_with_no_options_should_be_valid() {
         assert_eq!(
-            "#EXT-X-RENDITION-REPORT:URI=\"low.m3u8\",LAST-MSN=100",
+            b"#EXT-X-RENDITION-REPORT:URI=\"low.m3u8\",LAST-MSN=100",
             RenditionReport::new("low.m3u8".to_string(), 100, None)
                 .into_inner()
                 .value()
@@ -154,7 +154,7 @@ mod tests {
     #[test]
     fn as_str_with_options_should_be_valid() {
         assert_eq!(
-            "#EXT-X-RENDITION-REPORT:URI=\"low.m3u8\",LAST-MSN=100,LAST-PART=2",
+            b"#EXT-X-RENDITION-REPORT:URI=\"low.m3u8\",LAST-MSN=100,LAST-PART=2",
             RenditionReport::new("low.m3u8".to_string(), 100, Some(2))
                 .into_inner()
                 .value()

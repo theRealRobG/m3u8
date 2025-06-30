@@ -128,7 +128,7 @@ use m3u8::{
     tag::{
         hls::inf::Inf,
         known::{IsKnownName, ParsedTag, TagInformation},
-        value::{ParsedAttributeValue, ParsedTagValue},
+        value::{ParsedAttributeValue, SemiParsedTagValue},
     },
     Reader,
 };
@@ -174,15 +174,15 @@ impl IsKnownName for CustomImageTag<'_> {
 impl<'a> TagInformation for CustomImageTag<'a> {
     fn name(&self) -> &str {
         match self {
-            CustomImageTag::ImagesOnly => "-X-IMAGES-ONLY",
-            CustomImageTag::Tiles(_) => "-X-TILES",
+            Self::ImagesOnly => "-X-IMAGES-ONLY",
+            Self::Tiles(_) => "-X-TILES",
         }
     }
 
-    fn value(&self) -> ParsedTagValue {
+    fn value(&self) -> SemiParsedTagValue {
         match self {
-            CustomImageTag::ImagesOnly => ParsedTagValue::Empty,
-            CustomImageTag::Tiles(tiles) => ParsedTagValue::AttributeList(HashMap::from([
+            Self::ImagesOnly => SemiParsedTagValue::Empty,
+            Self::Tiles(tiles) => SemiParsedTagValue::AttributeList(HashMap::from([
                 (
                     "RESOLUTION",
                     ParsedAttributeValue::UnquotedString(tiles.original_resolution_str),
@@ -214,7 +214,7 @@ impl<'a> TryFrom<ParsedTag<'a>> for Tiles<'a> {
     type Error = ValidationError;
 
     fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
-        let ParsedTagValue::AttributeList(attribute_list) = tag.value else {
+        let SemiParsedTagValue::AttributeList(attribute_list) = tag.value else {
             return Err(ValidationError::UnexpectedValueType(
                 ValidationErrorValueKind::from(&tag.value),
             ));
@@ -271,7 +271,10 @@ let mut reader = Reader::from_str_with_custom_tag_parsing(
     ParsingOptions::default(),
     PhantomData::<CustomImageTag>,
 );
-assert_eq!(reader.read_line(), Ok(Some(HlsLine::from(CustomImageTag::ImagesOnly))));
+assert_eq!(
+    reader.read_line(),
+    Ok(Some(HlsLine::from(CustomImageTag::ImagesOnly)))
+);
 assert_eq!(
     reader.read_line(),
     Ok(Some(HlsLine::from(CustomImageTag::Tiles(Tiles {
@@ -292,7 +295,9 @@ assert_eq!(
     reader.read_line(),
     Ok(Some(HlsLine::from(Inf::new(
         60.06,
-        String::from("Indicates 20 320x180 images (laid out 5x4) each to be displayed for 3.003s")
+        String::from(
+            "Indicates 20 320x180 images (laid out 5x4) each to be displayed for 3.003s"
+        )
     ))))
 );
 assert_eq!(reader.read_line(), Ok(Some(HlsLine::Uri("image.1.jpeg"))));

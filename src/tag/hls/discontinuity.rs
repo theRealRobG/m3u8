@@ -19,7 +19,7 @@ impl TryFrom<ParsedTag<'_>> for Discontinuity {
 impl Discontinuity {
     pub fn into_inner(self) -> TagInner<'static> {
         TagInner {
-            output_line: Cow::Borrowed("#EXT-X-DISCONTINUITY"),
+            output_line: Cow::Borrowed(b"#EXT-X-DISCONTINUITY"),
         }
     }
 }
