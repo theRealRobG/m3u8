@@ -329,22 +329,14 @@ ParsingOptionsBuilder::new()
 It may be quite desirable to avoid parsing of tags that are not needed as this can add quite
 considerable performance overhead. Unknown tags make no attempt to parse or validate the value
 portion of the tag (the part after `:`) and just return the name of the tag along with the `&str`
-for the rest of the line. Running locally as of commit `ee6e14e8e78e5adfa4414bfd7b63ce4c983307a0`
+for the rest of the line. Running locally as of commit `6fcc38a67bf0eee0769b7e85f82599d1da6eb56d`
 the following benchmark shows that when parsing a large playlist, including all tags in the parse is
-about 2.5x slower than including no tags in the parse (`2.3491 ms` vs `920.32 µs` == `0.92032 ms`).
+about 2x slower than including no tags in the parse (`2.3842 ms` vs `1.1364 ms`).
 ```sh
-Bench large playlist with full parsing on all known tags
-                        time:   [2.3486 ms 2.3491 ms 2.3497 ms]
-Found 5 outliers among 100 measurements (5.00%)
-  3 (3.00%) high mild
-  2 (2.00%) high severe
-
-Bench large playlist with no known tags being fully parsed
-                        time:   [920.11 µs 920.32 µs 920.59 µs]
-Found 22 outliers among 100 measurements (22.00%)
-  10 (10.00%) low severe
-  5 (5.00%) low mild
-  7 (7.00%) high severe
+Large playlist, all tags, using Reader::from_str, no writing
+                        time:   [2.3793 ms 2.3842 ms 2.3891 ms]
+Large playlist, no tags, using Reader::from_str, no writing
+                        time:   [1.1357 ms 1.1364 ms 1.1372 ms]
 ```
 
 Some basic validation can still be done on `m3u8::tag::unknown::Tag`. For example, the name can be
