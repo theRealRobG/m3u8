@@ -42,11 +42,11 @@ macro_rules! reader_match {
 }
 
 macro_rules! reader_bench {
-    ($c:ident, $id:literal, $options:ident, $method:ident $([$as_bytes:ident $unwrap:ident])?, $mutate:ident) => {
+    ($c:ident, $id:literal, $options:ident, $method:ident $([$as_bytes:ident])?, $mutate:ident) => {
         $c.bench_function($id, |b| {
             b.iter(|| {
                 let options = $options.clone();
-                let mut reader = Reader::$method((black_box(LONG_MEDIA_PLAYLIST$(.$as_bytes())?)), options)$(.$unwrap())?;
+                let mut reader = Reader::$method((black_box(LONG_MEDIA_PLAYLIST$(.$as_bytes())?)), options);
                 let mut writer = Writer::new(Vec::new());
                 loop {
                     reader_match!($mutate, reader, writer)
@@ -54,11 +54,11 @@ macro_rules! reader_bench {
             });
         });
     };
-    (NO_WRITE, $c:ident, $id:literal, $options:ident, $method:ident $([$as_bytes:ident $unwrap:ident])?) => {
+    (NO_WRITE, $c:ident, $id:literal, $options:ident, $method:ident $([$as_bytes:ident])?) => {
         $c.bench_function($id, |b| {
             b.iter(|| {
                 let options = $options.clone();
-                let mut reader = Reader::$method(black_box(LONG_MEDIA_PLAYLIST$(.$as_bytes())?), options)$(.$unwrap())?;
+                let mut reader = Reader::$method(black_box(LONG_MEDIA_PLAYLIST$(.$as_bytes())?), options);
                 loop {
                     reader_match!(NO_WRITE, reader)
                 }
@@ -108,16 +108,16 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     reader_bench!(
         NO_WRITE,
         c,
-        "Large playlist, all tags, using Reader::try_from_reader, no writing",
+        "Large playlist, all tags, using Reader::from_reader, no writing",
         playlist_all_tags_parse_options,
-        try_from_reader[as_bytes unwrap]
+        from_reader[as_bytes]
     );
     reader_bench!(
         NO_WRITE,
         c,
-        "Large playlist, no tags, using Reader::try_from_reader, no writing",
+        "Large playlist, no tags, using Reader::from_reader, no writing",
         playlist_no_tags_parse_options,
-        try_from_reader[as_bytes unwrap]
+        from_reader[as_bytes]
     );
     // from_str benches
     reader_bench!(
@@ -144,23 +144,23 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     // try_from_reader benches
     reader_bench!(
         c,
-        "Large playlist, all tags, Reader::try_from_reader and Writer, no mutation",
+        "Large playlist, all tags, Reader::from_reader and Writer, no mutation",
         playlist_all_tags_parse_options,
-        try_from_reader[as_bytes unwrap],
+        from_reader[as_bytes],
         NO_MUTATE
     );
     reader_bench!(
         c,
-        "Large playlist, all tags, Reader::try_from_reader and Writer, mutation on EXTINF",
+        "Large playlist, all tags, Reader::from_reader and Writer, mutation on EXTINF",
         playlist_all_tags_parse_options,
-        try_from_reader[as_bytes unwrap],
+        from_reader[as_bytes],
         MUTATE
     );
     reader_bench!(
         c,
-        "Large playlist, no tags, Reader::try_from_reader and Writer, no mutation",
+        "Large playlist, no tags, Reader::from_reader and Writer, no mutation",
         playlist_no_tags_parse_options,
-        try_from_reader[as_bytes unwrap],
+        from_reader[as_bytes],
         NO_MUTATE
     );
 }
