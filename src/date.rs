@@ -4,7 +4,7 @@ use std::fmt::Display;
 #[macro_export]
 macro_rules! date_time {
     ($Y:literal-$M:literal-$D:literal T $h:literal:$m:literal:$s:literal) => {
-        DateTime {
+        $crate::date::DateTime {
             date_fullyear: $Y,
             date_month: $M,
             date_mday: $D,
@@ -15,14 +15,14 @@ macro_rules! date_time {
         }
     };
     ($Y:literal-$M:literal-$D:literal T $h:literal:$m:literal:$s:literal $x:literal:$y:literal) => {
-        DateTime {
+        $crate::date::DateTime {
             date_fullyear: $Y,
             date_month: $M,
             date_mday: $D,
             time_hour: $h,
             time_minute: $m,
             time_second: $s,
-            timezone_offset: DateTimeTimezoneOffset {
+            timezone_offset: $crate::date::DateTimeTimezoneOffset {
                 time_hour: $x,
                 time_minute: $y,
             },

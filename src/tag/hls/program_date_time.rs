@@ -72,9 +72,8 @@ impl<'a> ProgramDateTime<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{date::DateTimeTimezoneOffset, date_time};
-
     use super::*;
+    use crate::date_time;
     use pretty_assertions::assert_eq;
 
     #[test]
