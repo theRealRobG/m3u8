@@ -13,7 +13,7 @@ macro_rules! reader_match {
     (MUTATE, $reader:ident, $writer:ident) => {
         match black_box($reader.read_line()) {
             Ok(Some(HlsLine::KnownTag(known::Tag::Hls(hls::Tag::Inf(mut tag))))) => {
-                tag.set_title(String::from("TEST"));
+                tag.set_title(black_box(String::from("TEST")));
                 black_box($writer.write_line(HlsLine::from(tag)).unwrap());
             }
             Ok(Some(line)) => {
