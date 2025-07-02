@@ -54,6 +54,53 @@ pub mod stream_inf;
 pub mod targetduration;
 pub mod version;
 
+macro_rules! get_attr {
+    ($self:ident, &$field:ident) => {
+        &$self.$field
+    };
+    ($self:ident, $field:ident) => {
+        $self.$field
+    };
+    ($self:ident, Some(&$field:ident) as $value_case:ident($attr:ident)) => {
+        if let Some($field) = &$self.$field {
+            Some($field)
+        } else {
+            match $self.attribute_list.get($attr) {
+                Some(ParsedAttributeValue::$value_case(x)) => Some(x),
+                _ => None,
+            }
+        }
+    };
+    ($self:ident, Some($field:ident) as $value_case:ident($attr:ident)) => {
+        if let Some($field) = $self.$field {
+            Some($field)
+        } else {
+            match $self.attribute_list.get($attr) {
+                Some(ParsedAttributeValue::$value_case(x)) => Some(x),
+                _ => None,
+            }
+        }
+    };
+}
+
+macro_rules! set_attr {
+    ($self:ident, $attr:ident, $field:ident$(.$into:ident)?) => {
+        $self.attribute_list.remove($attr);
+        $self.$field = $field$(.$into())?;
+        $self.output_line_is_dirty = true;
+    };
+    ($self:ident, $attr:ident, Some($field:ident$(.$into:ident)?)) => {
+        $self.attribute_list.remove($attr);
+        $self.$field = Some($field$(.$into())?);
+        $self.output_line_is_dirty = true;
+    };
+    ($self:ident, $attr:ident, None<$field:ident>) => {
+        $self.attribute_list.remove($attr);
+        $self.$field = None;
+        $self.output_line_is_dirty = true;
+    };
+}
+
 #[derive(Debug, PartialEq)]
 pub enum Tag<'a> {
     /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.1.1
