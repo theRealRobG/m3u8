@@ -8,6 +8,38 @@ use crate::{
 };
 use std::{borrow::Cow, collections::HashMap};
 
+#[derive(Debug, PartialEq, Clone)]
+pub struct ContentSteeringAttributeList<'a> {
+    pub server_uri: Cow<'a, str>,
+    pub pathway_id: Option<Cow<'a, str>>,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct ContentSteeringBuilder<'a> {
+    server_uri: Cow<'a, str>,
+    pathway_id: Option<Cow<'a, str>>,
+}
+impl<'a> ContentSteeringBuilder<'a> {
+    pub fn new(server_uri: impl Into<Cow<'a, str>>) -> Self {
+        Self {
+            server_uri: server_uri.into(),
+            pathway_id: Default::default(),
+        }
+    }
+
+    pub fn with_pathway_id(mut self, pathway_id: impl Into<Cow<'a, str>>) -> Self {
+        self.pathway_id = Some(pathway_id.into());
+        self
+    }
+
+    pub fn finish(self) -> ContentSteering<'a> {
+        ContentSteering::new(ContentSteeringAttributeList {
+            server_uri: self.server_uri,
+            pathway_id: self.pathway_id,
+        })
+    }
+}
+
 /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.6.6
 #[derive(Debug, Clone)]
 pub struct ContentSteering<'a> {
@@ -48,10 +80,12 @@ impl<'a> TryFrom<ParsedTag<'a>> for ContentSteering<'a> {
 }
 
 impl<'a> ContentSteering<'a> {
-    pub fn new(server_uri: String, pathway_id: Option<String>) -> Self {
-        let server_uri = Cow::Owned(server_uri);
-        let pathway_id = pathway_id.map(Cow::Owned);
-        let output_line = Cow::Owned(calculate_line(&server_uri, &pathway_id));
+    pub fn new(attribute_list: ContentSteeringAttributeList<'a>) -> Self {
+        let output_line = Cow::Owned(calculate_line(&attribute_list));
+        let ContentSteeringAttributeList {
+            server_uri,
+            pathway_id,
+        } = attribute_list;
         Self {
             server_uri,
             pathway_id,
@@ -59,6 +93,10 @@ impl<'a> ContentSteering<'a> {
             output_line,
             output_line_is_dirty: false,
         }
+    }
+
+    pub fn builder(server_uri: impl Into<Cow<'a, str>>) -> ContentSteeringBuilder<'a> {
+        ContentSteeringBuilder::new(server_uri)
     }
 
     pub fn into_inner(mut self) -> TagInner<'a> {
@@ -85,23 +123,29 @@ impl<'a> ContentSteering<'a> {
         }
     }
 
-    pub fn set_server_uri(&mut self, server_uri: String) {
+    pub fn set_server_uri(&mut self, server_uri: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(SERVER_URI);
-        self.server_uri = Cow::Owned(server_uri);
+        self.server_uri = server_uri.into();
         self.output_line_is_dirty = true;
     }
 
-    pub fn set_pathway_id(&mut self, pathway_id: Option<String>) {
+    pub fn set_pathway_id(&mut self, pathway_id: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(PATHWAY_ID);
-        self.pathway_id = pathway_id.map(Cow::Owned);
+        self.pathway_id = Some(pathway_id.into());
+        self.output_line_is_dirty = true;
+    }
+
+    pub fn unset_pathway_id(&mut self) {
+        self.attribute_list.remove(PATHWAY_ID);
+        self.pathway_id = None;
         self.output_line_is_dirty = true;
     }
 
     fn recalculate_output_line(&mut self) {
-        self.output_line = Cow::Owned(calculate_line(
-            self.server_uri(),
-            &self.pathway_id().map(|x| x.into()),
-        ));
+        self.output_line = Cow::Owned(calculate_line(&ContentSteeringAttributeList {
+            server_uri: self.server_uri().into(),
+            pathway_id: self.pathway_id().map(Into::into),
+        }));
         self.output_line_is_dirty = false;
     }
 }
@@ -109,7 +153,11 @@ impl<'a> ContentSteering<'a> {
 const SERVER_URI: &str = "SERVER-URI";
 const PATHWAY_ID: &str = "PATHWAY-ID";
 
-fn calculate_line<'a>(server_uri: &str, pathway_id: &Option<Cow<'a, str>>) -> Vec<u8> {
+fn calculate_line<'a>(attribute_list: &ContentSteeringAttributeList) -> Vec<u8> {
+    let ContentSteeringAttributeList {
+        server_uri,
+        pathway_id,
+    } = attribute_list;
     let mut line = format!(
         "#EXT{}:{}=\"{}\"",
         TagName::ContentSteering.as_str(),
@@ -125,11 +173,12 @@ fn calculate_line<'a>(server_uri: &str, pathway_id: &Option<Cow<'a, str>>) -> Ve
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tag::hls::test_macro::mutation_tests;
     use pretty_assertions::assert_eq;
 
     #[test]
     fn new_without_pathway_id_should_be_valid_line() {
-        let tag = ContentSteering::new("example.json".to_string(), None);
+        let tag = ContentSteering::builder("example.json").finish();
         assert_eq!(
             b"#EXT-X-CONTENT-STEERING:SERVER-URI=\"example.json\"",
             tag.into_inner().value()
@@ -138,10 +187,20 @@ mod tests {
 
     #[test]
     fn new_with_pathway_id_should_be_valid_line() {
-        let tag = ContentSteering::new("example.json".to_string(), Some("1234".to_string()));
+        let tag = ContentSteering::builder("example.json")
+            .with_pathway_id("1234")
+            .finish();
         assert_eq!(
             b"#EXT-X-CONTENT-STEERING:SERVER-URI=\"example.json\",PATHWAY-ID=\"1234\"",
             tag.into_inner().value()
         );
     }
+
+    mutation_tests!(
+        ContentSteering::builder("server-uri.json")
+            .with_pathway_id("1234")
+            .finish(),
+        (server_uri, "other-steering.json", @Attr="SERVER-URI=\"other-steering.json\""),
+        (pathway_id, @Option "abcd", @Attr="PATHWAY-ID=\"abcd\"")
+    );
 }
