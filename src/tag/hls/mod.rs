@@ -1148,23 +1148,21 @@ mod tests {
     #[test]
     fn media() {
         assert_eq!(
-            Ok(Tag::Media(Media::new(
-                "AUDIO".to_string(),
-                "English".to_string(),
-                "stereo".to_string(),
-                Some("audio/en/stereo.m3u8".to_string()),
-                Some("en".to_string()),
-                Some("en".to_string()),
-                Some("1234".to_string()),
-                true,
-                true,
-                true,
-                None,
-                Some(8),
-                Some(48000),
-                Some("public.accessibility.describes-video".to_string()),
-                Some("2".to_string()),
-            ))),
+            Ok(Tag::Media(
+                Media::builder("AUDIO", "English", "stereo")
+                    .with_uri("audio/en/stereo.m3u8")
+                    .with_language("en")
+                    .with_assoc_language("en")
+                    .with_stable_rendition_id("1234")
+                    .with_default()
+                    .with_autoselect()
+                    .with_forced()
+                    .with_bit_depth(8)
+                    .with_sample_rate(48000)
+                    .with_characteristics("public.accessibility.describes-video")
+                    .with_channels("2")
+                    .finish()
+            )),
             Tag::try_from(ParsedTag {
                 name: "-X-MEDIA",
                 value: SemiParsedTagValue::AttributeList(HashMap::from([
@@ -1213,23 +1211,11 @@ mod tests {
             })
         );
         assert_eq!(
-            Ok(Tag::Media(Media::new(
-                "CLOSED-CAPTIONS".to_string(),
-                "English".to_string(),
-                "cc".to_string(),
-                None,
-                None,
-                None,
-                None,
-                false,
-                false,
-                false,
-                Some("CC1".to_string()),
-                None,
-                None,
-                None,
-                None,
-            ))),
+            Ok(Tag::Media(
+                Media::builder("CLOSED-CAPTIONS", "English", "cc")
+                    .with_instream_id("CC1")
+                    .finish()
+            )),
             Tag::try_from(ParsedTag {
                 name: "-X-MEDIA",
                 value: SemiParsedTagValue::AttributeList(HashMap::from([

@@ -8,6 +8,153 @@ use crate::{
 };
 use std::{borrow::Cow, collections::HashMap};
 
+#[derive(Debug, PartialEq, Clone)]
+pub struct MediaAttributeList<'a> {
+    pub media_type: Cow<'a, str>,
+    pub name: Cow<'a, str>,
+    pub group_id: Cow<'a, str>,
+    pub uri: Option<Cow<'a, str>>,
+    pub language: Option<Cow<'a, str>>,
+    pub assoc_language: Option<Cow<'a, str>>,
+    pub stable_rendition_id: Option<Cow<'a, str>>,
+    pub default: bool,
+    pub autoselect: bool,
+    pub forced: bool,
+    pub instream_id: Option<Cow<'a, str>>,
+    pub bit_depth: Option<u64>,
+    pub sample_rate: Option<u64>,
+    pub characteristics: Option<Cow<'a, str>>,
+    pub channels: Option<Cow<'a, str>>,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct MediaBuilder<'a> {
+    media_type: Cow<'a, str>,
+    name: Cow<'a, str>,
+    group_id: Cow<'a, str>,
+    uri: Option<Cow<'a, str>>,
+    language: Option<Cow<'a, str>>,
+    assoc_language: Option<Cow<'a, str>>,
+    stable_rendition_id: Option<Cow<'a, str>>,
+    default: bool,
+    autoselect: bool,
+    forced: bool,
+    instream_id: Option<Cow<'a, str>>,
+    bit_depth: Option<u64>,
+    sample_rate: Option<u64>,
+    characteristics: Option<Cow<'a, str>>,
+    channels: Option<Cow<'a, str>>,
+}
+impl<'a> MediaBuilder<'a> {
+    pub fn new(
+        media_type: impl Into<Cow<'a, str>>,
+        name: impl Into<Cow<'a, str>>,
+        group_id: impl Into<Cow<'a, str>>,
+    ) -> Self {
+        Self {
+            media_type: media_type.into(),
+            name: name.into(),
+            group_id: group_id.into(),
+            uri: Default::default(),
+            language: Default::default(),
+            assoc_language: Default::default(),
+            stable_rendition_id: Default::default(),
+            default: Default::default(),
+            autoselect: Default::default(),
+            forced: Default::default(),
+            instream_id: Default::default(),
+            bit_depth: Default::default(),
+            sample_rate: Default::default(),
+            characteristics: Default::default(),
+            channels: Default::default(),
+        }
+    }
+
+    pub fn finish(self) -> Media<'a> {
+        Media::new(MediaAttributeList {
+            media_type: self.media_type,
+            name: self.name,
+            group_id: self.group_id,
+            uri: self.uri,
+            language: self.language,
+            assoc_language: self.assoc_language,
+            stable_rendition_id: self.stable_rendition_id,
+            default: self.default,
+            autoselect: self.autoselect,
+            forced: self.forced,
+            instream_id: self.instream_id,
+            bit_depth: self.bit_depth,
+            sample_rate: self.sample_rate,
+            characteristics: self.characteristics,
+            channels: self.channels,
+        })
+    }
+
+    pub fn with_media_type(mut self, media_type: impl Into<Cow<'a, str>>) -> Self {
+        self.media_type = media_type.into();
+        self
+    }
+    pub fn with_name(mut self, name: impl Into<Cow<'a, str>>) -> Self {
+        self.name = name.into();
+        self
+    }
+    pub fn with_group_id(mut self, group_id: impl Into<Cow<'a, str>>) -> Self {
+        self.group_id = group_id.into();
+        self
+    }
+    pub fn with_uri(mut self, uri: impl Into<Cow<'a, str>>) -> Self {
+        self.uri = Some(uri.into());
+        self
+    }
+    pub fn with_language(mut self, language: impl Into<Cow<'a, str>>) -> Self {
+        self.language = Some(language.into());
+        self
+    }
+    pub fn with_assoc_language(mut self, assoc_language: impl Into<Cow<'a, str>>) -> Self {
+        self.assoc_language = Some(assoc_language.into());
+        self
+    }
+    pub fn with_stable_rendition_id(
+        mut self,
+        stable_rendition_id: impl Into<Cow<'a, str>>,
+    ) -> Self {
+        self.stable_rendition_id = Some(stable_rendition_id.into());
+        self
+    }
+    pub fn with_default(mut self) -> Self {
+        self.default = true;
+        self
+    }
+    pub fn with_autoselect(mut self) -> Self {
+        self.autoselect = true;
+        self
+    }
+    pub fn with_forced(mut self) -> Self {
+        self.forced = true;
+        self
+    }
+    pub fn with_instream_id(mut self, instream_id: impl Into<Cow<'a, str>>) -> Self {
+        self.instream_id = Some(instream_id.into());
+        self
+    }
+    pub fn with_bit_depth(mut self, bit_depth: u64) -> Self {
+        self.bit_depth = Some(bit_depth);
+        self
+    }
+    pub fn with_sample_rate(mut self, sample_rate: u64) -> Self {
+        self.sample_rate = Some(sample_rate);
+        self
+    }
+    pub fn with_characteristics(mut self, characteristics: impl Into<Cow<'a, str>>) -> Self {
+        self.characteristics = Some(characteristics.into());
+        self
+    }
+    pub fn with_channels(mut self, channels: impl Into<Cow<'a, str>>) -> Self {
+        self.channels = Some(channels.into());
+        self
+    }
+}
+
 /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.6.1
 #[derive(Debug, Clone)]
 pub struct Media<'a> {
@@ -95,50 +242,25 @@ impl<'a> TryFrom<ParsedTag<'a>> for Media<'a> {
 }
 
 impl<'a> Media<'a> {
-    pub fn new(
-        media_type: String,
-        name: String,
-        group_id: String,
-        uri: Option<String>,
-        language: Option<String>,
-        assoc_language: Option<String>,
-        stable_rendition_id: Option<String>,
-        default: bool,
-        autoselect: bool,
-        forced: bool,
-        instream_id: Option<String>,
-        bit_depth: Option<u64>,
-        sample_rate: Option<u64>,
-        characteristics: Option<String>,
-        channels: Option<String>,
-    ) -> Self {
-        let media_type = Cow::Owned(media_type);
-        let name = Cow::Owned(name);
-        let group_id = Cow::Owned(group_id);
-        let uri = uri.map(Cow::Owned);
-        let language = language.map(Cow::Owned);
-        let assoc_language = assoc_language.map(Cow::Owned);
-        let stable_rendition_id = stable_rendition_id.map(Cow::Owned);
-        let instream_id = instream_id.map(Cow::Owned);
-        let characteristics = characteristics.map(Cow::Owned);
-        let channels = channels.map(Cow::Owned);
-        let output_line = Cow::Owned(calculate_line(
-            &media_type,
-            &name,
-            &group_id,
-            &uri,
-            &language,
-            &assoc_language,
-            &stable_rendition_id,
+    pub fn new(attribute_list: MediaAttributeList<'a>) -> Self {
+        let output_line = Cow::Owned(calculate_line(&attribute_list));
+        let MediaAttributeList {
+            media_type,
+            name,
+            group_id,
+            uri,
+            language,
+            assoc_language,
+            stable_rendition_id,
             default,
             autoselect,
             forced,
-            &instream_id,
+            instream_id,
             bit_depth,
             sample_rate,
-            &characteristics,
-            &channels,
-        ));
+            characteristics,
+            channels,
+        } = attribute_list;
         Self {
             media_type,
             group_id,
@@ -159,6 +281,14 @@ impl<'a> Media<'a> {
             output_line,
             output_line_is_dirty: false,
         }
+    }
+
+    pub fn builder(
+        media_type: impl Into<Cow<'a, str>>,
+        name: impl Into<Cow<'a, str>>,
+        group_id: impl Into<Cow<'a, str>>,
+    ) -> MediaBuilder<'a> {
+        MediaBuilder::new(media_type, name, group_id)
     }
 
     pub fn into_inner(mut self) -> TagInner<'a> {
@@ -300,39 +430,59 @@ impl<'a> Media<'a> {
         }
     }
 
-    pub fn set_media_type(&mut self, media_type: String) {
+    pub fn set_media_type(&mut self, media_type: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(TYPE);
-        self.media_type = Cow::Owned(media_type);
+        self.media_type = media_type.into();
         self.output_line_is_dirty = true;
     }
-    pub fn set_name(&mut self, name: String) {
+    pub fn set_name(&mut self, name: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(NAME);
-        self.name = Cow::Owned(name);
+        self.name = name.into();
         self.output_line_is_dirty = true;
     }
-    pub fn set_group_id(&mut self, group_id: String) {
+    pub fn set_group_id(&mut self, group_id: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(GROUP_ID);
-        self.group_id = Cow::Owned(group_id);
+        self.group_id = group_id.into();
         self.output_line_is_dirty = true;
     }
-    pub fn set_uri(&mut self, uri: Option<String>) {
+    pub fn set_uri(&mut self, uri: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(URI);
-        self.uri = uri.map(Cow::Owned);
+        self.uri = Some(uri.into());
         self.output_line_is_dirty = true;
     }
-    pub fn set_language(&mut self, language: Option<String>) {
+    pub fn unset_uri(&mut self) {
+        self.attribute_list.remove(URI);
+        self.uri = None;
+        self.output_line_is_dirty = true;
+    }
+    pub fn set_language(&mut self, language: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(LANGUAGE);
-        self.language = language.map(Cow::Owned);
+        self.language = Some(language.into());
         self.output_line_is_dirty = true;
     }
-    pub fn set_assoc_language(&mut self, assoc_language: Option<String>) {
+    pub fn unset_language(&mut self) {
+        self.attribute_list.remove(LANGUAGE);
+        self.language = None;
+        self.output_line_is_dirty = true;
+    }
+    pub fn set_assoc_language(&mut self, assoc_language: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(ASSOC_LANGUAGE);
-        self.assoc_language = assoc_language.map(Cow::Owned);
+        self.assoc_language = Some(assoc_language.into());
         self.output_line_is_dirty = true;
     }
-    pub fn set_stable_rendition_id(&mut self, stable_rendition_id: Option<String>) {
+    pub fn unset_assoc_language(&mut self) {
+        self.attribute_list.remove(ASSOC_LANGUAGE);
+        self.assoc_language = None;
+        self.output_line_is_dirty = true;
+    }
+    pub fn set_stable_rendition_id(&mut self, stable_rendition_id: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(STABLE_RENDITION_ID);
-        self.stable_rendition_id = stable_rendition_id.map(Cow::Owned);
+        self.stable_rendition_id = Some(stable_rendition_id.into());
+        self.output_line_is_dirty = true;
+    }
+    pub fn unset_stable_rendition_id(&mut self) {
+        self.attribute_list.remove(STABLE_RENDITION_ID);
+        self.stable_rendition_id = None;
         self.output_line_is_dirty = true;
     }
     pub fn set_default(&mut self, default: bool) {
@@ -350,50 +500,75 @@ impl<'a> Media<'a> {
         self.forced = Some(forced);
         self.output_line_is_dirty = true;
     }
-    pub fn set_instream_id(&mut self, instream_id: Option<String>) {
+    pub fn set_instream_id(&mut self, instream_id: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(INSTREAM_ID);
-        self.instream_id = instream_id.map(Cow::Owned);
+        self.instream_id = Some(instream_id.into());
         self.output_line_is_dirty = true;
     }
-    pub fn set_bit_depth(&mut self, bit_depth: Option<u64>) {
+    pub fn unset_instream_id(&mut self) {
+        self.attribute_list.remove(INSTREAM_ID);
+        self.instream_id = None;
+        self.output_line_is_dirty = true;
+    }
+    pub fn set_bit_depth(&mut self, bit_depth: u64) {
         self.attribute_list.remove(BIT_DEPTH);
-        self.bit_depth = bit_depth;
+        self.bit_depth = Some(bit_depth);
         self.output_line_is_dirty = true;
     }
-    pub fn set_sample_rate(&mut self, sample_rate: Option<u64>) {
+    pub fn unset_bit_depth(&mut self) {
+        self.attribute_list.remove(BIT_DEPTH);
+        self.bit_depth = None;
+        self.output_line_is_dirty = true;
+    }
+    pub fn set_sample_rate(&mut self, sample_rate: u64) {
         self.attribute_list.remove(SAMPLE_RATE);
-        self.sample_rate = sample_rate;
+        self.sample_rate = Some(sample_rate);
         self.output_line_is_dirty = true;
     }
-    pub fn set_characteristics(&mut self, characteristics: Option<String>) {
+    pub fn unset_sample_rate(&mut self) {
+        self.attribute_list.remove(SAMPLE_RATE);
+        self.sample_rate = None;
+        self.output_line_is_dirty = true;
+    }
+    pub fn set_characteristics(&mut self, characteristics: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(CHARACTERISTICS);
-        self.characteristics = characteristics.map(Cow::Owned);
+        self.characteristics = Some(characteristics.into());
         self.output_line_is_dirty = true;
     }
-    pub fn set_channels(&mut self, channels: Option<String>) {
+    pub fn unset_characteristics(&mut self) {
+        self.attribute_list.remove(CHARACTERISTICS);
+        self.characteristics = None;
+        self.output_line_is_dirty = true;
+    }
+    pub fn set_channels(&mut self, channels: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(CHANNELS);
-        self.channels = channels.map(Cow::Owned);
+        self.channels = Some(channels.into());
+        self.output_line_is_dirty = true;
+    }
+    pub fn unset_channels(&mut self) {
+        self.attribute_list.remove(CHANNELS);
+        self.channels = None;
         self.output_line_is_dirty = true;
     }
 
     fn recalculate_output_line(&mut self) {
-        self.output_line = Cow::Owned(calculate_line(
-            self.media_type(),
-            self.name(),
-            self.group_id(),
-            &self.uri().map(|x| x.into()),
-            &self.language().map(|x| x.into()),
-            &self.assoc_language().map(|x| x.into()),
-            &self.stable_rendition_id().map(|x| x.into()),
-            self.default(),
-            self.autoselect(),
-            self.forced(),
-            &self.instream_id().map(|x| x.into()),
-            self.bit_depth(),
-            self.sample_rate(),
-            &self.characteristics().map(|x| x.into()),
-            &self.channels().map(|x| x.into()),
-        ));
+        self.output_line = Cow::Owned(calculate_line(&MediaAttributeList {
+            media_type: self.media_type().into(),
+            name: self.name().into(),
+            group_id: self.group_id().into(),
+            uri: self.uri().map(|x| x.into()),
+            language: self.language().map(|x| x.into()),
+            assoc_language: self.assoc_language().map(|x| x.into()),
+            stable_rendition_id: self.stable_rendition_id().map(|x| x.into()),
+            default: self.default(),
+            autoselect: self.autoselect(),
+            forced: self.forced(),
+            instream_id: self.instream_id().map(|x| x.into()),
+            bit_depth: self.bit_depth(),
+            sample_rate: self.sample_rate(),
+            characteristics: self.characteristics().map(|x| x.into()),
+            channels: self.channels().map(|x| x.into()),
+        }));
         self.output_line_is_dirty = false;
     }
 }
@@ -415,23 +590,24 @@ const CHARACTERISTICS: &str = "CHARACTERISTICS";
 const CHANNELS: &str = "CHANNELS";
 const YES: &str = "YES";
 
-fn calculate_line<'a>(
-    media_type: &str,
-    name: &str,
-    group_id: &str,
-    uri: &Option<Cow<'a, str>>,
-    language: &Option<Cow<'a, str>>,
-    assoc_language: &Option<Cow<'a, str>>,
-    stable_rendition_id: &Option<Cow<'a, str>>,
-    default: bool,
-    autoselect: bool,
-    forced: bool,
-    instream_id: &Option<Cow<'a, str>>,
-    bit_depth: Option<u64>,
-    sample_rate: Option<u64>,
-    characteristics: &Option<Cow<'a, str>>,
-    channels: &Option<Cow<'a, str>>,
-) -> Vec<u8> {
+fn calculate_line<'a>(attribute_list: &MediaAttributeList) -> Vec<u8> {
+    let MediaAttributeList {
+        media_type,
+        name,
+        group_id,
+        uri,
+        language,
+        assoc_language,
+        stable_rendition_id,
+        default,
+        autoselect,
+        forced,
+        instream_id,
+        bit_depth,
+        sample_rate,
+        characteristics,
+        channels,
+    } = attribute_list;
     let mut line =
         format!("#EXT-X-MEDIA:{TYPE}={media_type},{NAME}=\"{name}\",{GROUP_ID}=\"{group_id}\"");
     if let Some(uri) = uri {
@@ -446,13 +622,13 @@ fn calculate_line<'a>(
     if let Some(stable_rendition_id) = stable_rendition_id {
         line.push_str(format!(",{STABLE_RENDITION_ID}=\"{stable_rendition_id}\"").as_str());
     }
-    if default {
+    if *default {
         line.push_str(format!(",{DEFAULT}={YES}").as_str());
     }
-    if autoselect {
+    if *autoselect {
         line.push_str(format!(",{AUTOSELECT}={YES}").as_str());
     }
-    if forced {
+    if *forced {
         line.push_str(format!(",{FORCED}={YES}").as_str());
     }
     if let Some(instream_id) = instream_id {
@@ -475,6 +651,8 @@ fn calculate_line<'a>(
 
 #[cfg(test)]
 mod tests {
+    use crate::tag::hls::test_macro::mutation_tests;
+
     use super::*;
     use pretty_assertions::assert_eq;
 
@@ -489,25 +667,11 @@ mod tests {
                 "INSTREAM-ID=\"CC1\""
             )
             .as_bytes(),
-            Media::new(
-                "CLOSED-CAPTIONS".to_string(),
-                "English".to_string(),
-                "cc".to_string(),
-                None,
-                None,
-                None,
-                None,
-                false,
-                false,
-                false,
-                Some("CC1".to_string()),
-                None,
-                None,
-                None,
-                None,
-            )
-            .into_inner()
-            .value()
+            Media::builder("CLOSED-CAPTIONS", "English", "cc")
+                .with_instream_id("CC1")
+                .finish()
+                .into_inner()
+                .value()
         );
     }
 
@@ -532,25 +696,50 @@ mod tests {
                 "CHANNELS=\"2\"",
             )
             .as_bytes(),
-            Media::new(
-                "AUDIO".to_string(),
-                "English".to_string(),
-                "stereo".to_string(),
-                Some("audio/en/stereo.m3u8".to_string()),
-                Some("en".to_string()),
-                Some("en".to_string()),
-                Some("1234".to_string()),
-                true,
-                true,
-                true,
-                None,
-                Some(8),
-                Some(48000),
-                Some("public.accessibility.describes-video".to_string()),
-                Some("2".to_string()),
-            )
-            .into_inner()
-            .value()
+            Media::builder("AUDIO", "English", "stereo")
+                .with_uri("audio/en/stereo.m3u8")
+                .with_language("en")
+                .with_assoc_language("en")
+                .with_stable_rendition_id("1234")
+                .with_default()
+                .with_autoselect()
+                .with_forced()
+                .with_bit_depth(8)
+                .with_sample_rate(48000)
+                .with_characteristics("public.accessibility.describes-video")
+                .with_channels("2")
+                .finish()
+                .into_inner()
+                .value()
         );
     }
+
+    mutation_tests!(
+        Media::builder("AUDIO", "English", "stereo")
+            .with_uri("audio/en/stereo.m3u8")
+            .with_language("en")
+            .with_assoc_language("en")
+            .with_stable_rendition_id("1234")
+            .with_instream_id("ID1")
+            .with_bit_depth(8)
+            .with_sample_rate(48000)
+            .with_characteristics("public.accessibility.describes-video")
+            .with_channels("2")
+            .finish(),
+        (media_type, "VIDEO", @Attr="TYPE=VIDEO"),
+        (name, "Spanish", @Attr="NAME=\"Spanish\""),
+        (group_id, "surround", @Attr="GROUP-ID=\"surround\""),
+        (uri, @Option "example", @Attr="URI=\"example\""),
+        (language, @Option "es", @Attr="LANGUAGE=\"es\""),
+        (assoc_language, @Option "es", @Attr="ASSOC-LANGUAGE=\"es\""),
+        (stable_rendition_id, @Option "abcd", @Attr="STABLE-RENDITION-ID=\"abcd\""),
+        (default, true, @Attr="DEFAULT=YES"),
+        (autoselect, true, @Attr="AUTOSELECT=YES"),
+        (forced, true, @Attr="FORCED=YES"),
+        (instream_id, @Option "ID2", @Attr="INSTREAM-ID=\"ID2\""),
+        (bit_depth, @Option 10, @Attr="BIT-DEPTH=10"),
+        (sample_rate, @Option 42, @Attr="SAMPLE-RATE=42"),
+        (characteristics, @Option "example", @Attr="CHARACTERISTICS=\"example\""),
+        (channels, @Option "6", @Attr="CHANNELS=\"6\"")
+    );
 }
