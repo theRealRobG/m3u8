@@ -77,6 +77,7 @@ fn calculate_line(discontinuity_sequence: u64) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tag::hls::test_macro::mutation_tests;
     use pretty_assertions::assert_eq;
 
     #[test]
@@ -86,4 +87,6 @@ mod tests {
             DiscontinuitySequence::new(42).into_inner().value()
         )
     }
+
+    mutation_tests!(DiscontinuitySequence::new(42), (discontinuity_sequence, 1337, @Attr=":1337"));
 }

@@ -295,3 +295,100 @@ const NAME: &str = "NAME";
 const VALUE: &str = "VALUE";
 const IMPORT: &str = "IMPORT";
 const QUERYPARAM: &str = "QUERYPARAM";
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pretty_assertions::assert_eq;
+
+    #[test]
+    fn new_name_value_should_work() {
+        assert_eq!(
+            b"#EXT-X-DEFINE:NAME=\"name\",VALUE=\"value\"",
+            Define::new_name("name", "value").into_inner().value()
+        );
+    }
+
+    #[test]
+    fn set_name_and_value_should_work() {
+        let mut define = Define::new_import("import");
+        define.set_name_and_value("name", "value");
+        assert_eq!(
+            b"#EXT-X-DEFINE:NAME=\"name\",VALUE=\"value\"",
+            define.into_inner().value()
+        );
+    }
+
+    #[test]
+    fn new_import_should_work() {
+        assert_eq!(
+            b"#EXT-X-DEFINE:IMPORT=\"import\"",
+            Define::new_import("import").into_inner().value()
+        );
+    }
+
+    #[test]
+    fn set_import_should_work() {
+        let mut define = Define::new_queryparam("queryparam");
+        define.set_import("import");
+        assert_eq!(
+            b"#EXT-X-DEFINE:IMPORT=\"import\"",
+            define.into_inner().value()
+        );
+    }
+
+    #[test]
+    fn new_queryparam_should_work() {
+        assert_eq!(
+            b"#EXT-X-DEFINE:QUERYPARAM=\"queryparam\"",
+            Define::new_queryparam("queryparam").into_inner().value()
+        );
+    }
+
+    #[test]
+    fn set_queryparam_should_work() {
+        let mut define = Define::new_import("import");
+        define.set_queryparam("queryparam");
+        assert_eq!(
+            b"#EXT-X-DEFINE:QUERYPARAM=\"queryparam\"",
+            define.into_inner().value()
+        );
+    }
+
+    #[cfg(test)]
+    mod name_value {
+        use super::*;
+        use crate::tag::hls::test_macro::mutation_tests;
+        use pretty_assertions::assert_eq;
+
+        mutation_tests!(
+            Name::new("name", "value"),
+            (name, "other_name", @Attr="NAME=\"other_name\""),
+            (value, "other_value", @Attr="VALUE=\"other_value\"")
+        );
+    }
+
+    #[cfg(test)]
+    mod import {
+        use super::*;
+        use crate::tag::hls::test_macro::mutation_tests;
+        use pretty_assertions::assert_eq;
+
+        mutation_tests!(
+            Import::new("import"),
+            (import, "other_import", @Attr="IMPORT=\"other_import\"")
+        );
+    }
+
+    #[cfg(test)]
+    mod queryparam {
+        use super::*;
+        use crate::tag::hls::test_macro::mutation_tests;
+        use pretty_assertions::assert_eq;
+
+        mutation_tests!(
+            Queryparam::new("queryparam"),
+            (queryparam, "other_query_param", @Attr="QUERYPARAM=\"other_query_param\"")
+        );
+    }
+}

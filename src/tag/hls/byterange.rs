@@ -120,7 +120,7 @@ mod tests {
 
     mutation_tests!(
         Byterange::new(1024, Some(512)),
-        (length, 100, @Attr="100"),
+        (length, 100, @Attr=":100"),
         (offset, @Option 200, @Attr="@200")
     );
 }

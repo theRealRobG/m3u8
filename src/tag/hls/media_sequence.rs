@@ -76,6 +76,7 @@ fn calculate_line(media_sequence: u64) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tag::hls::test_macro::mutation_tests;
     use pretty_assertions::assert_eq;
 
     #[test]
@@ -85,4 +86,6 @@ mod tests {
             MediaSequence::new(100).into_inner().value()
         );
     }
+
+    mutation_tests!(MediaSequence::new(100), (media_sequence, 200, @Attr=":200"));
 }

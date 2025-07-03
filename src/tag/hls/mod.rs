@@ -765,13 +765,13 @@ mod tests {
     #[test]
     fn key() {
         assert_eq!(
-            Ok(Tag::Key(Key::new(
-                "SAMPLE-AES".to_string(),
-                Some("skd://some-key-id".to_string()),
-                Some("0xABCD".to_string()),
-                Some("com.apple.streamingkeydelivery".to_string()),
-                Some("1".to_string()),
-            ))),
+            Ok(Tag::Key(Key::builder("SAMPLE-AES")
+                .with_uri("skd://some-key-id")
+                .with_iv("0xABCD")
+                .with_keyformat("com.apple.streamingkeydelivery")
+                .with_keyformatversions("1")
+                .finish()
+            )),
             Tag::try_from(ParsedTag {
                 name: "-X-KEY",
                 value: SemiParsedTagValue::AttributeList(HashMap::from([
@@ -791,13 +791,7 @@ mod tests {
             })
         );
         assert_eq!(
-            Ok(Tag::Key(Key::new(
-                "NONE".to_string(),
-                None,
-                None,
-                None,
-                None,
-            ))),
+            Ok(Tag::Key(Key::builder("NONE").finish())),
             Tag::try_from(ParsedTag {
                 name: "-X-KEY",
                 value: SemiParsedTagValue::AttributeList(HashMap::from([(
@@ -812,13 +806,14 @@ mod tests {
     #[test]
     fn map() {
         assert_eq!(
-            Ok(Tag::Map(Map::new(
-                "init.mp4".to_string(),
-                Some(MapByterange {
-                    length: 1024,
-                    offset: 0
-                })
-            ))),
+            Ok(Tag::Map(
+                Map::builder("init.mp4")
+                    .with_byterange(MapByterange {
+                        length: 1024,
+                        offset: 0
+                    })
+                    .finish()
+            )),
             Tag::try_from(ParsedTag {
                 name: "-X-MAP",
                 value: SemiParsedTagValue::AttributeList(HashMap::from([
@@ -829,7 +824,7 @@ mod tests {
             })
         );
         assert_eq!(
-            Ok(Tag::Map(Map::new("init.mp4".to_string(), None,))),
+            Ok(Tag::Map(Map::builder("init.mp4").finish())),
             Tag::try_from(ParsedTag {
                 name: "-X-MAP",
                 value: SemiParsedTagValue::AttributeList(HashMap::from([(

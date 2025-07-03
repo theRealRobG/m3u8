@@ -8,6 +8,43 @@ use crate::{
 };
 use std::{borrow::Cow, collections::HashMap, fmt::Display};
 
+#[derive(Debug, PartialEq, Clone)]
+pub struct MapAttributeList<'a> {
+    pub uri: Cow<'a, str>,
+    pub byterange: Option<MapByterange>,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct MapBuilder<'a> {
+    uri: Cow<'a, str>,
+    byterange: Option<MapByterange>,
+}
+impl<'a> MapBuilder<'a> {
+    pub fn new(uri: impl Into<Cow<'a, str>>) -> Self {
+        Self {
+            uri: uri.into(),
+            byterange: Default::default(),
+        }
+    }
+
+    pub fn finish(self) -> Map<'a> {
+        Map::new(MapAttributeList {
+            uri: self.uri,
+            byterange: self.byterange,
+        })
+    }
+
+    pub fn with_uri(mut self, uri: impl Into<Cow<'a, str>>) -> Self {
+        self.uri = uri.into();
+        self
+    }
+
+    pub fn with_byterange(mut self, byterange: MapByterange) -> Self {
+        self.byterange = Some(byterange);
+        self
+    }
+}
+
 /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.4.5
 #[derive(Debug, Clone)]
 pub struct Map<'a> {
@@ -58,9 +95,9 @@ impl<'a> TryFrom<ParsedTag<'a>> for Map<'a> {
 }
 
 impl<'a> Map<'a> {
-    pub fn new(uri: String, byterange: Option<MapByterange>) -> Self {
-        let uri = Cow::Owned(uri);
-        let output_line = Cow::Owned(calculate_line(&uri, byterange));
+    pub fn new(attribute_list: MapAttributeList<'a>) -> Self {
+        let output_line = Cow::Owned(calculate_line(&attribute_list));
+        let MapAttributeList { uri, byterange } = attribute_list;
         Self {
             uri,
             byterange,
@@ -68,6 +105,10 @@ impl<'a> Map<'a> {
             output_line,
             output_line_is_dirty: false,
         }
+    }
+
+    pub fn builder(uri: impl Into<Cow<'a, str>>) -> MapBuilder<'a> {
+        MapBuilder::new(uri)
     }
 
     pub fn into_inner(mut self) -> TagInner<'a> {
@@ -103,20 +144,29 @@ impl<'a> Map<'a> {
         }
     }
 
-    pub fn set_uri(&mut self, uri: String) {
+    pub fn set_uri(&mut self, uri: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(URI);
-        self.uri = Cow::Owned(uri);
+        self.uri = uri.into();
         self.output_line_is_dirty = true;
     }
 
-    pub fn set_byterange(&mut self, byterange: Option<MapByterange>) {
+    pub fn set_byterange(&mut self, byterange: MapByterange) {
         self.attribute_list.remove(BYTERANGE);
-        self.byterange = byterange;
+        self.byterange = Some(byterange);
+        self.output_line_is_dirty = true;
+    }
+
+    pub fn unset_byterange(&mut self) {
+        self.attribute_list.remove(BYTERANGE);
+        self.byterange = None;
         self.output_line_is_dirty = true;
     }
 
     fn recalculate_output_line(&mut self) {
-        self.output_line = Cow::Owned(calculate_line(self.uri(), self.byterange()));
+        self.output_line = Cow::Owned(calculate_line(&&MapAttributeList {
+            uri: self.uri().into(),
+            byterange: self.byterange().map(|x| x.into()),
+        }));
         self.output_line_is_dirty = false;
     }
 }
@@ -124,7 +174,8 @@ impl<'a> Map<'a> {
 const URI: &str = "URI";
 const BYTERANGE: &str = "BYTERANGE";
 
-fn calculate_line(uri: &str, byterange: Option<MapByterange>) -> Vec<u8> {
+fn calculate_line(attribute_list: &MapAttributeList) -> Vec<u8> {
+    let MapAttributeList { uri, byterange } = attribute_list;
     let mut line = format!("#EXT-X-MAP:{URI}=\"{uri}\"");
     if let Some(byterange) = byterange {
         line.push_str(format!(",{BYTERANGE}=\"{byterange}\"").as_str());
@@ -134,6 +185,8 @@ fn calculate_line(uri: &str, byterange: Option<MapByterange>) -> Vec<u8> {
 
 #[cfg(test)]
 mod tests {
+    use crate::tag::hls::test_macro::mutation_tests;
+
     use super::*;
     use pretty_assertions::assert_eq;
 
@@ -141,9 +194,7 @@ mod tests {
     fn as_str_no_byterange_should_be_valid() {
         assert_eq!(
             b"#EXT-X-MAP:URI=\"example.mp4\"",
-            Map::new("example.mp4".to_string(), None)
-                .into_inner()
-                .value()
+            Map::builder("example.mp4").finish().into_inner().value()
         );
     }
 
@@ -151,15 +202,29 @@ mod tests {
     fn as_str_with_byterange_should_be_valid() {
         assert_eq!(
             b"#EXT-X-MAP:URI=\"example.mp4\",BYTERANGE=\"1024@512\"",
-            Map::new(
-                "example.mp4".to_string(),
-                Some(MapByterange {
+            Map::builder("example.mp4")
+                .with_byterange(MapByterange {
                     length: 1024,
                     offset: 512
                 })
-            )
-            .into_inner()
-            .value()
+                .finish()
+                .into_inner()
+                .value()
         );
     }
+
+    mutation_tests!(
+        Map::builder("example.mp4")
+            .with_byterange(MapByterange {
+                length: 1024,
+                offset: 512
+            })
+            .finish(),
+        (uri, "init.mp4", @Attr="URI=\"init.mp4\""),
+        (
+            byterange,
+            @Option MapByterange { length: 100, offset: 200 },
+            @Attr="BYTERANGE=\"100@200\""
+        )
+    );
 }

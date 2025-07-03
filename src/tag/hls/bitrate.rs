@@ -89,5 +89,5 @@ mod tests {
         assert_eq!(b"#EXT-X-BITRATE:10000000", tag.into_inner().value())
     }
 
-    mutation_tests!(Bitrate::new(100), (bitrate, 200, @Attr="200"));
+    mutation_tests!(Bitrate::new(100), (bitrate, 200, @Attr=":200"));
 }

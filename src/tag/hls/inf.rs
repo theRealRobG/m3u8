@@ -101,6 +101,7 @@ fn calculate_line(duration: f64, title: &str) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tag::hls::test_macro::mutation_tests;
     use pretty_assertions::assert_eq;
 
     #[test]
@@ -126,4 +127,10 @@ mod tests {
             Inf::new(6.006, "title".to_string()).into_inner().value()
         );
     }
+
+    mutation_tests!(
+        Inf::new(6.006, "hello"),
+        (duration, 10.0, @Attr="10"),
+        (title, "world", @Attr=",world")
+    );
 }
