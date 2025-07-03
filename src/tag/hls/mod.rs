@@ -1,5 +1,3 @@
-use std::borrow::Cow;
-
 use crate::{
     error::ValidationError,
     tag::{
@@ -20,6 +18,7 @@ use crate::{
     },
     utils::split_on_new_line,
 };
+use std::borrow::Cow;
 
 pub mod bitrate;
 pub mod byterange;
@@ -52,6 +51,8 @@ pub mod skip;
 pub mod start;
 pub mod stream_inf;
 pub mod targetduration;
+#[cfg(test)]
+mod test_macro;
 pub mod version;
 
 #[derive(Debug, PartialEq)]
