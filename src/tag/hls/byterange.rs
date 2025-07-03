@@ -64,10 +64,17 @@ impl<'a> Byterange<'a> {
 
     pub fn set_length(&mut self, length: u64) {
         self.length = length;
+        self.output_line_is_dirty = true;
     }
 
-    pub fn set_offset(&mut self, offset: Option<u64>) {
-        self.offset = offset;
+    pub fn set_offset(&mut self, offset: u64) {
+        self.offset = Some(offset);
+        self.output_line_is_dirty = true;
+    }
+
+    pub fn unset_offset(&mut self) {
+        self.offset = None;
+        self.output_line_is_dirty = true;
     }
 
     pub fn into_inner(mut self) -> TagInner<'a> {
@@ -96,6 +103,7 @@ fn calculate_line(length: u64, offset: Option<u64>) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tag::hls::test_macro::mutation_tests;
     use pretty_assertions::assert_eq;
 
     #[test]
@@ -109,4 +117,10 @@ mod tests {
         let tag = Byterange::new(1024, Some(512));
         assert_eq!(b"#EXT-X-BYTERANGE:1024@512", tag.into_inner().value());
     }
+
+    mutation_tests!(
+        Byterange::new(1024, Some(512)),
+        (length, 100, @Attr="100"),
+        (offset, @Option 200, @Attr="@200")
+    );
 }

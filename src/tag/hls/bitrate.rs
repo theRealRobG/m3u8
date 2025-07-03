@@ -80,6 +80,7 @@ fn calculate_line(bitrate: u64) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tag::hls::test_macro::mutation_tests;
     use pretty_assertions::assert_eq;
 
     #[test]
@@ -87,4 +88,6 @@ mod tests {
         let tag = Bitrate::new(10000000);
         assert_eq!(b"#EXT-X-BITRATE:10000000", tag.into_inner().value())
     }
+
+    mutation_tests!(Bitrate::new(100), (bitrate, 200, @Attr="200"));
 }
