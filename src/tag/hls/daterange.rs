@@ -511,6 +511,16 @@ impl<'a> Daterange<'a> {
         self.output_line_is_dirty = true;
     }
 
+    pub fn unset_extension_attribute(&mut self, name: impl Into<Cow<'a, str>>) {
+        let name = name.into();
+        if !name.starts_with("X-") {
+            return;
+        }
+        self.attribute_list.retain(|k, _| *k != name);
+        self.extension_attributes.remove(&name);
+        self.output_line_is_dirty = true;
+    }
+
     pub fn set_end_on_next(&mut self, end_on_next: bool) {
         self.attribute_list.remove(END_ON_NEXT);
         self.end_on_next = Some(end_on_next);
@@ -730,7 +740,7 @@ fn calculate_line<'a>(attribute_list: &DaterangeAttributeList) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::date_time;
+    use crate::{date_time, tag::hls::test_macro::mutation_tests};
     use pretty_assertions::assert_eq;
 
     #[test]
@@ -830,9 +840,17 @@ mod tests {
     fn mutation_should_work() {
         let mut daterange = Daterange::builder("some-id", DateTime::default())
             .with_cue("ONCE")
+            .with_extension_attribute(
+                "X-TO-REMOVE",
+                ExtensionAttributeValue::QuotedString("remove me".into()),
+            )
             .finish();
         assert_eq!(
-            b"#EXT-X-DATERANGE:ID=\"some-id\",START-DATE=\"1970-01-01T00:00:00.000Z\",CUE=\"ONCE\"",
+            concat!(
+                "#EXT-X-DATERANGE:ID=\"some-id\",START-DATE=\"1970-01-01T00:00:00.000Z\",",
+                "CUE=\"ONCE\",X-TO-REMOVE=\"remove me\"",
+            )
+            .as_bytes(),
             daterange.clone().into_inner().value()
         );
         daterange.set_id("another-id");
@@ -842,6 +860,7 @@ mod tests {
             "X-EXAMPLE",
             ExtensionAttributeValue::QuotedString("TEST".into()),
         );
+        daterange.unset_extension_attribute("X-TO-REMOVE");
         assert_eq!(
             concat!(
                 "#EXT-X-DATERANGE:ID=\"another-id\",START-DATE=\"1970-01-01T00:00:00.000Z\",",
@@ -851,4 +870,28 @@ mod tests {
             daterange.into_inner().value()
         );
     }
+
+    mutation_tests!(
+        Daterange::builder("some-id", date_time!(2025-06-14 T 23:41:42.000 -05:00))
+            .with_class("com.example.class")
+            .with_cue("ONCE")
+            .with_end_date(date_time!(2025-06-14 T 23:43:42.000 -05:00))
+            .with_duration(120.0)
+            .with_planned_duration(180.0)
+            .with_scte35_cmd("0xABCD")
+            .with_scte35_out("0xABCD")
+            .with_scte35_in("0xABCD")
+            .finish(),
+        (id, "another-id", @Attr="ID=\"another-id\""),
+        (start_date, DateTime::default(), @Attr="START-DATE=\"1970-01-01T00:00:00.000Z\""),
+        (class, @Option "com.test.class", @Attr="CLASS=\"com.test.class\""),
+        (cue, @Option "ONCE,PRE", @Attr="CUE=\"ONCE,PRE\""),
+        (end_date, @Option DateTime::default(), @Attr="END-DATE=\"1970-01-01T00:00:00.000Z\""),
+        (duration, @Option 60.0, @Attr="DURATION=60"),
+        (planned_duration, @Option 80.0, @Attr="PLANNED-DURATION=80"),
+        (scte35_cmd, @Option "0x1234", @Attr="SCTE35-CMD=0x1234"),
+        (scte35_out, @Option "0x1234", @Attr="SCTE35-OUT=0x1234"),
+        (scte35_in, @Option "0x1234", @Attr="SCTE35-IN=0x1234"),
+        (end_on_next, true, @Attr="END-ON-NEXT=YES")
+    );
 }
