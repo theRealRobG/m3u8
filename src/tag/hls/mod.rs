@@ -430,12 +430,9 @@ pub enum TagType {
 mod tests {
     use super::*;
     use crate::{
-        date::{DateTime, DateTimeTimezoneOffset},
         date_time,
         tag::{
-            hls::{
-                daterange::OwnedExtensionAttributeValue, map::MapByterange, part::PartByterange,
-            },
+            hls::{daterange::ExtensionAttributeValue, map::MapByterange, part::PartByterange},
             value::{
                 DecimalResolution, HlsPlaylistType, ParsedAttributeValue, SemiParsedTagValue,
                 UnparsedTagValue,
@@ -961,45 +958,23 @@ mod tests {
     #[test]
     fn daterange() {
         assert_eq!(
-            Ok(Tag::Daterange(Daterange::new(
-                "test".to_string(),
-                Some("com.m3u8.test".to_string()),
-                DateTime {
-                    date_fullyear: 2025,
-                    date_month: 6,
-                    date_mday: 5,
-                    time_hour: 20,
-                    time_minute: 38,
-                    time_second: 42.149,
-                    timezone_offset: DateTimeTimezoneOffset {
-                        time_hour: -5,
-                        time_minute: 0
-                    }
-                },
-                Some("ONCE".to_string()),
-                Some(DateTime {
-                    date_fullyear: 2025,
-                    date_month: 6,
-                    date_mday: 5,
-                    time_hour: 20,
-                    time_minute: 40,
-                    time_second: 42.149,
-                    timezone_offset: DateTimeTimezoneOffset {
-                        time_hour: -5,
-                        time_minute: 0
-                    }
-                }),
-                Some(120.0),
-                Some(180.0),
-                HashMap::from([(
-                    "X-COM-M3U8-TEST".to_string(),
-                    OwnedExtensionAttributeValue::QuotedString("YES".to_string())
-                )]),
-                Some("0xABCD".to_string()),
-                Some("0xABCD".to_string()),
-                Some("0xABCD".to_string()),
-                true,
-            ))),
+            Ok(Tag::Daterange(
+                Daterange::builder("test", date_time!(2025-06-05 T 20:38:42.149 -05:00))
+                    .with_class("com.m3u8.test")
+                    .with_cue("ONCE")
+                    .with_end_date(date_time!(2025-06-05 T 20:40:42.149 -05:00))
+                    .with_duration(120.0)
+                    .with_planned_duration(180.0)
+                    .with_extension_attribute(
+                        "X-COM-M3U8-TEST",
+                        ExtensionAttributeValue::QuotedString("YES".into())
+                    )
+                    .with_scte35_cmd("0xABCD")
+                    .with_scte35_in("0xABCD")
+                    .with_scte35_out("0xABCD")
+                    .with_end_on_next()
+                    .finish()
+            )),
             Tag::try_from(ParsedTag {
                 name: "-X-DATERANGE",
                 value: SemiParsedTagValue::AttributeList(HashMap::from([
@@ -1047,31 +1022,9 @@ mod tests {
             })
         );
         assert_eq!(
-            Ok(Tag::Daterange(Daterange::new(
-                "test".to_string(),
-                None as Option<String>,
-                DateTime {
-                    date_fullyear: 2025,
-                    date_month: 6,
-                    date_mday: 5,
-                    time_hour: 20,
-                    time_minute: 38,
-                    time_second: 42.149,
-                    timezone_offset: DateTimeTimezoneOffset {
-                        time_hour: -5,
-                        time_minute: 0
-                    }
-                },
-                None as Option<String>,
-                None,
-                None,
-                None,
-                HashMap::new(),
-                None as Option<String>,
-                None as Option<String>,
-                None as Option<String>,
-                false,
-            ))),
+            Ok(Tag::Daterange(
+                Daterange::builder("test", date_time!(2025-06-05 T 20:38:42.149 -05:00)).finish()
+            )),
             Tag::try_from(ParsedTag {
                 name: "-X-DATERANGE",
                 value: SemiParsedTagValue::AttributeList(HashMap::from([
@@ -1454,25 +1407,25 @@ mod tests {
     #[test]
     fn i_frame_stream_inf() {
         assert_eq!(
-            Ok(Tag::IFrameStreamInf(IFrameStreamInf::new(
-                "iframe.high.m3u8".to_string(),
-                10000000,
-                Some(9000000),
-                Some(2.0),
-                Some("hvc1.2.4.L153.b0,ec-3".to_string()),
-                Some("dvh1.08.07/db4h".to_string()),
-                Some(DecimalResolution {
-                    width: 3840,
-                    height: 2160
-                }),
-                Some("TYPE-1".to_string()),
-                Some("com.example.drm1:SMART-TV/PC".to_string()),
-                Some("PQ".to_string()),
-                Some("CH-STEREO,CH-MONO".to_string()),
-                Some("1234".to_string()),
-                Some("alternate-view".to_string()),
-                Some("1234".to_string()),
-            ))),
+            Ok(Tag::IFrameStreamInf(
+                IFrameStreamInf::builder("iframe.high.m3u8", 10000000)
+                    .with_average_bandwidth(9000000)
+                    .with_score(2.0)
+                    .with_codecs("hvc1.2.4.L153.b0,ec-3")
+                    .with_supplemental_codecs("dvh1.08.07/db4h")
+                    .with_resolution(DecimalResolution {
+                        width: 3840,
+                        height: 2160
+                    })
+                    .with_hdcp_level("TYPE-1")
+                    .with_allowed_cpc("com.example.drm1:SMART-TV/PC")
+                    .with_video_range("PQ")
+                    .with_req_video_layout("CH-STEREO,CH-MONO")
+                    .with_stable_variant_id("1234")
+                    .with_video("alternate-view")
+                    .with_pathway_id("1234")
+                    .finish()
+            )),
             Tag::try_from(ParsedTag {
                 name: "-X-I-FRAME-STREAM-INF",
                 value: SemiParsedTagValue::AttributeList(HashMap::from([
@@ -1542,22 +1495,9 @@ mod tests {
             })
         );
         assert_eq!(
-            Ok(Tag::IFrameStreamInf(IFrameStreamInf::new(
-                "iframe.high.m3u8".to_string(),
-                10000000,
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-            ))),
+            Ok(Tag::IFrameStreamInf(
+                IFrameStreamInf::builder("iframe.high.m3u8", 10000000).finish()
+            )),
             Tag::try_from(ParsedTag {
                 name: "-X-I-FRAME-STREAM-INF",
                 value: SemiParsedTagValue::AttributeList(HashMap::from([
@@ -1671,10 +1611,11 @@ mod tests {
     #[test]
     fn content_steering() {
         assert_eq!(
-            Ok(Tag::ContentSteering(ContentSteering::new(
-                "content-steering.json".to_string(),
-                Some("1234".to_string())
-            ))),
+            Ok(Tag::ContentSteering(
+                ContentSteering::builder("content-steering.json")
+                    .with_pathway_id("1234")
+                    .finish()
+            )),
             Tag::try_from(ParsedTag {
                 name: "-X-CONTENT-STEERING",
                 value: SemiParsedTagValue::AttributeList(HashMap::from([
@@ -1688,10 +1629,9 @@ mod tests {
             })
         );
         assert_eq!(
-            Ok(Tag::ContentSteering(ContentSteering::new(
-                "content-steering.json".to_string(),
-                None
-            ))),
+            Ok(Tag::ContentSteering(
+                ContentSteering::builder("content-steering.json").finish()
+            )),
             Tag::try_from(ParsedTag {
                 name: "-X-CONTENT-STEERING",
                 value: SemiParsedTagValue::AttributeList(HashMap::from([(

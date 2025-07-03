@@ -12,6 +12,136 @@ use std::{
     collections::{HashMap, HashSet},
 };
 
+#[derive(Debug, PartialEq, Clone)]
+pub struct DaterangeAttributeList<'a> {
+    pub id: Cow<'a, str>,
+    pub start_date: DateTime,
+    pub class: Option<Cow<'a, str>>,
+    pub cue: Option<Cow<'a, str>>,
+    pub end_date: Option<DateTime>,
+    pub duration: Option<f64>,
+    pub planned_duration: Option<f64>,
+    pub extension_attributes: HashMap<Cow<'a, str>, ExtensionAttributeValue<'a>>,
+    pub end_on_next: bool,
+    pub scte35_cmd: Option<Cow<'a, str>>,
+    pub scte35_out: Option<Cow<'a, str>>,
+    pub scte35_in: Option<Cow<'a, str>>,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct DaterangeBuilder<'a> {
+    id: Cow<'a, str>,
+    start_date: DateTime,
+    class: Option<Cow<'a, str>>,
+    cue: Option<Cow<'a, str>>,
+    end_date: Option<DateTime>,
+    duration: Option<f64>,
+    planned_duration: Option<f64>,
+    extension_attributes: HashMap<Cow<'a, str>, ExtensionAttributeValue<'a>>,
+    end_on_next: bool,
+    scte35_cmd: Option<Cow<'a, str>>,
+    scte35_out: Option<Cow<'a, str>>,
+    scte35_in: Option<Cow<'a, str>>,
+}
+impl<'a> DaterangeBuilder<'a> {
+    pub fn new(id: impl Into<Cow<'a, str>>, start_date: DateTime) -> Self {
+        Self {
+            id: id.into(),
+            start_date,
+            class: Default::default(),
+            cue: Default::default(),
+            end_date: Default::default(),
+            duration: Default::default(),
+            planned_duration: Default::default(),
+            extension_attributes: Default::default(),
+            end_on_next: Default::default(),
+            scte35_cmd: Default::default(),
+            scte35_out: Default::default(),
+            scte35_in: Default::default(),
+        }
+    }
+
+    pub fn finish(self) -> Daterange<'a> {
+        Daterange::new(DaterangeAttributeList {
+            id: self.id,
+            start_date: self.start_date,
+            class: self.class,
+            cue: self.cue,
+            end_date: self.end_date,
+            duration: self.duration,
+            planned_duration: self.planned_duration,
+            extension_attributes: self.extension_attributes,
+            end_on_next: self.end_on_next,
+            scte35_cmd: self.scte35_cmd,
+            scte35_out: self.scte35_out,
+            scte35_in: self.scte35_in,
+        })
+    }
+
+    pub fn with_class(mut self, class: impl Into<Cow<'a, str>>) -> Self {
+        self.class = Some(class.into());
+        self
+    }
+
+    pub fn with_cue(mut self, cue: impl Into<Cow<'a, str>>) -> Self {
+        self.cue = Some(cue.into());
+        self
+    }
+
+    pub fn with_end_date(mut self, end_date: DateTime) -> Self {
+        self.end_date = Some(end_date);
+        self
+    }
+
+    pub fn with_duration(mut self, duration: f64) -> Self {
+        self.duration = Some(duration);
+        self
+    }
+
+    pub fn with_planned_duration(mut self, planned_duration: f64) -> Self {
+        self.planned_duration = Some(planned_duration);
+        self
+    }
+
+    pub fn with_extension_attribute(
+        mut self,
+        extension_attribute_name: impl Into<Cow<'a, str>>,
+        extension_attribute_value: ExtensionAttributeValue<'a>,
+    ) -> Self {
+        self.extension_attributes
+            .insert(extension_attribute_name.into(), extension_attribute_value);
+        self
+    }
+
+    pub fn with_extension_attributes(
+        mut self,
+        extension_attributes: HashMap<Cow<'a, str>, ExtensionAttributeValue<'a>>,
+    ) -> Self {
+        self.extension_attributes = extension_attributes;
+        self
+    }
+
+    pub fn with_end_on_next(mut self) -> Self {
+        self.end_on_next = true;
+        self
+    }
+
+    pub fn with_scte35_cmd(mut self, scte35_cmd: impl Into<Cow<'a, str>>) -> Self {
+        self.scte35_cmd = Some(scte35_cmd.into());
+        self
+    }
+
+    pub fn with_scte35_out(mut self, scte35_out: impl Into<Cow<'a, str>>) -> Self {
+        self.scte35_out = Some(scte35_out.into());
+        self
+    }
+
+    pub fn with_scte35_in(mut self, scte35_in: impl Into<Cow<'a, str>>) -> Self {
+        self.scte35_in = Some(scte35_in.into());
+        self
+    }
+}
+
 /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.5.1
 #[derive(Debug, Clone)]
 pub struct Daterange<'a> {
@@ -22,7 +152,7 @@ pub struct Daterange<'a> {
     end_date: Option<DateTime>,
     duration: Option<f64>,
     planned_duration: Option<f64>,
-    extension_attributes: HashMap<Cow<'a, str>, InternalExtensionAttributeValue<'a>>,
+    extension_attributes: HashMap<Cow<'a, str>, ExtensionAttributeValue<'a>>,
     end_on_next: Option<bool>,
     scte35_cmd: Option<Cow<'a, str>>,
     scte35_out: Option<Cow<'a, str>>,
@@ -88,40 +218,22 @@ impl<'a> TryFrom<ParsedTag<'a>> for Daterange<'a> {
 }
 
 impl<'a> Daterange<'a> {
-    pub fn new(
-        id: String,
-        class: Option<String>,
-        start_date: DateTime,
-        cue: Option<String>,
-        end_date: Option<DateTime>,
-        duration: Option<f64>,
-        planned_duration: Option<f64>,
-        mut extension_attributes: HashMap<String, OwnedExtensionAttributeValue>,
-        scte35_cmd: Option<String>,
-        scte35_out: Option<String>,
-        scte35_in: Option<String>,
-        end_on_next: bool,
-    ) -> Self {
-        let id = Cow::Owned(id);
-        let class = class.map(Cow::Owned);
-        let cue = cue.map(Cow::Owned);
-        let scte35_cmd = scte35_cmd.map(Cow::Owned);
-        let scte35_out = scte35_out.map(Cow::Owned);
-        let scte35_in = scte35_in.map(Cow::Owned);
-        let output_line = Cow::Owned(calculate_line(
-            &id,
-            &class,
+    pub fn new(attribute_list: DaterangeAttributeList<'a>) -> Self {
+        let output_line = Cow::Owned(calculate_line(&attribute_list));
+        let DaterangeAttributeList {
+            id,
             start_date,
-            &cue,
+            class,
+            cue,
             end_date,
             duration,
             planned_duration,
-            &extension_attributes_from_owned(&extension_attributes),
-            &scte35_cmd,
-            &scte35_out,
-            &scte35_in,
+            extension_attributes,
             end_on_next,
-        ));
+            scte35_cmd,
+            scte35_out,
+            scte35_in,
+        } = attribute_list;
         Self {
             id,
             start_date,
@@ -130,17 +242,7 @@ impl<'a> Daterange<'a> {
             end_date,
             duration,
             planned_duration,
-            extension_attributes: extension_attributes
-                .drain()
-                .filter_map(|(key, value)| {
-                    if !key.starts_with("X-") {
-                        return None;
-                    }
-                    InternalExtensionAttributeValue::try_from(value)
-                        .ok()
-                        .map(|value| (Cow::Owned(key), value))
-                })
-                .collect(),
+            extension_attributes,
             end_on_next: Some(end_on_next),
             scte35_cmd,
             scte35_out,
@@ -149,6 +251,10 @@ impl<'a> Daterange<'a> {
             output_line,
             output_line_is_dirty: false,
         }
+    }
+
+    pub fn builder(id: impl Into<Cow<'a, str>>, start_date: DateTime) -> DaterangeBuilder<'a> {
+        DaterangeBuilder::new(id, start_date)
     }
 
     pub fn into_inner(mut self) -> TagInner<'a> {
@@ -241,7 +347,17 @@ impl<'a> Daterange<'a> {
     }
 
     pub fn extension_attribute<'b>(&'a self, name: &'b str) -> Option<ExtensionAttributeValue<'a>> {
-        self.extension_attributes().get(name).copied()
+        if let Some(a) = self.extension_attributes.get(name) {
+            Some(ExtensionAttributeValue::from(a))
+        } else if let Some(a) = self.attribute_list.get(name) {
+            if let Ok(value) = ExtensionAttributeValue::try_from(*a) {
+                Some(value)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
     }
 
     pub fn extension_attribute_keys(&self) -> HashSet<&str> {
@@ -309,15 +425,21 @@ impl<'a> Daterange<'a> {
 
     // === SETTERS ===
 
-    pub fn set_id(&mut self, id: String) {
+    pub fn set_id(&mut self, id: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(ID);
-        self.id = Cow::Owned(id);
+        self.id = id.into();
         self.output_line_is_dirty = true;
     }
 
-    pub fn set_class(&mut self, class: Option<String>) {
+    pub fn set_class(&mut self, class: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(CLASS);
-        self.class = class.map(Cow::Owned);
+        self.class = Some(class.into());
+        self.output_line_is_dirty = true;
+    }
+
+    pub fn unset_class(&mut self) {
+        self.attribute_list.remove(CLASS);
+        self.class = None;
         self.output_line_is_dirty = true;
     }
 
@@ -327,49 +449,66 @@ impl<'a> Daterange<'a> {
         self.output_line_is_dirty = true;
     }
 
-    pub fn set_cue(&mut self, cue: Option<String>) {
+    pub fn set_cue(&mut self, cue: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(CUE);
-        self.cue = cue.map(Cow::Owned);
+        self.cue = Some(cue.into());
         self.output_line_is_dirty = true;
     }
 
-    pub fn set_end_date(&mut self, end_date: Option<DateTime>) {
+    pub fn unset_cue(&mut self) {
+        self.attribute_list.remove(CUE);
+        self.cue = None;
+        self.output_line_is_dirty = true;
+    }
+
+    pub fn set_end_date(&mut self, end_date: DateTime) {
         self.attribute_list.remove(END_DATE);
-        self.end_date = end_date;
+        self.end_date = Some(end_date);
         self.output_line_is_dirty = true;
     }
 
-    pub fn set_duration(&mut self, duration: Option<f64>) {
+    pub fn unset_end_date(&mut self) {
+        self.attribute_list.remove(END_DATE);
+        self.end_date = None;
+        self.output_line_is_dirty = true;
+    }
+
+    pub fn set_duration(&mut self, duration: f64) {
         self.attribute_list.remove(DURATION);
-        self.duration = duration;
+        self.duration = Some(duration);
         self.output_line_is_dirty = true;
     }
 
-    pub fn set_planned_duration(&mut self, planned_duration: Option<f64>) {
+    pub fn unset_duration(&mut self) {
+        self.attribute_list.remove(DURATION);
+        self.duration = None;
+        self.output_line_is_dirty = true;
+    }
+
+    pub fn set_planned_duration(&mut self, planned_duration: f64) {
         self.attribute_list.remove(PLANNED_DURATION);
-        self.planned_duration = planned_duration;
+        self.planned_duration = Some(planned_duration);
+        self.output_line_is_dirty = true;
+    }
+
+    pub fn unset_planned_duration(&mut self) {
+        self.attribute_list.remove(PLANNED_DURATION);
+        self.planned_duration = None;
         self.output_line_is_dirty = true;
     }
 
     pub fn set_extension_attribute(
         &mut self,
-        name: String,
-        value: Option<OwnedExtensionAttributeValue>,
+        name: impl Into<Cow<'a, str>>,
+        value: ExtensionAttributeValue<'a>,
     ) {
+        let name = name.into();
         if !name.starts_with("X-") {
             return;
         }
-        if let Some(value) = value {
-            if let Ok(value) = InternalExtensionAttributeValue::try_from(value) {
-                self.attribute_list.remove(name.as_str());
-                self.extension_attributes.insert(Cow::Owned(name), value);
-                self.output_line_is_dirty = true;
-            }
-        } else {
-            self.attribute_list.remove(name.as_str());
-            self.extension_attributes.remove(name.as_str());
-            self.output_line_is_dirty = true;
-        }
+        self.attribute_list.retain(|k, _| *k != name);
+        self.extension_attributes.insert(name, value);
+        self.output_line_is_dirty = true;
     }
 
     pub fn set_end_on_next(&mut self, end_on_next: bool) {
@@ -378,65 +517,88 @@ impl<'a> Daterange<'a> {
         self.output_line_is_dirty = true;
     }
 
-    pub fn set_scte35_cmd(&mut self, scte35_cmd: Option<String>) {
+    pub fn set_scte35_cmd(&mut self, scte35_cmd: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(SCTE35_CMD);
-        self.scte35_cmd = scte35_cmd.map(Cow::Owned);
+        self.scte35_cmd = Some(scte35_cmd.into());
         self.output_line_is_dirty = true;
     }
 
-    pub fn set_scte35_out(&mut self, scte35_out: Option<String>) {
+    pub fn unset_scte35_cmd(&mut self) {
+        self.attribute_list.remove(SCTE35_CMD);
+        self.scte35_cmd = None;
+        self.output_line_is_dirty = true;
+    }
+
+    pub fn set_scte35_out(&mut self, scte35_out: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(SCTE35_OUT);
-        self.scte35_out = scte35_out.map(Cow::Owned);
+        self.scte35_out = Some(scte35_out.into());
         self.output_line_is_dirty = true;
     }
 
-    pub fn set_scte35_in(&mut self, scte35_in: Option<String>) {
+    pub fn unset_scte35_out(&mut self) {
+        self.attribute_list.remove(SCTE35_OUT);
+        self.scte35_out = None;
+        self.output_line_is_dirty = true;
+    }
+
+    pub fn set_scte35_in(&mut self, scte35_in: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(SCTE35_IN);
-        self.scte35_in = scte35_in.map(Cow::Owned);
+        self.scte35_in = Some(scte35_in.into());
+        self.output_line_is_dirty = true;
+    }
+
+    pub fn unset_scte35_in(&mut self) {
+        self.attribute_list.remove(SCTE35_IN);
+        self.scte35_in = None;
         self.output_line_is_dirty = true;
     }
 
     fn recalculate_output_line(&mut self) {
-        self.output_line = Cow::Owned(calculate_line(
-            self.id(),
-            &self.class().map(|x| x.into()),
-            self.start_date(),
-            &self.cue().map(|x| x.into()),
-            self.end_date(),
-            self.duration(),
-            self.planned_duration(),
-            &self.extension_attributes(),
-            &self.scte35_cmd().map(|x| x.into()),
-            &self.scte35_out().map(|x| x.into()),
-            &self.scte35_in().map(|x| x.into()),
-            self.end_on_next(),
-        ));
+        self.output_line = Cow::Owned(calculate_line(&DaterangeAttributeList {
+            id: self.id().into(),
+            class: self.class().map(|x| x.into()),
+            start_date: self.start_date(),
+            cue: self.cue().map(|x| x.into()),
+            end_date: self.end_date(),
+            duration: self.duration(),
+            planned_duration: self.planned_duration(),
+            extension_attributes: {
+                let mut map = HashMap::new();
+                for (key, value) in self.extension_attributes() {
+                    map.insert(Cow::Borrowed(key), value);
+                }
+                map
+            },
+            scte35_cmd: self.scte35_cmd().map(|x| x.into()),
+            scte35_out: self.scte35_out().map(|x| x.into()),
+            scte35_in: self.scte35_in().map(|x| x.into()),
+            end_on_next: self.end_on_next(),
+        }));
         self.output_line_is_dirty = false;
     }
 }
 
 #[derive(Debug, PartialEq, Clone)]
-enum InternalExtensionAttributeValue<'a> {
+pub enum ExtensionAttributeValue<'a> {
     QuotedString(Cow<'a, str>),
     HexadecimalSequence(Cow<'a, str>),
     SignedDecimalFloatingPoint(f64),
 }
+impl<'a> ExtensionAttributeValue<'a> {
+    pub fn quoted_string(quoted_string: impl Into<Cow<'a, str>>) -> Self {
+        Self::QuotedString(quoted_string.into())
+    }
 
-#[derive(Debug, PartialEq, Clone, Copy)]
-pub enum ExtensionAttributeValue<'a> {
-    QuotedString(&'a str),
-    HexadecimalSequence(&'a str),
-    SignedDecimalFloatingPoint(f64),
+    pub fn hexadecimal_sequence(hexadecimal_sequence: impl Into<Cow<'a, str>>) -> Self {
+        Self::HexadecimalSequence(hexadecimal_sequence.into())
+    }
+
+    pub fn signed_decimal_floating_point(signed_decimal_floating_point: f64) -> Self {
+        Self::SignedDecimalFloatingPoint(signed_decimal_floating_point)
+    }
 }
 
-#[derive(Debug, PartialEq, Clone)]
-pub enum OwnedExtensionAttributeValue {
-    QuotedString(String),
-    HexadecimalSequence(String),
-    SignedDecimalFloatingPoint(f64),
-}
-
-impl<'a> TryFrom<ParsedAttributeValue<'a>> for InternalExtensionAttributeValue<'a> {
+impl<'a> TryFrom<ParsedAttributeValue<'a>> for ExtensionAttributeValue<'a> {
     type Error = &'static str;
 
     fn try_from(value: ParsedAttributeValue<'a>) -> Result<Self, Self::Error> {
@@ -456,56 +618,12 @@ impl<'a> TryFrom<ParsedAttributeValue<'a>> for InternalExtensionAttributeValue<'
     }
 }
 
-impl<'a> TryFrom<ParsedAttributeValue<'a>> for ExtensionAttributeValue<'a> {
-    type Error = &'static str;
-
-    fn try_from(value: ParsedAttributeValue<'a>) -> Result<Self, Self::Error> {
+impl<'a> From<&'a ExtensionAttributeValue<'a>> for ExtensionAttributeValue<'a> {
+    fn from(value: &'a ExtensionAttributeValue<'a>) -> Self {
         match value {
-            ParsedAttributeValue::DecimalInteger(n) => {
-                Ok(Self::SignedDecimalFloatingPoint(n as f64))
-            }
-            ParsedAttributeValue::SignedDecimalFloatingPoint(n) => {
-                Ok(Self::SignedDecimalFloatingPoint(n))
-            }
-            ParsedAttributeValue::QuotedString(s) => Ok(Self::QuotedString(s)),
-            ParsedAttributeValue::UnquotedString(s) if is_hexadecimal_sequence(s) => {
-                Ok(Self::HexadecimalSequence(s))
-            }
-            ParsedAttributeValue::UnquotedString(_) => Err("Invalid extension attribute value"),
-        }
-    }
-}
-
-impl<'a> From<&'a InternalExtensionAttributeValue<'a>> for ExtensionAttributeValue<'a> {
-    fn from(value: &'a InternalExtensionAttributeValue) -> Self {
-        match value {
-            InternalExtensionAttributeValue::QuotedString(cow) => Self::QuotedString(cow),
-            InternalExtensionAttributeValue::HexadecimalSequence(cow) => {
-                Self::HexadecimalSequence(cow)
-            }
-            InternalExtensionAttributeValue::SignedDecimalFloatingPoint(n) => {
-                Self::SignedDecimalFloatingPoint(*n)
-            }
-        }
-    }
-}
-
-impl<'a> TryFrom<OwnedExtensionAttributeValue> for InternalExtensionAttributeValue<'a> {
-    type Error = &'static str;
-
-    fn try_from(value: OwnedExtensionAttributeValue) -> Result<Self, Self::Error> {
-        match value {
-            OwnedExtensionAttributeValue::QuotedString(s) => Ok(Self::QuotedString(Cow::Owned(s))),
-            OwnedExtensionAttributeValue::SignedDecimalFloatingPoint(n) => {
-                Ok(Self::SignedDecimalFloatingPoint(n))
-            }
-            OwnedExtensionAttributeValue::HexadecimalSequence(s) => {
-                if is_hexadecimal_sequence(&s) {
-                    Ok(Self::HexadecimalSequence(Cow::Owned(s)))
-                } else {
-                    Err("Invalid extension attribute value")
-                }
-            }
+            Self::QuotedString(cow) => Self::QuotedString(Cow::Borrowed(&cow)),
+            Self::HexadecimalSequence(cow) => Self::HexadecimalSequence(Cow::Borrowed(&cow)),
+            Self::SignedDecimalFloatingPoint(d) => Self::SignedDecimalFloatingPoint(*d),
         }
     }
 }
@@ -538,20 +656,21 @@ const SCTE35_IN: &str = "SCTE35-IN";
 const END_ON_NEXT: &str = "END-ON-NEXT";
 const YES: &str = "YES";
 
-fn calculate_line<'a>(
-    id: &str,
-    class: &Option<Cow<'a, str>>,
-    start_date: DateTime,
-    cue: &Option<Cow<'a, str>>,
-    end_date: Option<DateTime>,
-    duration: Option<f64>,
-    planned_duration: Option<f64>,
-    client_attributes: &HashMap<&str, ExtensionAttributeValue<'a>>,
-    scte35_cmd: &Option<Cow<'a, str>>,
-    scte35_out: &Option<Cow<'a, str>>,
-    scte35_in: &Option<Cow<'a, str>>,
-    end_on_next: bool,
-) -> Vec<u8> {
+fn calculate_line<'a>(attribute_list: &DaterangeAttributeList) -> Vec<u8> {
+    let DaterangeAttributeList {
+        id,
+        start_date,
+        class,
+        cue,
+        end_date,
+        duration,
+        planned_duration,
+        extension_attributes,
+        end_on_next,
+        scte35_cmd,
+        scte35_out,
+        scte35_in,
+    } = attribute_list;
     let mut line = format!(
         "#EXT{}:{}=\"{}\",{}=\"{}\"",
         TagName::Daterange.as_str(),
@@ -575,7 +694,7 @@ fn calculate_line<'a>(
     if let Some(planned_duration) = planned_duration {
         line.push_str(format!(",{}={}", PLANNED_DURATION, planned_duration).as_str());
     }
-    for (key, value) in client_attributes {
+    for (key, value) in extension_attributes {
         line.push(',');
         line.push_str(key);
         line.push('=');
@@ -602,84 +721,22 @@ fn calculate_line<'a>(
     if let Some(scte35_in) = scte35_in {
         line.push_str(format!(",{}={}", SCTE35_IN, scte35_in).as_str());
     }
-    if end_on_next {
+    if *end_on_next {
         line.push_str(",END-ON-NEXT=YES");
     }
     line.into_bytes()
 }
 
-fn extension_attributes_from_owned(
-    extension_attributes: &HashMap<String, OwnedExtensionAttributeValue>,
-) -> HashMap<&str, ExtensionAttributeValue> {
-    let mut intermediate_hash_map = HashMap::new();
-    let user_set_extension_attrs: Vec<(&str, ExtensionAttributeValue)> = extension_attributes
-        .iter()
-        .filter_map(|(key, value)| {
-            if !key.starts_with("X-") {
-                return None;
-            }
-            match value {
-                OwnedExtensionAttributeValue::QuotedString(s) => Some((
-                    key.as_str(),
-                    ExtensionAttributeValue::QuotedString(s.as_str()),
-                )),
-                OwnedExtensionAttributeValue::HexadecimalSequence(s) => {
-                    if is_hexadecimal_sequence(s) {
-                        Some((
-                            key.as_str(),
-                            ExtensionAttributeValue::HexadecimalSequence(s.as_str()),
-                        ))
-                    } else {
-                        None
-                    }
-                }
-                OwnedExtensionAttributeValue::SignedDecimalFloatingPoint(d) => Some((
-                    key.as_str(),
-                    ExtensionAttributeValue::SignedDecimalFloatingPoint(*d),
-                )),
-            }
-        })
-        .collect();
-    for (key, value) in user_set_extension_attrs {
-        intermediate_hash_map.insert(key, value);
-    }
-    intermediate_hash_map
-}
-
 #[cfg(test)]
 mod tests {
-    use crate::{date::DateTimeTimezoneOffset, date_time};
-
     use super::*;
+    use crate::date_time;
     use pretty_assertions::assert_eq;
 
     #[test]
     fn new_with_no_optionals_should_be_valid() {
-        let tag = Daterange::new(
-            "some-id".to_string(),
-            None,
-            DateTime {
-                date_fullyear: 2025,
-                date_month: 6,
-                date_mday: 14,
-                time_hour: 23,
-                time_minute: 41,
-                time_second: 42.0,
-                timezone_offset: DateTimeTimezoneOffset {
-                    time_hour: -5,
-                    time_minute: 0,
-                },
-            },
-            None,
-            None,
-            None,
-            None,
-            HashMap::new(),
-            None,
-            None,
-            None,
-            false,
-        );
+        let tag =
+            Daterange::builder("some-id", date_time!(2025-06-14 T 23:41:42.000 -05:00)).finish();
         assert_eq!(
             b"#EXT-X-DATERANGE:ID=\"some-id\",START-DATE=\"2025-06-14T23:41:42.000-05:00\"",
             tag.into_inner().value()
@@ -688,20 +745,17 @@ mod tests {
 
     #[test]
     fn new_with_optionals_should_be_valid() {
-        let tag = Daterange::new(
-            "some-id".to_string(),
-            Some("com.example.class".to_string()),
-            date_time!(2025-06-14 T 23:41:42.000 -05:00),
-            Some("ONCE".to_string()),
-            Some(date_time!(2025-06-14 T 23:43:42.000 -05:00)),
-            Some(120.0),
-            Some(180.0),
-            HashMap::new(),
-            Some("0xABCD".to_string()),
-            Some("0xABCD".to_string()),
-            Some("0xABCD".to_string()),
-            true,
-        );
+        let tag = Daterange::builder("some-id", date_time!(2025-06-14 T 23:41:42.000 -05:00))
+            .with_class("com.example.class")
+            .with_cue("ONCE")
+            .with_end_date(date_time!(2025-06-14 T 23:43:42.000 -05:00))
+            .with_duration(120.0)
+            .with_planned_duration(180.0)
+            .with_scte35_cmd("0xABCD")
+            .with_scte35_out("0xABCD")
+            .with_scte35_in("0xABCD")
+            .with_end_on_next()
+            .finish();
         assert_eq!(
             concat!(
                 "#EXT-X-DATERANGE:ID=\"some-id\",START-DATE=\"2025-06-14T23:41:42.000-05:00\",",
@@ -716,33 +770,20 @@ mod tests {
 
     #[test]
     fn new_with_optionals_and_some_client_attributes_should_be_valid() {
-        let tag = Daterange::new(
-            "some-id".to_string(),
-            None as Option<String>,
-            date_time!(2025-06-14 T 23:41:42.000 -05:00),
-            None as Option<String>,
-            None,
-            None,
-            None,
-            HashMap::from([
-                (
-                    "X-COM-EXAMPLE-A".to_string(),
-                    OwnedExtensionAttributeValue::QuotedString("Example A".to_string()),
-                ),
-                (
-                    "X-COM-EXAMPLE-B".to_string(),
-                    OwnedExtensionAttributeValue::SignedDecimalFloatingPoint(42.0),
-                ),
-                (
-                    "X-COM-EXAMPLE-C".to_string(),
-                    OwnedExtensionAttributeValue::HexadecimalSequence("0xABCD".to_string()),
-                ),
-            ]),
-            None as Option<String>,
-            None as Option<String>,
-            None as Option<String>,
-            false,
-        );
+        let tag = Daterange::builder("some-id", date_time!(2025-06-14 T 23:41:42.000 -05:00))
+            .with_extension_attribute(
+                "X-COM-EXAMPLE-A",
+                ExtensionAttributeValue::QuotedString("Example A".into()),
+            )
+            .with_extension_attribute(
+                "X-COM-EXAMPLE-B",
+                ExtensionAttributeValue::SignedDecimalFloatingPoint(42.0),
+            )
+            .with_extension_attribute(
+                "X-COM-EXAMPLE-C",
+                ExtensionAttributeValue::HexadecimalSequence("0xABCD".into()),
+            )
+            .finish();
         // Client attributes can come in any order (due to it being a HashMap) so we need to be a
         // little more creative in validating the tag format.
         let tag_inner = tag.into_inner();
@@ -787,32 +828,19 @@ mod tests {
 
     #[test]
     fn mutation_should_work() {
-        let mut daterange = Daterange::new(
-            "some-id".to_string(),
-            None,
-            DateTime::default(),
-            Some("ONCE".to_string()),
-            None,
-            None,
-            None,
-            HashMap::new(),
-            None,
-            None,
-            None,
-            false,
-        );
+        let mut daterange = Daterange::builder("some-id", DateTime::default())
+            .with_cue("ONCE")
+            .finish();
         assert_eq!(
             b"#EXT-X-DATERANGE:ID=\"some-id\",START-DATE=\"1970-01-01T00:00:00.000Z\",CUE=\"ONCE\"",
             daterange.clone().into_inner().value()
         );
-        daterange.set_id("another-id".to_string());
-        daterange.set_class(Some("com.example.test".to_string()));
-        daterange.set_cue(None);
+        daterange.set_id("another-id");
+        daterange.set_class("com.example.test");
+        daterange.unset_cue();
         daterange.set_extension_attribute(
-            "X-EXAMPLE".to_string(),
-            Some(OwnedExtensionAttributeValue::QuotedString(
-                "TEST".to_string(),
-            )),
+            "X-EXAMPLE",
+            ExtensionAttributeValue::QuotedString("TEST".into()),
         );
         assert_eq!(
             concat!(

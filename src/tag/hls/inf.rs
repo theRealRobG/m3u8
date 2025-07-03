@@ -46,8 +46,8 @@ impl<'a> TryFrom<ParsedTag<'a>> for Inf<'a> {
 }
 
 impl<'a> Inf<'a> {
-    pub fn new(duration: f64, title: String) -> Self {
-        let title = Cow::Owned(title);
+    pub fn new(duration: f64, title: impl Into<Cow<'a, str>>) -> Self {
+        let title = title.into();
         let output_line = Cow::Owned(calculate_line(duration, &title));
         Self {
             duration,
@@ -79,8 +79,8 @@ impl<'a> Inf<'a> {
         self.output_line_is_dirty = true;
     }
 
-    pub fn set_title(&mut self, title: String) {
-        self.title = Cow::Owned(title);
+    pub fn set_title(&mut self, title: impl Into<Cow<'a, str>>) {
+        self.title = title.into();
         self.output_line_is_dirty = true;
     }
 

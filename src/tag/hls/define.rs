@@ -23,9 +23,9 @@ impl<'a> PartialEq for Name<'a> {
 }
 
 impl<'a> Name<'a> {
-    pub fn new(name: String, value: String) -> Self {
-        let name = Cow::Owned(name);
-        let value = Cow::Owned(value);
+    pub fn new(name: impl Into<Cow<'a, str>>, value: impl Into<Cow<'a, str>>) -> Self {
+        let name = name.into();
+        let value = value.into();
         let output_line = Cow::Owned(Self::calculate_line(&name, &value));
         Self {
             name,
@@ -52,13 +52,13 @@ impl<'a> Name<'a> {
         &self.value
     }
 
-    pub fn set_name(&mut self, name: String) {
-        self.name = Cow::Owned(name);
+    pub fn set_name(&mut self, name: impl Into<Cow<'a, str>>) {
+        self.name = name.into();
         self.output_line_is_dirty = true;
     }
 
-    pub fn set_value(&mut self, value: String) {
-        self.value = Cow::Owned(value);
+    pub fn set_value(&mut self, value: impl Into<Cow<'a, str>>) {
+        self.value = value.into();
         self.output_line_is_dirty = true;
     }
 
@@ -86,8 +86,8 @@ impl<'a> PartialEq for Import<'a> {
 }
 
 impl<'a> Import<'a> {
-    pub fn new(import: String) -> Self {
-        let import = Cow::Owned(import);
+    pub fn new(import: impl Into<Cow<'a, str>>) -> Self {
+        let import = import.into();
         let output_line = Cow::Owned(Self::calculate_line(&import));
         Self {
             import,
@@ -109,8 +109,8 @@ impl<'a> Import<'a> {
         &self.import
     }
 
-    pub fn set_import(&mut self, import: String) {
-        self.import = Cow::Owned(import);
+    pub fn set_import(&mut self, import: impl Into<Cow<'a, str>>) {
+        self.import = import.into();
         self.output_line_is_dirty = true;
     }
 
@@ -138,8 +138,8 @@ impl<'a> PartialEq for Queryparam<'a> {
 }
 
 impl<'a> Queryparam<'a> {
-    pub fn new(queryparam: String) -> Self {
-        let queryparam = Cow::Owned(queryparam);
+    pub fn new(queryparam: impl Into<Cow<'a, str>>) -> Self {
+        let queryparam = queryparam.into();
         let output_line = Cow::Owned(Self::calculate_line(&queryparam));
         Self {
             queryparam,
@@ -161,8 +161,8 @@ impl<'a> Queryparam<'a> {
         &self.queryparam
     }
 
-    pub fn set_queryparam(&mut self, queryparam: String) {
-        self.queryparam = Cow::Owned(queryparam);
+    pub fn set_queryparam(&mut self, queryparam: impl Into<Cow<'a, str>>) {
+        self.queryparam = queryparam.into();
         self.output_line_is_dirty = true;
     }
 
@@ -226,15 +226,15 @@ impl<'a> TryFrom<ParsedTag<'a>> for Define<'a> {
 }
 
 impl<'a> Define<'a> {
-    pub fn new_name(name: String, value: String) -> Self {
+    pub fn new_name(name: impl Into<Cow<'a, str>>, value: impl Into<Cow<'a, str>>) -> Self {
         Self::Name(Name::new(name, value))
     }
 
-    pub fn new_import(import: String) -> Self {
+    pub fn new_import(import: impl Into<Cow<'a, str>>) -> Self {
         Self::Import(Import::new(import))
     }
 
-    pub fn new_queryparam(queryparam: String) -> Self {
+    pub fn new_queryparam(queryparam: impl Into<Cow<'a, str>>) -> Self {
         Self::Queryparam(Queryparam::new(queryparam))
     }
 
@@ -266,15 +266,19 @@ impl<'a> Define<'a> {
         }
     }
 
-    pub fn set_name_and_value(&mut self, name: String, value: String) {
+    pub fn set_name_and_value(
+        &mut self,
+        name: impl Into<Cow<'a, str>>,
+        value: impl Into<Cow<'a, str>>,
+    ) {
         *self = Self::new_name(name, value);
     }
 
-    pub fn set_import(&mut self, import: String) {
+    pub fn set_import(&mut self, import: impl Into<Cow<'a, str>>) {
         *self = Self::new_import(import);
     }
 
-    pub fn set_queryparam(&mut self, queryparam: String) {
+    pub fn set_queryparam(&mut self, queryparam: impl Into<Cow<'a, str>>) {
         *self = Self::new_queryparam(queryparam);
     }
 
