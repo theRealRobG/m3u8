@@ -879,16 +879,13 @@ mod tests {
     #[test]
     fn part() {
         assert_eq!(
-            Ok(Tag::Part(Part::new(
-                "part.1.mp4".to_string(),
-                0.5,
-                true,
-                Some(PartByterange {
-                    length: 1024,
-                    offset: Some(512)
-                }),
-                true,
-            ))),
+            Ok(Tag::Part(
+                Part::builder("part.1.mp4", 0.5)
+                    .with_independent()
+                    .with_byterange(PartByterange { length: 1024, offset: Some(512) })
+                    .with_gap()
+                    .finish()
+            )),
             Tag::try_from(ParsedTag {
                 name: "-X-PART",
                 value: SemiParsedTagValue::AttributeList(HashMap::from([
@@ -901,20 +898,18 @@ mod tests {
                     ("BYTERANGE", ParsedAttributeValue::QuotedString("1024@512")),
                     ("GAP", ParsedAttributeValue::UnquotedString("YES"))
                 ])),
-                original_input: b"#EXT-X-PART:URI=\"part.1.mp4\",DURATION=0.5,INDEPENDENT=YES,BYTERANGE=1024@512,GAP=YES"
+                original_input: b"#EXT-X-PART:URI=\"part.1.mp4\",DURATION=0.5,INDEPENDENT=YES,BYTERANGE=\"1024@512\",GAP=YES"
             })
         );
         assert_eq!(
-            Ok(Tag::Part(Part::new(
-                "part.1.mp4".to_string(),
-                0.5,
-                false,
-                Some(PartByterange {
-                    length: 1024,
-                    offset: None
-                }),
-                false,
-            ))),
+            Ok(Tag::Part(
+                Part::builder("part.1.mp4", 0.5)
+                    .with_byterange(PartByterange {
+                        length: 1024,
+                        offset: None
+                    })
+                    .finish()
+            )),
             Tag::try_from(ParsedTag {
                 name: "-X-PART",
                 value: SemiParsedTagValue::AttributeList(HashMap::from([
@@ -925,17 +920,11 @@ mod tests {
                     ),
                     ("BYTERANGE", ParsedAttributeValue::QuotedString("1024")),
                 ])),
-                original_input: b"#EXT-X-PART:URI=\"part.1.mp4\",DURATION=0.5,BYTERANGE=1024"
+                original_input: b"#EXT-X-PART:URI=\"part.1.mp4\",DURATION=0.5,BYTERANGE=\"1024\""
             })
         );
         assert_eq!(
-            Ok(Tag::Part(Part::new(
-                "part.1.mp4".to_string(),
-                0.5,
-                false,
-                None,
-                false,
-            ))),
+            Ok(Tag::Part(Part::builder("part.1.mp4", 0.5).finish())),
             Tag::try_from(ParsedTag {
                 name: "-X-PART",
                 value: SemiParsedTagValue::AttributeList(HashMap::from([

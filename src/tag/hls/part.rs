@@ -8,6 +8,58 @@ use crate::{
 };
 use std::{borrow::Cow, collections::HashMap, fmt::Display};
 
+#[derive(Debug, PartialEq, Clone)]
+pub struct PartAttributeList<'a> {
+    pub uri: Cow<'a, str>,
+    pub duration: f64,
+    pub independent: bool,
+    pub byterange: Option<PartByterange>,
+    pub gap: bool,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct PartBuilder<'a> {
+    uri: Cow<'a, str>,
+    duration: f64,
+    independent: bool,
+    byterange: Option<PartByterange>,
+    gap: bool,
+}
+impl<'a> PartBuilder<'a> {
+    pub fn new(uri: impl Into<Cow<'a, str>>, duration: f64) -> Self {
+        Self {
+            uri: uri.into(),
+            duration,
+            independent: Default::default(),
+            byterange: Default::default(),
+            gap: Default::default(),
+        }
+    }
+
+    pub fn finish(self) -> Part<'a> {
+        Part::new(PartAttributeList {
+            uri: self.uri,
+            duration: self.duration,
+            independent: self.independent,
+            byterange: self.byterange,
+            gap: self.gap,
+        })
+    }
+
+    pub fn with_independent(mut self) -> Self {
+        self.independent = true;
+        self
+    }
+    pub fn with_byterange(mut self, byterange: PartByterange) -> Self {
+        self.byterange = Some(byterange);
+        self
+    }
+    pub fn with_gap(mut self) -> Self {
+        self.gap = true;
+        self
+    }
+}
+
 /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.4.9
 #[derive(Debug, Clone)]
 pub struct Part<'a> {
@@ -77,15 +129,15 @@ impl<'a> TryFrom<ParsedTag<'a>> for Part<'a> {
 }
 
 impl<'a> Part<'a> {
-    pub fn new(
-        uri: String,
-        duration: f64,
-        independent: bool,
-        byterange: Option<PartByterange>,
-        gap: bool,
-    ) -> Self {
-        let uri = Cow::Owned(uri);
-        let output_line = Cow::Owned(calculate_line(&uri, duration, independent, byterange, gap));
+    pub fn new(attribute_list: PartAttributeList<'a>) -> Self {
+        let output_line = Cow::Owned(calculate_line(&attribute_list));
+        let PartAttributeList {
+            uri,
+            duration,
+            independent,
+            byterange,
+            gap,
+        } = attribute_list;
         Self {
             uri,
             duration,
@@ -96,6 +148,10 @@ impl<'a> Part<'a> {
             output_line,
             output_line_is_dirty: false,
         }
+    }
+
+    pub fn builder(uri: impl Into<Cow<'a, str>>, duration: f64) -> PartBuilder<'a> {
+        PartBuilder::new(uri, duration)
     }
 
     pub fn into_inner(mut self) -> TagInner<'a> {
@@ -159,9 +215,9 @@ impl<'a> Part<'a> {
         }
     }
 
-    pub fn set_uri(&mut self, uri: String) {
+    pub fn set_uri(&mut self, uri: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(URI);
-        self.uri = Cow::Owned(uri);
+        self.uri = uri.into();
         self.output_line_is_dirty = true;
     }
     pub fn set_duration(&mut self, duration: f64) {
@@ -174,9 +230,14 @@ impl<'a> Part<'a> {
         self.independent = Some(independent);
         self.output_line_is_dirty = true;
     }
-    pub fn set_byterange(&mut self, byterange: Option<PartByterange>) {
+    pub fn set_byterange(&mut self, byterange: PartByterange) {
         self.attribute_list.remove(BYTERANGE);
-        self.byterange = byterange;
+        self.byterange = Some(byterange);
+        self.output_line_is_dirty = true;
+    }
+    pub fn unset_byterange(&mut self) {
+        self.attribute_list.remove(BYTERANGE);
+        self.byterange = None;
         self.output_line_is_dirty = true;
     }
     pub fn set_gap(&mut self, gap: bool) {
@@ -186,13 +247,13 @@ impl<'a> Part<'a> {
     }
 
     fn recalculate_output_line(&mut self) {
-        self.output_line = Cow::Owned(calculate_line(
-            self.uri(),
-            self.duration(),
-            self.independent(),
-            self.byterange(),
-            self.gap(),
-        ));
+        self.output_line = Cow::Owned(calculate_line(&PartAttributeList {
+            uri: self.uri().into(),
+            duration: self.duration(),
+            independent: self.independent(),
+            byterange: self.byterange(),
+            gap: self.gap(),
+        }));
         self.output_line_is_dirty = false;
     }
 }
@@ -204,21 +265,22 @@ const BYTERANGE: &str = "BYTERANGE";
 const GAP: &str = "GAP";
 const YES: &str = "YES";
 
-fn calculate_line(
-    uri: &str,
-    duration: f64,
-    independent: bool,
-    byterange: Option<PartByterange>,
-    gap: bool,
-) -> Vec<u8> {
+fn calculate_line(attribute_list: &PartAttributeList) -> Vec<u8> {
+    let PartAttributeList {
+        uri,
+        duration,
+        independent,
+        byterange,
+        gap,
+    } = attribute_list;
     let mut line = format!("#EXT-X-PART:{URI}=\"{uri}\",{DURATION}={duration}");
-    if independent {
+    if *independent {
         line.push_str(format!(",{INDEPENDENT}={YES}").as_str());
     }
     if let Some(byterange) = byterange {
-        line.push_str(format!(",{BYTERANGE}={byterange}").as_str());
+        line.push_str(format!(",{BYTERANGE}=\"{byterange}\"").as_str());
     }
-    if gap {
+    if *gap {
         line.push_str(format!(",{GAP}={YES}").as_str());
     }
     line.into_bytes()
@@ -227,13 +289,15 @@ fn calculate_line(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tag::hls::test_macro::mutation_tests;
     use pretty_assertions::assert_eq;
 
     #[test]
     fn as_str_with_no_options_should_be_valid() {
         assert_eq!(
             b"#EXT-X-PART:URI=\"part.1.0.mp4\",DURATION=0.5",
-            Part::new("part.1.0.mp4".to_string(), 0.5, false, None, false)
+            Part::builder("part.1.0.mp4", 0.5)
+                .finish()
                 .into_inner()
                 .value()
         );
@@ -242,38 +306,46 @@ mod tests {
     #[test]
     fn as_str_with_options_no_byterange_offset_should_be_valid() {
         assert_eq!(
-            b"#EXT-X-PART:URI=\"part.1.0.mp4\",DURATION=0.5,INDEPENDENT=YES,BYTERANGE=1024,GAP=YES",
-            Part::new(
-                "part.1.0.mp4".to_string(),
-                0.5,
-                true,
-                Some(PartByterange {
+            b"#EXT-X-PART:URI=\"part.1.0.mp4\",DURATION=0.5,INDEPENDENT=YES,BYTERANGE=\"1024\",GAP=YES",
+            Part::builder("part.1.0.mp4", 0.5)
+                .with_independent()
+                .with_byterange(PartByterange {
                     length: 1024,
                     offset: None
-                }),
-                true
-            )
-            .into_inner()
-            .value()
+                })
+                .with_gap()
+                .finish()
+                .into_inner()
+                .value()
         );
     }
 
     #[test]
     fn as_str_with_options_with_byterange_offset_should_be_valid() {
         assert_eq!(
-            b"#EXT-X-PART:URI=\"part.1.0.mp4\",DURATION=0.5,INDEPENDENT=YES,BYTERANGE=1024@512,GAP=YES",
-            Part::new(
-                "part.1.0.mp4".to_string(),
-                0.5,
-                true,
-                Some(PartByterange {
-                    length: 1024,
-                    offset: Some(512)
-                }),
-                true
-            )
-            .into_inner()
-            .value()
+            b"#EXT-X-PART:URI=\"part.1.0.mp4\",DURATION=0.5,INDEPENDENT=YES,BYTERANGE=\"1024@512\",GAP=YES",
+            Part::builder("part.1.0.mp4", 0.5)
+                .with_independent()
+                .with_byterange(PartByterange { length: 1024, offset: Some(512) })
+                .with_gap()
+                .finish()
+                .into_inner()
+                .value()
         );
     }
+
+    mutation_tests!(
+        Part::builder("part.1.0.mp4", 0.5)
+            .with_byterange(PartByterange { length: 1024, offset: Some(512) })
+            .finish(),
+        (uri, "example", @Attr="URI=\"example\""),
+        (duration, 1.0, @Attr="DURATION=1"),
+        (independent, true, @Attr="INDEPENDENT=YES"),
+        (
+            byterange,
+            @Option PartByterange { length: 100, offset: Some(200) },
+            @Attr="BYTERANGE=\"100@200\""
+        ),
+        (gap, true, @Attr="GAP=YES")
+    );
 }

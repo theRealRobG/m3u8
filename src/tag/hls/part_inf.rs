@@ -89,6 +89,7 @@ fn calculate_line(part_target: f64) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tag::hls::test_macro::mutation_tests;
     use pretty_assertions::assert_eq;
 
     #[test]
@@ -98,4 +99,6 @@ mod tests {
             PartInf::new(0.5).into_inner().value()
         );
     }
+
+    mutation_tests!(PartInf::new(0.5), (part_target, 1.0, @Attr="PART-TARGET=1"));
 }
