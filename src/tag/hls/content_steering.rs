@@ -153,7 +153,7 @@ impl<'a> ContentSteering<'a> {
 const SERVER_URI: &str = "SERVER-URI";
 const PATHWAY_ID: &str = "PATHWAY-ID";
 
-fn calculate_line<'a>(attribute_list: &ContentSteeringAttributeList) -> Vec<u8> {
+fn calculate_line(attribute_list: &ContentSteeringAttributeList) -> Vec<u8> {
     let ContentSteeringAttributeList {
         server_uri,
         pathway_id,

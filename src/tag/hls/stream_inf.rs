@@ -736,7 +736,7 @@ const SUBTITLES: &str = "SUBTITLES";
 const CLOSED_CAPTIONS: &str = "CLOSED-CAPTIONS";
 const PATHWAY_ID: &str = "PATHWAY-ID";
 
-fn calculate_line<'a>(attribute_list: &StreamInfAttributeList) -> Vec<u8> {
+fn calculate_line(attribute_list: &StreamInfAttributeList) -> Vec<u8> {
     let StreamInfAttributeList {
         bandwidth,
         average_bandwidth,

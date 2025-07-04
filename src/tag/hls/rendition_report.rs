@@ -25,7 +25,7 @@ impl<'a> RenditionReportBuilder<'a> {
     pub fn new(uri: impl Into<Cow<'a, str>>, last_msn: u64) -> Self {
         Self {
             uri: uri.into(),
-            last_msn: last_msn,
+            last_msn,
             last_part: Default::default(),
         }
     }

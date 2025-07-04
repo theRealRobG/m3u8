@@ -621,7 +621,7 @@ const STABLE_VARIANT_ID: &str = "STABLE-VARIANT-ID";
 const VIDEO: &str = "VIDEO";
 const PATHWAY_ID: &str = "PATHWAY-ID";
 
-fn calculate_line<'a>(attribute_list: &IFrameStreamInfAttributeList) -> Vec<u8> {
+fn calculate_line(attribute_list: &IFrameStreamInfAttributeList) -> Vec<u8> {
     let IFrameStreamInfAttributeList {
         uri,
         bandwidth,

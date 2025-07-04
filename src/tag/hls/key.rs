@@ -283,7 +283,7 @@ const IV: &str = "IV";
 const KEYFORMAT: &str = "KEYFORMAT";
 const KEYFORMATVERSIONS: &str = "KEYFORMATVERSIONS";
 
-fn calculate_line<'a>(attribute_list: &KeyAttributeList) -> Vec<u8> {
+fn calculate_line(attribute_list: &KeyAttributeList) -> Vec<u8> {
     let KeyAttributeList {
         method,
         uri,

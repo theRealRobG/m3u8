@@ -269,7 +269,7 @@ const URI: &str = "URI";
 const FORMAT: &str = "FORMAT";
 const LANGUAGE: &str = "LANGUAGE";
 
-fn calculate_line<'a>(attribute_list: &SessionDataAttributeList) -> Vec<u8> {
+fn calculate_line(attribute_list: &SessionDataAttributeList) -> Vec<u8> {
     let SessionDataAttributeList {
         data_id,
         value,

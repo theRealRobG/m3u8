@@ -590,7 +590,7 @@ const CHARACTERISTICS: &str = "CHARACTERISTICS";
 const CHANNELS: &str = "CHANNELS";
 const YES: &str = "YES";
 
-fn calculate_line<'a>(attribute_list: &MediaAttributeList) -> Vec<u8> {
+fn calculate_line(attribute_list: &MediaAttributeList) -> Vec<u8> {
     let MediaAttributeList {
         media_type,
         name,

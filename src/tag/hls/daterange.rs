@@ -350,11 +350,7 @@ impl<'a> Daterange<'a> {
         if let Some(a) = self.extension_attributes.get(name) {
             Some(ExtensionAttributeValue::from(a))
         } else if let Some(a) = self.attribute_list.get(name) {
-            if let Ok(value) = ExtensionAttributeValue::try_from(*a) {
-                Some(value)
-            } else {
-                None
-            }
+            ExtensionAttributeValue::try_from(*a).ok()
         } else {
             None
         }
@@ -631,8 +627,8 @@ impl<'a> TryFrom<ParsedAttributeValue<'a>> for ExtensionAttributeValue<'a> {
 impl<'a> From<&'a ExtensionAttributeValue<'a>> for ExtensionAttributeValue<'a> {
     fn from(value: &'a ExtensionAttributeValue<'a>) -> Self {
         match value {
-            Self::QuotedString(cow) => Self::QuotedString(Cow::Borrowed(&cow)),
-            Self::HexadecimalSequence(cow) => Self::HexadecimalSequence(Cow::Borrowed(&cow)),
+            Self::QuotedString(cow) => Self::QuotedString(Cow::Borrowed(cow)),
+            Self::HexadecimalSequence(cow) => Self::HexadecimalSequence(Cow::Borrowed(cow)),
             Self::SignedDecimalFloatingPoint(d) => Self::SignedDecimalFloatingPoint(*d),
         }
     }
@@ -666,7 +662,7 @@ const SCTE35_IN: &str = "SCTE35-IN";
 const END_ON_NEXT: &str = "END-ON-NEXT";
 const YES: &str = "YES";
 
-fn calculate_line<'a>(attribute_list: &DaterangeAttributeList) -> Vec<u8> {
+fn calculate_line(attribute_list: &DaterangeAttributeList) -> Vec<u8> {
     let DaterangeAttributeList {
         id,
         start_date,

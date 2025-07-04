@@ -163,9 +163,9 @@ impl<'a> Map<'a> {
     }
 
     fn recalculate_output_line(&mut self) {
-        self.output_line = Cow::Owned(calculate_line(&&MapAttributeList {
+        self.output_line = Cow::Owned(calculate_line(&MapAttributeList {
             uri: self.uri().into(),
-            byterange: self.byterange().map(|x| x.into()),
+            byterange: self.byterange(),
         }));
         self.output_line_is_dirty = false;
     }

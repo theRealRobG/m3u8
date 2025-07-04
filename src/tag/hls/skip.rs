@@ -163,7 +163,7 @@ impl<'a> Skip<'a> {
 const SKIPPED_SEGMENTS: &str = "SKIPPED-SEGMENTS";
 const RECENTLY_REMOVED_DATERANGES: &str = "RECENTLY-REMOVED-DATERANGES";
 
-fn calculate_line<'a>(attribute_list: &SkipAttributeList) -> Vec<u8> {
+fn calculate_line(attribute_list: &SkipAttributeList) -> Vec<u8> {
     let SkipAttributeList {
         skipped_segments,
         recently_removed_dateranges,

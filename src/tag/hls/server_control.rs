@@ -67,6 +67,11 @@ impl ServerControlBuilder {
         self
     }
 }
+impl Default for ServerControlBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.3.8
 #[derive(Debug, Clone)]
