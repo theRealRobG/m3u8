@@ -433,7 +433,9 @@ mod tests {
     #[test]
     fn avoiding_parsing_known_tag_when_configured_to_avoid_via_parsing_options() {
         assert_eq!(
-            Ok(HlsLine::from(hls::Tag::Start(Start::new(-18.0, false)))),
+            Ok(HlsLine::from(hls::Tag::Start(
+                Start::builder(-18.0).finish()
+            ))),
             parse("#EXT-X-START:TIME-OFFSET=-18", &ParsingOptions::default()).map(|p| p.parsed)
         );
         assert_eq!(

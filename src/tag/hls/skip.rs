@@ -8,6 +8,41 @@ use crate::{
 };
 use std::{borrow::Cow, collections::HashMap};
 
+#[derive(Debug, PartialEq, Clone)]
+pub struct SkipAttributeList<'a> {
+    pub skipped_segments: u64,
+    pub recently_removed_dateranges: Option<Cow<'a, str>>,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct SkipBuilder<'a> {
+    skipped_segments: u64,
+    recently_removed_dateranges: Option<Cow<'a, str>>,
+}
+impl<'a> SkipBuilder<'a> {
+    pub fn new(skipped_segments: u64) -> Self {
+        Self {
+            skipped_segments,
+            recently_removed_dateranges: Default::default(),
+        }
+    }
+
+    pub fn finish(self) -> Skip<'a> {
+        Skip::new(SkipAttributeList {
+            skipped_segments: self.skipped_segments,
+            recently_removed_dateranges: self.recently_removed_dateranges,
+        })
+    }
+
+    pub fn with_recently_removed_dateranges(
+        mut self,
+        recently_removed_dateranges: impl Into<Cow<'a, str>>,
+    ) -> Self {
+        self.recently_removed_dateranges = Some(recently_removed_dateranges.into());
+        self
+    }
+}
+
 /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.5.2
 #[derive(Debug, Clone)]
 pub struct Skip<'a> {
@@ -52,12 +87,12 @@ impl<'a> TryFrom<ParsedTag<'a>> for Skip<'a> {
 }
 
 impl<'a> Skip<'a> {
-    pub fn new(skipped_segments: u64, recently_removed_dateranges: Option<String>) -> Self {
-        let recently_removed_dateranges = recently_removed_dateranges.map(Cow::Owned);
-        let output_line = Cow::Owned(calculate_line(
+    pub fn new(attribute_list: SkipAttributeList<'a>) -> Self {
+        let output_line = Cow::Owned(calculate_line(&attribute_list));
+        let SkipAttributeList {
             skipped_segments,
-            &recently_removed_dateranges,
-        ));
+            recently_removed_dateranges,
+        } = attribute_list;
         Self {
             skipped_segments,
             recently_removed_dateranges,
@@ -65,6 +100,10 @@ impl<'a> Skip<'a> {
             output_line,
             output_line_is_dirty: false,
         }
+    }
+
+    pub fn builder(skipped_segments: u64) -> SkipBuilder<'a> {
+        SkipBuilder::new(skipped_segments)
     }
 
     pub fn into_inner(mut self) -> TagInner<'a> {
@@ -97,17 +136,26 @@ impl<'a> Skip<'a> {
         self.output_line_is_dirty = true;
     }
 
-    pub fn set_recently_removed_dateranges(&mut self, recently_removed_dateranges: Option<String>) {
+    pub fn set_recently_removed_dateranges(
+        &mut self,
+        recently_removed_dateranges: impl Into<Cow<'a, str>>,
+    ) {
         self.attribute_list.remove(RECENTLY_REMOVED_DATERANGES);
-        self.recently_removed_dateranges = recently_removed_dateranges.map(Cow::Owned);
+        self.recently_removed_dateranges = Some(recently_removed_dateranges.into());
+        self.output_line_is_dirty = true;
+    }
+
+    pub fn unset_recently_removed_dateranges(&mut self) {
+        self.attribute_list.remove(RECENTLY_REMOVED_DATERANGES);
+        self.recently_removed_dateranges = None;
         self.output_line_is_dirty = true;
     }
 
     fn recalculate_output_line(&mut self) {
-        self.output_line = Cow::Owned(calculate_line(
-            self.skipped_segments(),
-            &self.recently_removed_dateranges().map(|x| x.into()),
-        ));
+        self.output_line = Cow::Owned(calculate_line(&SkipAttributeList {
+            skipped_segments: self.skipped_segments(),
+            recently_removed_dateranges: self.recently_removed_dateranges().map(|x| x.into()),
+        }));
         self.output_line_is_dirty = false;
     }
 }
@@ -115,10 +163,11 @@ impl<'a> Skip<'a> {
 const SKIPPED_SEGMENTS: &str = "SKIPPED-SEGMENTS";
 const RECENTLY_REMOVED_DATERANGES: &str = "RECENTLY-REMOVED-DATERANGES";
 
-fn calculate_line<'a>(
-    skipped_segments: u64,
-    recently_removed_dateranges: &Option<Cow<'a, str>>,
-) -> Vec<u8> {
+fn calculate_line<'a>(attribute_list: &SkipAttributeList) -> Vec<u8> {
+    let SkipAttributeList {
+        skipped_segments,
+        recently_removed_dateranges,
+    } = attribute_list;
     let mut line = format!("#EXT-X-SKIP:{SKIPPED_SEGMENTS}={skipped_segments}");
     if let Some(recently_removed_dateranges) = recently_removed_dateranges {
         line.push_str(
@@ -131,13 +180,14 @@ fn calculate_line<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tag::hls::test_macro::mutation_tests;
     use pretty_assertions::assert_eq;
 
     #[test]
     fn as_str_with_no_recently_removed_dateranges_should_be_valid() {
         assert_eq!(
             b"#EXT-X-SKIP:SKIPPED-SEGMENTS=100",
-            Skip::new(100, None).into_inner().value()
+            Skip::builder(100).finish().into_inner().value()
         );
     }
 
@@ -145,9 +195,19 @@ mod tests {
     fn as_str_with_recently_removed_dateranges_shuold_be_valid() {
         assert_eq!(
             b"#EXT-X-SKIP:SKIPPED-SEGMENTS=100,RECENTLY-REMOVED-DATERANGES=\"abc\t123\"",
-            Skip::new(100, Some("abc\t123".to_string()))
+            Skip::builder(100)
+                .with_recently_removed_dateranges("abc\t123")
+                .finish()
                 .into_inner()
                 .value()
         );
     }
+
+    mutation_tests!(
+        Skip::builder(100)
+            .with_recently_removed_dateranges("abc\t123")
+            .finish(),
+        (skipped_segments, 200, @Attr="SKIPPED-SEGMENTS=200"),
+        (recently_removed_dateranges, @Option "efg", @Attr="RECENTLY-REMOVED-DATERANGES=\"efg\"")
+    );
 }

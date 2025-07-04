@@ -76,6 +76,7 @@ fn calculate_line(target_duration: u64) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tag::hls::test_macro::mutation_tests;
     use pretty_assertions::assert_eq;
 
     #[test]
@@ -85,4 +86,6 @@ mod tests {
             Targetduration::new(10).into_inner().value()
         );
     }
+
+    mutation_tests!(Targetduration::new(10), (target_duration, 20, @Attr=":20"));
 }

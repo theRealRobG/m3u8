@@ -73,7 +73,7 @@ impl<'a> ProgramDateTime<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::date_time;
+    use crate::{date_time, tag::hls::test_macro::mutation_tests};
     use pretty_assertions::assert_eq;
 
     #[test]
@@ -85,6 +85,11 @@ mod tests {
                 .value()
         )
     }
+
+    mutation_tests!(
+        ProgramDateTime::new(date_time!(2025-07-03 T 14:21:33.001 -05:00)),
+        (program_date_time, DateTime::default(), @Attr=":1970-01-01T00:00:00.000Z")
+    );
 }
 
 fn calculate_line(date_time: DateTime) -> Vec<u8> {

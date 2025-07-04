@@ -75,6 +75,8 @@ fn calculate_line(version: u64) -> Vec<u8> {
 
 #[cfg(test)]
 mod tests {
+    use crate::tag::hls::test_macro::mutation_tests;
+
     use super::*;
     use pretty_assertions::assert_eq;
 
@@ -82,4 +84,6 @@ mod tests {
     fn as_str_should_be_valid() {
         assert_eq!(b"#EXT-X-VERSION:10", Version::new(10).into_inner().value());
     }
+
+    mutation_tests!(Version::new(10), (version, 20, @Attr=":20"));
 }

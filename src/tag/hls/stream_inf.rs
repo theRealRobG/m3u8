@@ -8,6 +8,161 @@ use crate::{
 };
 use std::{borrow::Cow, collections::HashMap};
 
+#[derive(Debug, PartialEq, Clone)]
+pub struct StreamInfAttributeList<'a> {
+    pub bandwidth: u64,
+    pub average_bandwidth: Option<u64>,
+    pub score: Option<f64>,
+    pub codecs: Option<Cow<'a, str>>,
+    pub supplemental_codecs: Option<Cow<'a, str>>,
+    pub resolution: Option<DecimalResolution>,
+    pub frame_rate: Option<f64>,
+    pub hdcp_level: Option<Cow<'a, str>>,
+    pub allowed_cpc: Option<Cow<'a, str>>,
+    pub video_range: Option<Cow<'a, str>>,
+    pub req_video_layout: Option<Cow<'a, str>>,
+    pub stable_variant_id: Option<Cow<'a, str>>,
+    pub audio: Option<Cow<'a, str>>,
+    pub video: Option<Cow<'a, str>>,
+    pub subtitles: Option<Cow<'a, str>>,
+    pub closed_captions: Option<Cow<'a, str>>,
+    pub pathway_id: Option<Cow<'a, str>>,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct StreamInfBuilder<'a> {
+    bandwidth: u64,
+    average_bandwidth: Option<u64>,
+    score: Option<f64>,
+    codecs: Option<Cow<'a, str>>,
+    supplemental_codecs: Option<Cow<'a, str>>,
+    resolution: Option<DecimalResolution>,
+    frame_rate: Option<f64>,
+    hdcp_level: Option<Cow<'a, str>>,
+    allowed_cpc: Option<Cow<'a, str>>,
+    video_range: Option<Cow<'a, str>>,
+    req_video_layout: Option<Cow<'a, str>>,
+    stable_variant_id: Option<Cow<'a, str>>,
+    audio: Option<Cow<'a, str>>,
+    video: Option<Cow<'a, str>>,
+    subtitles: Option<Cow<'a, str>>,
+    closed_captions: Option<Cow<'a, str>>,
+    pathway_id: Option<Cow<'a, str>>,
+}
+impl<'a> StreamInfBuilder<'a> {
+    pub fn new(bandwidth: u64) -> Self {
+        Self {
+            bandwidth,
+            average_bandwidth: Default::default(),
+            score: Default::default(),
+            codecs: Default::default(),
+            supplemental_codecs: Default::default(),
+            resolution: Default::default(),
+            frame_rate: Default::default(),
+            hdcp_level: Default::default(),
+            allowed_cpc: Default::default(),
+            video_range: Default::default(),
+            req_video_layout: Default::default(),
+            stable_variant_id: Default::default(),
+            audio: Default::default(),
+            video: Default::default(),
+            subtitles: Default::default(),
+            closed_captions: Default::default(),
+            pathway_id: Default::default(),
+        }
+    }
+
+    pub fn finish(self) -> StreamInf<'a> {
+        StreamInf::new(StreamInfAttributeList {
+            bandwidth: self.bandwidth,
+            average_bandwidth: self.average_bandwidth,
+            score: self.score,
+            codecs: self.codecs,
+            supplemental_codecs: self.supplemental_codecs,
+            resolution: self.resolution,
+            frame_rate: self.frame_rate,
+            hdcp_level: self.hdcp_level,
+            allowed_cpc: self.allowed_cpc,
+            video_range: self.video_range,
+            req_video_layout: self.req_video_layout,
+            stable_variant_id: self.stable_variant_id,
+            audio: self.audio,
+            video: self.video,
+            subtitles: self.subtitles,
+            closed_captions: self.closed_captions,
+            pathway_id: self.pathway_id,
+        })
+    }
+
+    pub fn with_average_bandwidth(mut self, average_bandwidth: u64) -> Self {
+        self.average_bandwidth = Some(average_bandwidth);
+        self
+    }
+    pub fn with_score(mut self, score: f64) -> Self {
+        self.score = Some(score);
+        self
+    }
+    pub fn with_codecs(mut self, codecs: impl Into<Cow<'a, str>>) -> Self {
+        self.codecs = Some(codecs.into());
+        self
+    }
+    pub fn with_supplemental_codecs(
+        mut self,
+        supplemental_codecs: impl Into<Cow<'a, str>>,
+    ) -> Self {
+        self.supplemental_codecs = Some(supplemental_codecs.into());
+        self
+    }
+    pub fn with_resolution(mut self, resolution: DecimalResolution) -> Self {
+        self.resolution = Some(resolution);
+        self
+    }
+    pub fn with_frame_rate(mut self, frame_rate: f64) -> Self {
+        self.frame_rate = Some(frame_rate);
+        self
+    }
+    pub fn with_hdcp_level(mut self, hdcp_level: impl Into<Cow<'a, str>>) -> Self {
+        self.hdcp_level = Some(hdcp_level.into());
+        self
+    }
+    pub fn with_allowed_cpc(mut self, allowed_cpc: impl Into<Cow<'a, str>>) -> Self {
+        self.allowed_cpc = Some(allowed_cpc.into());
+        self
+    }
+    pub fn with_video_range(mut self, video_range: impl Into<Cow<'a, str>>) -> Self {
+        self.video_range = Some(video_range.into());
+        self
+    }
+    pub fn with_req_video_layout(mut self, req_video_layout: impl Into<Cow<'a, str>>) -> Self {
+        self.req_video_layout = Some(req_video_layout.into());
+        self
+    }
+    pub fn with_stable_variant_id(mut self, stable_variant_id: impl Into<Cow<'a, str>>) -> Self {
+        self.stable_variant_id = Some(stable_variant_id.into());
+        self
+    }
+    pub fn with_audio(mut self, audio: impl Into<Cow<'a, str>>) -> Self {
+        self.audio = Some(audio.into());
+        self
+    }
+    pub fn with_video(mut self, video: impl Into<Cow<'a, str>>) -> Self {
+        self.video = Some(video.into());
+        self
+    }
+    pub fn with_subtitles(mut self, subtitles: impl Into<Cow<'a, str>>) -> Self {
+        self.subtitles = Some(subtitles.into());
+        self
+    }
+    pub fn with_closed_captions(mut self, closed_captions: impl Into<Cow<'a, str>>) -> Self {
+        self.closed_captions = Some(closed_captions.into());
+        self
+    }
+    pub fn with_pathway_id(mut self, pathway_id: impl Into<Cow<'a, str>>) -> Self {
+        self.pathway_id = Some(pathway_id.into());
+        self
+    }
+}
+
 /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.6.2
 #[derive(Debug, Clone)]
 pub struct StreamInf<'a> {
@@ -94,56 +249,27 @@ impl<'a> TryFrom<ParsedTag<'a>> for StreamInf<'a> {
 }
 
 impl<'a> StreamInf<'a> {
-    pub fn new(
-        bandwidth: u64,
-        average_bandwidth: Option<u64>,
-        score: Option<f64>,
-        codecs: Option<String>,
-        supplemental_codecs: Option<String>,
-        resolution: Option<DecimalResolution>,
-        frame_rate: Option<f64>,
-        hdcp_level: Option<String>,
-        allowed_cpc: Option<String>,
-        video_range: Option<String>,
-        req_video_layout: Option<String>,
-        stable_variant_id: Option<String>,
-        audio: Option<String>,
-        video: Option<String>,
-        subtitles: Option<String>,
-        closed_captions: Option<String>,
-        pathway_id: Option<String>,
-    ) -> Self {
-        let codecs = codecs.map(Cow::Owned);
-        let supplemental_codecs = supplemental_codecs.map(Cow::Owned);
-        let hdcp_level = hdcp_level.map(Cow::Owned);
-        let allowed_cpc = allowed_cpc.map(Cow::Owned);
-        let video_range = video_range.map(Cow::Owned);
-        let req_video_layout = req_video_layout.map(Cow::Owned);
-        let stable_variant_id = stable_variant_id.map(Cow::Owned);
-        let audio = audio.map(Cow::Owned);
-        let video = video.map(Cow::Owned);
-        let subtitles = subtitles.map(Cow::Owned);
-        let closed_captions = closed_captions.map(Cow::Owned);
-        let pathway_id = pathway_id.map(Cow::Owned);
-        let output_line = Cow::Owned(calculate_line(
+    pub fn new(attribute_list: StreamInfAttributeList<'a>) -> Self {
+        let output_line = Cow::Owned(calculate_line(&attribute_list));
+        let StreamInfAttributeList {
             bandwidth,
             average_bandwidth,
             score,
-            &codecs,
-            &supplemental_codecs,
+            codecs,
+            supplemental_codecs,
             resolution,
             frame_rate,
-            &hdcp_level,
-            &allowed_cpc,
-            &video_range,
-            &req_video_layout,
-            &stable_variant_id,
-            &audio,
-            &video,
-            &subtitles,
-            &closed_captions,
-            &pathway_id,
-        ));
+            hdcp_level,
+            allowed_cpc,
+            video_range,
+            req_video_layout,
+            stable_variant_id,
+            audio,
+            video,
+            subtitles,
+            closed_captions,
+            pathway_id,
+        } = attribute_list;
         Self {
             bandwidth,
             average_bandwidth,
@@ -166,6 +292,10 @@ impl<'a> StreamInf<'a> {
             output_line,
             output_line_is_dirty: false,
         }
+    }
+
+    pub fn builder(bandwidth: u64) -> StreamInfBuilder<'a> {
+        StreamInfBuilder::new(bandwidth)
     }
 
     pub fn into_inner(mut self) -> TagInner<'a> {
@@ -372,122 +502,218 @@ impl<'a> StreamInf<'a> {
         self.output_line_is_dirty = true;
     }
 
-    pub fn set_average_bandwidth(&mut self, average_bandwidth: Option<u64>) {
+    pub fn set_average_bandwidth(&mut self, average_bandwidth: u64) {
         self.attribute_list.remove(AVERAGE_BANDWIDTH);
-        self.average_bandwidth = average_bandwidth;
+        self.average_bandwidth = Some(average_bandwidth);
         self.output_line_is_dirty = true;
     }
 
-    pub fn set_score(&mut self, score: Option<f64>) {
+    pub fn unset_average_bandwidth(&mut self) {
+        self.attribute_list.remove(AVERAGE_BANDWIDTH);
+        self.average_bandwidth = None;
+        self.output_line_is_dirty = true;
+    }
+
+    pub fn set_score(&mut self, score: f64) {
         self.attribute_list.remove(SCORE);
-        self.score = score;
+        self.score = Some(score);
         self.output_line_is_dirty = true;
     }
 
-    pub fn set_codecs(&mut self, codecs: Option<String>) {
+    pub fn unset_score(&mut self) {
+        self.attribute_list.remove(SCORE);
+        self.score = None;
+        self.output_line_is_dirty = true;
+    }
+
+    pub fn set_codecs(&mut self, codecs: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(CODECS);
-        self.codecs = codecs.map(Cow::Owned);
+        self.codecs = Some(codecs.into());
         self.output_line_is_dirty = true;
     }
 
-    pub fn set_supplemental_codecs(&mut self, supplemental_codecs: Option<String>) {
+    pub fn unset_codecs(&mut self) {
+        self.attribute_list.remove(CODECS);
+        self.codecs = None;
+        self.output_line_is_dirty = true;
+    }
+
+    pub fn set_supplemental_codecs(&mut self, supplemental_codecs: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(SUPPLEMENTAL_CODECS);
-        self.supplemental_codecs = supplemental_codecs.map(Cow::Owned);
+        self.supplemental_codecs = Some(supplemental_codecs.into());
         self.output_line_is_dirty = true;
     }
 
-    pub fn set_resolution(&mut self, resolution: Option<DecimalResolution>) {
+    pub fn unset_supplemental_codecs(&mut self) {
+        self.attribute_list.remove(SUPPLEMENTAL_CODECS);
+        self.supplemental_codecs = None;
+        self.output_line_is_dirty = true;
+    }
+
+    pub fn set_resolution(&mut self, resolution: DecimalResolution) {
         self.attribute_list.remove(RESOLUTION);
-        self.resolution = resolution;
+        self.resolution = Some(resolution);
         self.output_line_is_dirty = true;
     }
 
-    pub fn set_frame_rate(&mut self, frame_rate: Option<f64>) {
+    pub fn unset_resolution(&mut self) {
+        self.attribute_list.remove(RESOLUTION);
+        self.resolution = None;
+        self.output_line_is_dirty = true;
+    }
+
+    pub fn set_frame_rate(&mut self, frame_rate: f64) {
         self.attribute_list.remove(FRAME_RATE);
-        self.frame_rate = frame_rate;
+        self.frame_rate = Some(frame_rate);
         self.output_line_is_dirty = true;
     }
 
-    pub fn set_hdcp_level(&mut self, hdcp_level: Option<String>) {
+    pub fn unset_frame_rate(&mut self) {
+        self.attribute_list.remove(FRAME_RATE);
+        self.frame_rate = None;
+        self.output_line_is_dirty = true;
+    }
+
+    pub fn set_hdcp_level(&mut self, hdcp_level: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(HDCP_LEVEL);
-        self.hdcp_level = hdcp_level.map(Cow::Owned);
+        self.hdcp_level = Some(hdcp_level.into());
         self.output_line_is_dirty = true;
     }
 
-    pub fn set_allowed_cpc(&mut self, allowed_cpc: Option<String>) {
+    pub fn unset_hdcp_level(&mut self) {
+        self.attribute_list.remove(HDCP_LEVEL);
+        self.hdcp_level = None;
+        self.output_line_is_dirty = true;
+    }
+
+    pub fn set_allowed_cpc(&mut self, allowed_cpc: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(ALLOWED_CPC);
-        self.allowed_cpc = allowed_cpc.map(Cow::Owned);
+        self.allowed_cpc = Some(allowed_cpc.into());
         self.output_line_is_dirty = true;
     }
 
-    pub fn set_video_range(&mut self, video_range: Option<String>) {
+    pub fn unset_allowed_cpc(&mut self) {
+        self.attribute_list.remove(ALLOWED_CPC);
+        self.allowed_cpc = None;
+        self.output_line_is_dirty = true;
+    }
+
+    pub fn set_video_range(&mut self, video_range: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(VIDEO_RANGE);
-        self.video_range = video_range.map(Cow::Owned);
+        self.video_range = Some(video_range.into());
         self.output_line_is_dirty = true;
     }
 
-    pub fn set_req_video_layout(&mut self, req_video_layout: Option<String>) {
+    pub fn unset_video_range(&mut self) {
+        self.attribute_list.remove(VIDEO_RANGE);
+        self.video_range = None;
+        self.output_line_is_dirty = true;
+    }
+
+    pub fn set_req_video_layout(&mut self, req_video_layout: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(REQ_VIDEO_LAYOUT);
-        self.req_video_layout = req_video_layout.map(Cow::Owned);
+        self.req_video_layout = Some(req_video_layout.into());
         self.output_line_is_dirty = true;
     }
 
-    pub fn set_stable_variant_id(&mut self, stable_variant_id: Option<String>) {
+    pub fn unset_req_video_layout(&mut self) {
+        self.attribute_list.remove(REQ_VIDEO_LAYOUT);
+        self.req_video_layout = None;
+        self.output_line_is_dirty = true;
+    }
+
+    pub fn set_stable_variant_id(&mut self, stable_variant_id: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(STABLE_VARIANT_ID);
-        self.stable_variant_id = stable_variant_id.map(Cow::Owned);
+        self.stable_variant_id = Some(stable_variant_id.into());
         self.output_line_is_dirty = true;
     }
 
-    pub fn set_audio(&mut self, audio: Option<String>) {
+    pub fn unset_stable_variant_id(&mut self) {
+        self.attribute_list.remove(STABLE_VARIANT_ID);
+        self.stable_variant_id = None;
+        self.output_line_is_dirty = true;
+    }
+
+    pub fn set_audio(&mut self, audio: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(AUDIO);
-        self.audio = audio.map(Cow::Owned);
+        self.audio = Some(audio.into());
         self.output_line_is_dirty = true;
     }
 
-    pub fn set_video(&mut self, video: Option<String>) {
+    pub fn unset_audio(&mut self) {
+        self.attribute_list.remove(AUDIO);
+        self.audio = None;
+        self.output_line_is_dirty = true;
+    }
+
+    pub fn set_video(&mut self, video: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(VIDEO);
-        self.video = video.map(Cow::Owned);
+        self.video = Some(video.into());
         self.output_line_is_dirty = true;
     }
 
-    pub fn set_subtitles(&mut self, subtitles: Option<String>) {
+    pub fn unset_video(&mut self) {
+        self.attribute_list.remove(VIDEO);
+        self.video = None;
+        self.output_line_is_dirty = true;
+    }
+
+    pub fn set_subtitles(&mut self, subtitles: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(SUBTITLES);
-        self.subtitles = subtitles.map(Cow::Owned);
+        self.subtitles = Some(subtitles.into());
         self.output_line_is_dirty = true;
     }
 
-    pub fn set_closed_captions(&mut self, closed_captions: Option<String>) {
+    pub fn unset_subtitles(&mut self) {
+        self.attribute_list.remove(SUBTITLES);
+        self.subtitles = None;
+        self.output_line_is_dirty = true;
+    }
+
+    pub fn set_closed_captions(&mut self, closed_captions: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(CLOSED_CAPTIONS);
-        self.closed_captions = closed_captions.map(Cow::Owned);
+        self.closed_captions = Some(closed_captions.into());
         self.output_line_is_dirty = true;
     }
 
-    pub fn set_pathway_id(&mut self, pathway_id: Option<String>) {
+    pub fn unset_closed_captions(&mut self) {
+        self.attribute_list.remove(CLOSED_CAPTIONS);
+        self.closed_captions = None;
+        self.output_line_is_dirty = true;
+    }
+
+    pub fn set_pathway_id(&mut self, pathway_id: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(PATHWAY_ID);
-        self.pathway_id = pathway_id.map(Cow::Owned);
+        self.pathway_id = Some(pathway_id.into());
+        self.output_line_is_dirty = true;
+    }
+
+    pub fn unset_pathway_id(&mut self) {
+        self.attribute_list.remove(PATHWAY_ID);
+        self.pathway_id = None;
         self.output_line_is_dirty = true;
     }
 
     fn recalculate_output_line(&mut self) {
-        self.output_line = Cow::Owned(calculate_line(
-            self.bandwidth(),
-            self.average_bandwidth(),
-            self.score(),
-            &self.codecs().map(|x| x.into()),
-            &self.supplemental_codecs().map(|x| x.into()),
-            self.resolution(),
-            self.frame_rate(),
-            &self.hdcp_level().map(|x| x.into()),
-            &self.allowed_cpc().map(|x| x.into()),
-            &self.video_range().map(|x| x.into()),
-            &self.req_video_layout().map(|x| x.into()),
-            &self.stable_variant_id().map(|x| x.into()),
-            &self.audio().map(|x| x.into()),
-            &self.video().map(|x| x.into()),
-            &self.subtitles().map(|x| x.into()),
-            &self.closed_captions().map(|x| x.into()),
-            &self.pathway_id().map(|x| x.into()),
-        ));
+        self.output_line = Cow::Owned(calculate_line(&StreamInfAttributeList {
+            bandwidth: self.bandwidth(),
+            average_bandwidth: self.average_bandwidth(),
+            score: self.score(),
+            codecs: self.codecs().map(|x| x.into()),
+            supplemental_codecs: self.supplemental_codecs().map(|x| x.into()),
+            resolution: self.resolution(),
+            frame_rate: self.frame_rate(),
+            hdcp_level: self.hdcp_level().map(|x| x.into()),
+            allowed_cpc: self.allowed_cpc().map(|x| x.into()),
+            video_range: self.video_range().map(|x| x.into()),
+            req_video_layout: self.req_video_layout().map(|x| x.into()),
+            stable_variant_id: self.stable_variant_id().map(|x| x.into()),
+            audio: self.audio().map(|x| x.into()),
+            video: self.video().map(|x| x.into()),
+            subtitles: self.subtitles().map(|x| x.into()),
+            closed_captions: self.closed_captions().map(|x| x.into()),
+            pathway_id: self.pathway_id().map(|x| x.into()),
+        }));
         self.output_line_is_dirty = false;
     }
 }
@@ -510,25 +736,26 @@ const SUBTITLES: &str = "SUBTITLES";
 const CLOSED_CAPTIONS: &str = "CLOSED-CAPTIONS";
 const PATHWAY_ID: &str = "PATHWAY-ID";
 
-fn calculate_line<'a>(
-    bandwidth: u64,
-    average_bandwidth: Option<u64>,
-    score: Option<f64>,
-    codecs: &Option<Cow<'a, str>>,
-    supplemental_codecs: &Option<Cow<'a, str>>,
-    resolution: Option<DecimalResolution>,
-    frame_rate: Option<f64>,
-    hdcp_level: &Option<Cow<'a, str>>,
-    allowed_cpc: &Option<Cow<'a, str>>,
-    video_range: &Option<Cow<'a, str>>,
-    req_video_layout: &Option<Cow<'a, str>>,
-    stable_variant_id: &Option<Cow<'a, str>>,
-    audio: &Option<Cow<'a, str>>,
-    video: &Option<Cow<'a, str>>,
-    subtitles: &Option<Cow<'a, str>>,
-    closed_captions: &Option<Cow<'a, str>>,
-    pathway_id: &Option<Cow<'a, str>>,
-) -> Vec<u8> {
+fn calculate_line<'a>(attribute_list: &StreamInfAttributeList) -> Vec<u8> {
+    let StreamInfAttributeList {
+        bandwidth,
+        average_bandwidth,
+        score,
+        codecs,
+        supplemental_codecs,
+        resolution,
+        frame_rate,
+        hdcp_level,
+        allowed_cpc,
+        video_range,
+        req_video_layout,
+        stable_variant_id,
+        audio,
+        video,
+        subtitles,
+        closed_captions,
+        pathway_id,
+    } = attribute_list;
     let mut line = format!("#EXT-X-STREAM-INF:{BANDWIDTH}={bandwidth}");
     if let Some(average_bandwidth) = average_bandwidth {
         line.push_str(format!(",{AVERAGE_BANDWIDTH}={average_bandwidth}").as_str());
@@ -584,18 +811,14 @@ fn calculate_line<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tag::hls::test_macro::mutation_tests;
     use pretty_assertions::assert_eq;
 
     #[test]
     fn as_str_with_no_options_should_be_valid() {
         assert_eq!(
             b"#EXT-X-STREAM-INF:BANDWIDTH=10000000",
-            StreamInf::new(
-                10000000, None, None, None, None, None, None, None, None, None, None, None, None,
-                None, None, None, None,
-            )
-            .into_inner()
-            .value()
+            StreamInf::builder(10000000).finish().into_inner().value()
         );
     }
 
@@ -623,30 +846,70 @@ mod tests {
                 "PATHWAY-ID=\"1234\"",
             )
             .as_bytes(),
-            StreamInf::new(
-                10000000,
-                Some(9000000),
-                Some(2.0),
-                Some("hvc1.2.4.L153.b0,ec-3".to_string()),
-                Some("dvh1.08.07/db4h".to_string()),
-                Some(DecimalResolution {
+            StreamInf::builder(10000000)
+                .with_average_bandwidth(9000000)
+                .with_score(2.0)
+                .with_codecs("hvc1.2.4.L153.b0,ec-3")
+                .with_supplemental_codecs("dvh1.08.07/db4h")
+                .with_resolution(DecimalResolution {
                     width: 3840,
                     height: 2160
-                }),
-                Some(23.976),
-                Some("TYPE-1".to_string()),
-                Some("com.example.drm1:SMART-TV/PC".to_string()),
-                Some("PQ".to_string()),
-                Some("CH-STEREO,CH-MONO".to_string()),
-                Some("1234".to_string()),
-                Some("surround".to_string()),
-                Some("alternate-view".to_string()),
-                Some("subs".to_string()),
-                Some("cc".to_string()),
-                Some("1234".to_string()),
-            )
-            .into_inner()
-            .value()
+                })
+                .with_frame_rate(23.976)
+                .with_hdcp_level("TYPE-1")
+                .with_allowed_cpc("com.example.drm1:SMART-TV/PC")
+                .with_video_range("PQ")
+                .with_req_video_layout("CH-STEREO,CH-MONO")
+                .with_stable_variant_id("1234")
+                .with_audio("surround")
+                .with_video("alternate-view")
+                .with_subtitles("subs")
+                .with_closed_captions("cc")
+                .with_pathway_id("1234")
+                .finish()
+                .into_inner()
+                .value()
         )
     }
+
+    mutation_tests!(
+        StreamInf::builder(10000000)
+            .with_average_bandwidth(9000000)
+            .with_score(2.0)
+            .with_codecs("hvc1.2.4.L153.b0,ec-3")
+            .with_supplemental_codecs("dvh1.08.07/db4h")
+            .with_resolution(DecimalResolution {
+                width: 3840,
+                height: 2160
+            })
+            .with_frame_rate(23.976)
+            .with_hdcp_level("TYPE-1")
+            .with_allowed_cpc("com.example.drm1:SMART-TV/PC")
+            .with_video_range("PQ")
+            .with_req_video_layout("CH-STEREO,CH-MONO")
+            .with_stable_variant_id("1234")
+            .with_audio("surround")
+            .with_video("alternate-view")
+            .with_subtitles("subs")
+            .with_closed_captions("cc")
+            .with_pathway_id("1234")
+            .finish(),
+        (bandwidth, 100, @Attr="BANDWIDTH=100"),
+        (average_bandwidth, @Option 200, @Attr="AVERAGE-BANDWIDTH=200"),
+        (score, @Option 1.0, @Attr="SCORE=1"),
+        (codecs, @Option "example", @Attr="CODECS=\"example\""),
+        (supplemental_codecs, @Option "example", @Attr="SUPPLEMENTAL-CODECS=\"example\""),
+        (resolution, @Option DecimalResolution { width: 2, height: 4 }, @Attr="RESOLUTION=2x4"),
+        (frame_rate, @Option 60.0, @Attr="FRAME-RATE=60"),
+        (hdcp_level, @Option "NONE", @Attr="HDCP-LEVEL=NONE"),
+        (allowed_cpc, @Option "example", @Attr="ALLOWED-CPC=\"example\""),
+        (video_range, @Option "HLG", @Attr="VIDEO-RANGE=HLG"),
+        (req_video_layout, @Option "CH-STEREO", @Attr="REQ-VIDEO-LAYOUT=\"CH-STEREO\""),
+        (stable_variant_id, @Option "abcd", @Attr="STABLE-VARIANT-ID=\"abcd\""),
+        (audio, @Option "stereo", @Attr="AUDIO=\"stereo\""),
+        (video, @Option "video", @Attr="VIDEO=\"video\""),
+        (subtitles, @Option "subtitles", @Attr="SUBTITLES=\"subtitles\""),
+        (closed_captions, @Option "example", @Attr="CLOSED-CAPTIONS=\"example\""),
+        (pathway_id, @Option "abcd", @Attr="PATHWAY-ID=\"abcd\"")
+    );
 }

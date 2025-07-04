@@ -53,6 +53,7 @@ impl PlaylistType {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tag::hls::test_macro::mutation_tests;
     use pretty_assertions::assert_eq;
 
     #[test]
@@ -70,4 +71,9 @@ mod tests {
             PlaylistType(HlsPlaylistType::Vod).into_inner().value()
         );
     }
+
+    mutation_tests!(
+        PlaylistType(HlsPlaylistType::Vod),
+        (playlist_type, HlsPlaylistType::Event, @Attr=":EVENT")
+    );
 }

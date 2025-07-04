@@ -8,6 +8,38 @@ use crate::{
 };
 use std::{borrow::Cow, collections::HashMap};
 
+#[derive(Debug, PartialEq, Clone)]
+pub struct StartAttributeList {
+    pub time_offset: f64,
+    pub precise: bool,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct StartBuilder {
+    time_offset: f64,
+    precise: bool,
+}
+impl StartBuilder {
+    pub fn new(time_offset: f64) -> Self {
+        Self {
+            time_offset,
+            precise: Default::default(),
+        }
+    }
+
+    pub fn finish<'a>(self) -> Start<'a> {
+        Start::new(StartAttributeList {
+            time_offset: self.time_offset,
+            precise: self.precise,
+        })
+    }
+
+    pub fn with_precise(mut self) -> Self {
+        self.precise = true;
+        self
+    }
+}
+
 /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.2.2
 #[derive(Debug, Clone)]
 pub struct Start<'a> {
@@ -52,14 +84,23 @@ impl<'a> TryFrom<ParsedTag<'a>> for Start<'a> {
 }
 
 impl<'a> Start<'a> {
-    pub fn new(time_offset: f64, precise: bool) -> Self {
+    pub fn new(attribute_list: StartAttributeList) -> Self {
+        let output_line = Cow::Owned(calculate_line(&attribute_list));
+        let StartAttributeList {
+            time_offset,
+            precise,
+        } = attribute_list;
         Self {
             time_offset,
             precise: Some(precise),
             attribute_list: HashMap::new(),
-            output_line: Cow::Owned(calculate_line(time_offset, precise)),
+            output_line,
             output_line_is_dirty: false,
         }
+    }
+
+    pub fn builder(time_offset: f64) -> StartBuilder {
+        StartBuilder::new(time_offset)
     }
 
     pub fn into_inner(mut self) -> TagInner<'a> {
@@ -99,7 +140,10 @@ impl<'a> Start<'a> {
     }
 
     fn recalculate_output_line(&mut self) {
-        self.output_line = Cow::Owned(calculate_line(self.time_offset(), self.precise()));
+        self.output_line = Cow::Owned(calculate_line(&StartAttributeList {
+            time_offset: self.time_offset(),
+            precise: self.precise(),
+        }));
         self.output_line_is_dirty = false;
     }
 }
@@ -108,8 +152,12 @@ const TIME_OFFSET: &str = "TIME-OFFSET";
 const PRECISE: &str = "PRECISE";
 const YES: &str = "YES";
 
-fn calculate_line(time_offset: f64, precise: bool) -> Vec<u8> {
-    if precise {
+fn calculate_line(attribute_list: &StartAttributeList) -> Vec<u8> {
+    let StartAttributeList {
+        time_offset,
+        precise,
+    } = attribute_list;
+    if *precise {
         format!("#EXT-X-START:{TIME_OFFSET}={time_offset},{PRECISE}={YES}").into_bytes()
     } else {
         format!("#EXT-X-START:{TIME_OFFSET}={time_offset}").into_bytes()
@@ -118,6 +166,8 @@ fn calculate_line(time_offset: f64, precise: bool) -> Vec<u8> {
 
 #[cfg(test)]
 mod tests {
+    use crate::tag::hls::test_macro::mutation_tests;
+
     use super::*;
     use pretty_assertions::assert_eq;
 
@@ -125,7 +175,7 @@ mod tests {
     fn as_str_without_precise_should_be_valid() {
         assert_eq!(
             b"#EXT-X-START:TIME-OFFSET=-42",
-            Start::new(-42.0, false).into_inner().value()
+            Start::builder(-42.0).finish().into_inner().value()
         )
     }
 
@@ -133,7 +183,17 @@ mod tests {
     fn as_str_with_precise_should_be_valid() {
         assert_eq!(
             b"#EXT-X-START:TIME-OFFSET=-42,PRECISE=YES",
-            Start::new(-42.0, true).into_inner().value()
+            Start::builder(-42.0)
+                .with_precise()
+                .finish()
+                .into_inner()
+                .value()
         )
     }
+
+    mutation_tests!(
+        Start::builder(-42.0).finish(),
+        (time_offset, 10.0, @Attr="TIME-OFFSET=10"),
+        (precise, true, @Attr="PRECISE=YES")
+    );
 }

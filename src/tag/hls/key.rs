@@ -350,19 +350,7 @@ mod tests {
         (method, "EXAMPLE", @Attr="METHOD=EXAMPLE"),
         (uri, @Option "example.key", @Attr="URI=\"example.key\""),
         (iv, @Option "0x1234", @Attr="IV=0x1234"),
-        (keyformat, "example", @Attr="KEYFORMAT=\"example\""),
+        (keyformat, "example"; @Default="identity", @Attr="KEYFORMAT=\"example\""),
         (keyformatversions, @Option "example", @Attr="KEYFORMATVERSIONS=\"example\"")
     );
-
-    #[test]
-    fn unsetting_keyformat() {
-        // The macro above doesn't take into account that KEYFORMAT has a default value when unset
-        // such that the return type is non-optional... So adding one test for this case.
-        let mut key = Key::builder("SAMPLE-AES")
-            .with_keyformat("example")
-            .finish();
-        key.unset_keyformat();
-        assert_eq!("identity", key.keyformat());
-        assert_eq!(b"#EXT-X-KEY:METHOD=SAMPLE-AES", key.into_inner().value());
-    }
 }

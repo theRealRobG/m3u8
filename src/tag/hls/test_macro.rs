@@ -29,6 +29,36 @@ macro_rules! mutation_test {
             }
         }
     };
+    ($init:expr, $field:ident, $val:expr; @Default=$default:literal, @Attr=$attr:literal) => {
+        paste::paste! {
+            #[test]
+            fn [<set_ $field>]() {
+                let mut test = $init;
+                test.[<set_ $field>]($val);
+                assert_eq!($val, test.$field(), "setter failed");
+                let inner = test.into_inner();
+                let output_line = $crate::utils::str_from(inner.value());
+                assert!(
+                    output_line.contains($attr),
+                    "into_inner for setter failed ({} not found in {})",
+                    $attr,
+                    output_line,
+                );
+
+                let mut test = $init;
+                test.[<unset_ $field>]();
+                assert_eq!($default, test.$field(), "unsetter to default value failed");
+                let inner = test.into_inner();
+                let output_line = $crate::utils::str_from(inner.value());
+                assert!(
+                    !output_line.contains($attr),
+                    "into_inner for unsetter failed ({} found in {})",
+                    $attr,
+                    output_line,
+                );
+            }
+        }
+    };
     ($init:expr, $field:ident, $val:expr, @Attr=$attr:literal) => {
         paste::paste! {
             #[test]
@@ -55,7 +85,16 @@ macro_rules! mutation_test {
 ///
 /// The single matcher is:
 /// ```ignore
-/// ($init:expr$(, ($field:ident, $(@$opt:ident )?$val:expr, @Attr=$attr:literal))+)
+/// (
+///     $init:expr$
+///     (,
+///         (
+///             $field:ident,
+///             $(@$opt:ident )?$val:expr$(; @Default=$default:literal)?,
+///             @Attr=$attr:literal
+///         )
+///     )+
+/// )
 /// ```
 ///
 /// Parameters explained:
@@ -64,7 +103,10 @@ macro_rules! mutation_test {
 /// * `$opt` is always equal to `Option` (included as a variable to allow for optional matching).
 /// * `$val` is the value to be set and therefore also what we expect the getter method to return
 ///   after it has been set. When `@Option` is included, it checks for equality on `Some($val)`),
-///   and also validates that calling `unset_$field` works as expected too.
+///   and also validates that calling `unset_$field` works as expected too. When `@Default=$default`
+///   is included it expects that there is a default value provided by `$field()` when unset, and
+///   checks that this is the case when unsetting. `@Option` and `@Default` cannot be used together.
+/// * `$default` is the value provided for `$field` when it has been unset.
 /// * `$attr` is the literal value expected to be found in the output line (`into_inner().value()`).
 ///
 /// An example usage is:
@@ -128,10 +170,35 @@ macro_rules! mutation_test {
 ///     );
 /// }
 /// ```
+/// An example usage of `@Default` can be found with the `PreloadHint` test where `BYTERANGE-START`
+/// has a default value of `0` (per HLS spec):
+/// ```ignore
+/// mutation_tests!(
+///     PreloadHint::builder("PART", "part.2.mp4")
+///         .with_byterange_start(512)
+///         .with_byterange_length(1024)
+///         .finish(),
+///     (hint_type, "PART", @Attr="TYPE=PART"),
+///     (uri, "part.2.mp4", @Attr="URI=\"part.2.mp4\""),
+///     (byterange_start, 100; @Default=0, @Attr="BYTERANGE-START=100"),
+///     (byterange_length, @Option 200, @Attr="BYTERANGE-LENGTH=200")
+/// );
+/// ```
 macro_rules! mutation_tests {
-    ($init:expr$(, ($field:ident, $(@$opt:ident )?$val:expr, @Attr=$attr:literal))+) => {
+    (
+        $init:expr$
+        (,
+            (
+                $field:ident,
+                $(@$opt:ident )?$val:expr$(; @Default=$default:literal)?,
+                @Attr=$attr:literal
+            )
+        )+
+    ) => {
         $(
-            $crate::tag::hls::test_macro::mutation_test!($init, $field, $(@$opt )?$val, @Attr=$attr);
+            $crate::tag::hls::test_macro::mutation_test!(
+                $init, $field, $(@$opt )?$val$(; @Default=$default)?, @Attr=$attr
+            );
         )+
     };
 }

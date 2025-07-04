@@ -8,6 +8,62 @@ use crate::{
 };
 use std::{borrow::Cow, collections::HashMap};
 
+#[derive(Debug, PartialEq, Clone)]
+pub struct SessionDataAttributeList<'a> {
+    pub data_id: Cow<'a, str>,
+    pub value: Option<Cow<'a, str>>,
+    pub uri: Option<Cow<'a, str>>,
+    pub format: Option<Cow<'a, str>>,
+    pub language: Option<Cow<'a, str>>,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct SessionDataBuilder<'a> {
+    data_id: Cow<'a, str>,
+    value: Option<Cow<'a, str>>,
+    uri: Option<Cow<'a, str>>,
+    format: Option<Cow<'a, str>>,
+    language: Option<Cow<'a, str>>,
+}
+impl<'a> SessionDataBuilder<'a> {
+    pub fn new(data_id: impl Into<Cow<'a, str>>) -> Self {
+        Self {
+            data_id: data_id.into(),
+            value: Default::default(),
+            uri: Default::default(),
+            format: Default::default(),
+            language: Default::default(),
+        }
+    }
+
+    pub fn finish(self) -> SessionData<'a> {
+        SessionData::new(SessionDataAttributeList {
+            data_id: self.data_id,
+            value: self.value,
+            uri: self.uri,
+            format: self.format,
+            language: self.language,
+        })
+    }
+
+    pub fn with_value(mut self, value: impl Into<Cow<'a, str>>) -> Self {
+        self.value = Some(value.into());
+        self
+    }
+    pub fn with_uri(mut self, uri: impl Into<Cow<'a, str>>) -> Self {
+        self.uri = Some(uri.into());
+        self
+    }
+    pub fn with_format(mut self, format: impl Into<Cow<'a, str>>) -> Self {
+        self.format = Some(format.into());
+        self
+    }
+    pub fn with_language(mut self, language: impl Into<Cow<'a, str>>) -> Self {
+        self.language = Some(language.into());
+        self
+    }
+}
+
 /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.6.4
 #[derive(Debug, Clone)]
 pub struct SessionData<'a> {
@@ -57,19 +113,15 @@ impl<'a> TryFrom<ParsedTag<'a>> for SessionData<'a> {
 }
 
 impl<'a> SessionData<'a> {
-    pub fn new(
-        data_id: String,
-        value: Option<String>,
-        uri: Option<String>,
-        format: Option<String>,
-        language: Option<String>,
-    ) -> Self {
-        let data_id = Cow::Owned(data_id);
-        let value = value.map(Cow::Owned);
-        let uri = uri.map(Cow::Owned);
-        let format = format.map(Cow::Owned);
-        let language = language.map(Cow::Owned);
-        let output_line = Cow::Owned(calculate_line(&data_id, &value, &uri, &format, &language));
+    pub fn new(attribute_list: SessionDataAttributeList<'a>) -> Self {
+        let output_line = Cow::Owned(calculate_line(&attribute_list));
+        let SessionDataAttributeList {
+            data_id,
+            value,
+            uri,
+            format,
+            language,
+        } = attribute_list;
         Self {
             data_id,
             value,
@@ -80,6 +132,10 @@ impl<'a> SessionData<'a> {
             output_line,
             output_line_is_dirty: false,
         }
+    }
+
+    pub fn builder(data_id: impl Into<Cow<'a, str>>) -> SessionDataBuilder<'a> {
+        SessionDataBuilder::new(data_id)
     }
 
     pub fn into_inner(mut self) -> TagInner<'a> {
@@ -139,46 +195,70 @@ impl<'a> SessionData<'a> {
         }
     }
 
-    pub fn set_data_id(&mut self, data_id: String) {
+    pub fn set_data_id(&mut self, data_id: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(DATA_ID);
-        self.data_id = Cow::Owned(data_id);
+        self.data_id = data_id.into();
         self.output_line_is_dirty = true;
     }
 
-    pub fn set_value(&mut self, value: Option<String>) {
+    pub fn set_value(&mut self, value: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(VALUE);
-        self.value = value.map(Cow::Owned);
+        self.value = Some(value.into());
         self.output_line_is_dirty = true;
     }
 
-    pub fn set_uri(&mut self, uri: Option<String>) {
+    pub fn unset_value(&mut self) {
+        self.attribute_list.remove(VALUE);
+        self.value = None;
+        self.output_line_is_dirty = true;
+    }
+
+    pub fn set_uri(&mut self, uri: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(URI);
-        self.uri = uri.map(Cow::Owned);
+        self.uri = Some(uri.into());
         self.output_line_is_dirty = true;
     }
 
-    pub fn set_format(&mut self, format: String) {
+    pub fn unset_uri(&mut self) {
+        self.attribute_list.remove(URI);
+        self.uri = None;
+        self.output_line_is_dirty = true;
+    }
+
+    pub fn set_format(&mut self, format: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(FORMAT);
-        self.format = Some(Cow::Owned(format));
+        self.format = Some(format.into());
         self.output_line_is_dirty = true;
     }
 
-    pub fn set_language(&mut self, language: Option<String>) {
+    pub fn unset_format(&mut self) {
+        self.attribute_list.remove(FORMAT);
+        self.format = None;
+        self.output_line_is_dirty = true;
+    }
+
+    pub fn set_language(&mut self, language: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(LANGUAGE);
-        self.language = language.map(Cow::Owned);
+        self.language = Some(language.into());
+        self.output_line_is_dirty = true;
+    }
+
+    pub fn unset_language(&mut self) {
+        self.attribute_list.remove(LANGUAGE);
+        self.language = None;
         self.output_line_is_dirty = true;
     }
 
     fn recalculate_output_line(&mut self) {
         let format = self.format();
         let format = if format == "JSON" { None } else { Some(format) };
-        self.output_line = Cow::Owned(calculate_line(
-            self.data_id(),
-            &self.value().map(|x| x.into()),
-            &self.uri().map(|x| x.into()),
-            &format.map(|x| x.into()),
-            &self.language().map(|x| x.into()),
-        ));
+        self.output_line = Cow::Owned(calculate_line(&SessionDataAttributeList {
+            data_id: self.data_id().into(),
+            value: self.value().map(|x| x.into()),
+            uri: self.uri().map(|x| x.into()),
+            format: format.map(|x| x.into()),
+            language: self.language().map(|x| x.into()),
+        }));
         self.output_line_is_dirty = false;
     }
 }
@@ -189,13 +269,14 @@ const URI: &str = "URI";
 const FORMAT: &str = "FORMAT";
 const LANGUAGE: &str = "LANGUAGE";
 
-fn calculate_line<'a>(
-    data_id: &str,
-    value: &Option<Cow<'a, str>>,
-    uri: &Option<Cow<'a, str>>,
-    format: &Option<Cow<'a, str>>,
-    language: &Option<Cow<'a, str>>,
-) -> Vec<u8> {
+fn calculate_line<'a>(attribute_list: &SessionDataAttributeList) -> Vec<u8> {
+    let SessionDataAttributeList {
+        data_id,
+        value,
+        uri,
+        format,
+        language,
+    } = attribute_list;
     let mut line = format!("#EXT-X-SESSION-DATA:{DATA_ID}=\"{data_id}\"");
     if let Some(value) = value {
         line.push_str(format!(",{VALUE}=\"{value}\"").as_str());
@@ -214,6 +295,8 @@ fn calculate_line<'a>(
 
 #[cfg(test)]
 mod tests {
+    use crate::tag::hls::test_macro::mutation_tests;
+
     use super::*;
     use pretty_assertions::assert_eq;
 
@@ -221,15 +304,12 @@ mod tests {
     fn as_str_with_no_options_should_be_valid() {
         assert_eq!(
             b"#EXT-X-SESSION-DATA:DATA-ID=\"1234\",VALUE=\"test\",LANGUAGE=\"en\"",
-            SessionData::new(
-                "1234".to_string(),
-                Some("test".to_string()),
-                None,
-                None,
-                Some("en".to_string()),
-            )
-            .into_inner()
-            .value()
+            SessionData::builder("1234")
+                .with_value("test")
+                .with_language("en")
+                .finish()
+                .into_inner()
+                .value()
         )
     }
 
@@ -237,15 +317,25 @@ mod tests {
     fn as_str_with_options_should_be_valid() {
         assert_eq!(
             b"#EXT-X-SESSION-DATA:DATA-ID=\"1234\",URI=\"test.bin\",FORMAT=RAW",
-            SessionData::new(
-                "1234".to_string(),
-                None,
-                Some("test.bin".to_string()),
-                Some("RAW".to_string()),
-                None,
-            )
-            .into_inner()
-            .value()
+            SessionData::builder("1234")
+                .with_uri("test.bin")
+                .with_format("RAW")
+                .finish()
+                .into_inner()
+                .value()
         )
     }
+
+    mutation_tests!(
+        SessionData::builder("1234")
+            .with_value("test")
+            .with_language("en")
+            .with_uri("test.bin")
+            .with_format("RAW")
+            .finish(),
+        (data_id, "abcd", @Attr="DATA-ID=\"abcd\""),
+        (language, @Option "es", @Attr="LANGUAGE=\"es\""),
+        (uri, @Option "example.bin", @Attr="URI=\"example.bin\""),
+        (format, "INVALID"; @Default="JSON", @Attr="FORMAT=INVALID")
+    );
 }

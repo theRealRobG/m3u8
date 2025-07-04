@@ -8,6 +8,66 @@ use crate::{
 };
 use std::{borrow::Cow, collections::HashMap};
 
+#[derive(Debug, PartialEq, Clone)]
+pub struct ServerControlAttributeList {
+    pub can_skip_until: Option<f64>,
+    pub can_skip_dateranges: bool,
+    pub hold_back: Option<f64>,
+    pub part_hold_back: Option<f64>,
+    pub can_block_reload: bool,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct ServerControlBuilder {
+    can_skip_until: Option<f64>,
+    can_skip_dateranges: bool,
+    hold_back: Option<f64>,
+    part_hold_back: Option<f64>,
+    can_block_reload: bool,
+}
+impl ServerControlBuilder {
+    pub fn new() -> Self {
+        Self {
+            can_skip_until: Default::default(),
+            can_skip_dateranges: Default::default(),
+            hold_back: Default::default(),
+            part_hold_back: Default::default(),
+            can_block_reload: Default::default(),
+        }
+    }
+
+    pub fn finish<'a>(self) -> ServerControl<'a> {
+        ServerControl::new(ServerControlAttributeList {
+            can_skip_until: self.can_skip_until,
+            can_skip_dateranges: self.can_skip_dateranges,
+            hold_back: self.hold_back,
+            part_hold_back: self.part_hold_back,
+            can_block_reload: self.can_block_reload,
+        })
+    }
+
+    pub fn with_can_skip_until(mut self, can_skip_until: f64) -> Self {
+        self.can_skip_until = Some(can_skip_until);
+        self
+    }
+    pub fn with_can_skip_dateranges(mut self) -> Self {
+        self.can_skip_dateranges = true;
+        self
+    }
+    pub fn with_hold_back(mut self, hold_back: f64) -> Self {
+        self.hold_back = Some(hold_back);
+        self
+    }
+    pub fn with_part_hold_back(mut self, part_hold_back: f64) -> Self {
+        self.part_hold_back = Some(part_hold_back);
+        self
+    }
+    pub fn with_can_block_reload(mut self) -> Self {
+        self.can_block_reload = true;
+        self
+    }
+}
+
 /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.3.8
 #[derive(Debug, Clone)]
 pub struct ServerControl<'a> {
@@ -54,32 +114,29 @@ impl<'a> TryFrom<ParsedTag<'a>> for ServerControl<'a> {
 }
 
 impl<'a> ServerControl<'a> {
-    pub fn new(
-        can_skip_until: Option<f64>,
-        can_skip_dateranges: bool,
-        hold_back: Option<f64>,
-        part_hold_back: Option<f64>,
-        can_block_reload: bool,
-    ) -> Self {
-        let output_line = Cow::Owned(calculate_line(
+    pub fn new(attribute_list: ServerControlAttributeList) -> Self {
+        let output_line = Cow::Owned(calculate_line(&attribute_list));
+        let ServerControlAttributeList {
             can_skip_until,
             can_skip_dateranges,
             hold_back,
             part_hold_back,
             can_block_reload,
-        ));
-        let can_skip_dateranges = Some(can_skip_dateranges);
-        let can_block_reload = Some(can_block_reload);
+        } = attribute_list;
         Self {
             can_skip_until,
-            can_skip_dateranges,
+            can_skip_dateranges: Some(can_skip_dateranges),
             hold_back,
             part_hold_back,
-            can_block_reload,
+            can_block_reload: Some(can_block_reload),
             attribute_list: HashMap::new(),
             output_line,
             output_line_is_dirty: false,
         }
+    }
+
+    pub fn builder() -> ServerControlBuilder {
+        ServerControlBuilder::new()
     }
 
     pub fn into_inner(mut self) -> TagInner<'a> {
@@ -151,9 +208,15 @@ impl<'a> ServerControl<'a> {
         }
     }
 
-    pub fn set_can_skip_until(&mut self, can_skip_until: Option<f64>) {
+    pub fn set_can_skip_until(&mut self, can_skip_until: f64) {
         self.attribute_list.remove(CAN_SKIP_UNTIL);
-        self.can_skip_until = can_skip_until;
+        self.can_skip_until = Some(can_skip_until);
+        self.output_line_is_dirty = true;
+    }
+
+    pub fn unset_can_skip_until(&mut self) {
+        self.attribute_list.remove(CAN_SKIP_UNTIL);
+        self.can_skip_until = None;
         self.output_line_is_dirty = true;
     }
 
@@ -163,15 +226,27 @@ impl<'a> ServerControl<'a> {
         self.output_line_is_dirty = true;
     }
 
-    pub fn set_hold_back(&mut self, hold_back: Option<f64>) {
+    pub fn set_hold_back(&mut self, hold_back: f64) {
         self.attribute_list.remove(HOLD_BACK);
-        self.hold_back = hold_back;
+        self.hold_back = Some(hold_back);
         self.output_line_is_dirty = true;
     }
 
-    pub fn set_part_hold_back(&mut self, part_hold_back: Option<f64>) {
+    pub fn unset_hold_back(&mut self) {
+        self.attribute_list.remove(HOLD_BACK);
+        self.hold_back = None;
+        self.output_line_is_dirty = true;
+    }
+
+    pub fn set_part_hold_back(&mut self, part_hold_back: f64) {
         self.attribute_list.remove(PART_HOLD_BACK);
-        self.part_hold_back = part_hold_back;
+        self.part_hold_back = Some(part_hold_back);
+        self.output_line_is_dirty = true;
+    }
+
+    pub fn unset_part_hold_back(&mut self) {
+        self.attribute_list.remove(PART_HOLD_BACK);
+        self.part_hold_back = None;
         self.output_line_is_dirty = true;
     }
 
@@ -182,13 +257,13 @@ impl<'a> ServerControl<'a> {
     }
 
     fn recalculate_output_line(&mut self) {
-        self.output_line = Cow::Owned(calculate_line(
-            self.can_skip_until(),
-            self.can_skip_dateranges(),
-            self.hold_back(),
-            self.part_hold_back(),
-            self.can_block_reload(),
-        ));
+        self.output_line = Cow::Owned(calculate_line(&ServerControlAttributeList {
+            can_skip_until: self.can_skip_until(),
+            can_skip_dateranges: self.can_skip_dateranges(),
+            hold_back: self.hold_back(),
+            part_hold_back: self.part_hold_back(),
+            can_block_reload: self.can_block_reload(),
+        }));
         self.output_line_is_dirty = false;
     }
 }
@@ -200,20 +275,21 @@ const PART_HOLD_BACK: &str = "PART-HOLD-BACK";
 const CAN_BLOCK_RELOAD: &str = "CAN-BLOCK-RELOAD";
 const YES: &str = "YES";
 
-fn calculate_line(
-    can_skip_until: Option<f64>,
-    can_skip_dateranges: bool,
-    hold_back: Option<f64>,
-    part_hold_back: Option<f64>,
-    can_block_reload: bool,
-) -> Vec<u8> {
+fn calculate_line(attribute_list: &ServerControlAttributeList) -> Vec<u8> {
+    let ServerControlAttributeList {
+        can_skip_until,
+        can_skip_dateranges,
+        hold_back,
+        part_hold_back,
+        can_block_reload,
+    } = attribute_list;
     let mut line = String::from("#EXT-X-SERVER-CONTROL:");
     let mut separator = "";
     if let Some(can_skip_until) = can_skip_until {
         line.push_str(format!("{separator}{CAN_SKIP_UNTIL}={can_skip_until:?}").as_str());
         separator = ",";
     }
-    if can_skip_dateranges {
+    if *can_skip_dateranges {
         line.push_str(format!("{separator}{CAN_SKIP_DATERANGES}={YES}").as_str());
         separator = ",";
     }
@@ -225,7 +301,7 @@ fn calculate_line(
         line.push_str(format!("{separator}{PART_HOLD_BACK}={part_hold_back:?}").as_str());
         separator = ",";
     }
-    if can_block_reload {
+    if *can_block_reload {
         line.push_str(format!("{separator}{CAN_BLOCK_RELOAD}={YES}").as_str());
     }
     line.into_bytes()
@@ -234,13 +310,16 @@ fn calculate_line(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tag::hls::test_macro::mutation_tests;
     use pretty_assertions::assert_eq;
 
     #[test]
     fn as_str_with_one_value_should_be_valid() {
         assert_eq!(
             b"#EXT-X-SERVER-CONTROL:CAN-SKIP-UNTIL=36.0",
-            ServerControl::new(Some(36.0), false, None, None, false)
+            ServerControl::builder()
+                .with_can_skip_until(36.0)
+                .finish()
                 .into_inner()
                 .value()
         );
@@ -250,7 +329,10 @@ mod tests {
     fn as_str_with_bools_should_be_valid() {
         assert_eq!(
             b"#EXT-X-SERVER-CONTROL:CAN-SKIP-DATERANGES=YES,CAN-BLOCK-RELOAD=YES",
-            ServerControl::new(None, true, None, None, true)
+            ServerControl::builder()
+                .with_can_block_reload()
+                .with_can_skip_dateranges()
+                .finish()
                 .into_inner()
                 .value()
         );
@@ -264,9 +346,29 @@ mod tests {
                 "PART-HOLD-BACK=1.5,CAN-BLOCK-RELOAD=YES",
             )
             .as_bytes(),
-            ServerControl::new(Some(36.0), true, Some(18.0), Some(1.5), true)
+            ServerControl::builder()
+                .with_can_skip_until(36.0)
+                .with_can_block_reload()
+                .with_can_skip_dateranges()
+                .with_hold_back(18.0)
+                .with_part_hold_back(1.5)
+                .finish()
                 .into_inner()
                 .value()
         );
     }
+
+    mutation_tests!(
+        ServerControl::builder()
+            .with_can_skip_until(36.0)
+            .with_can_skip_dateranges()
+            .with_hold_back(18.0)
+            .with_part_hold_back(1.5)
+            .finish(),
+        (can_skip_until, @Option 18.0, @Attr="CAN-SKIP-UNTIL=18"),
+        (can_block_reload, true, @Attr="CAN-BLOCK-RELOAD=YES"),
+        (can_skip_dateranges, true, @Attr="CAN-SKIP-DATERANGES=YES"),
+        (hold_back, @Option 42.0, @Attr="HOLD-BACK=42"),
+        (part_hold_back, @Option 3.0, @Attr="PART-HOLD-BACK=3")
+    );
 }
