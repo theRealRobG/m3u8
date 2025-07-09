@@ -14,12 +14,12 @@ pub struct Tag<'a> {
     pub(crate) validation_error: Option<ValidationError>,
 }
 
-impl Tag<'_> {
-    pub fn name(&self) -> &str {
+impl<'a> Tag<'a> {
+    pub fn name(&self) -> &'a str {
         self.name
     }
 
-    pub fn value(&self) -> Option<&[u8]> {
+    pub fn value(&self) -> Option<&'a [u8]> {
         self.value
     }
 
@@ -27,7 +27,7 @@ impl Tag<'_> {
         self.validation_error
     }
 
-    pub fn as_bytes(&self) -> &[u8] {
+    pub fn as_bytes(&self) -> &'a [u8] {
         split_on_new_line(self.original_input).parsed
     }
 }
