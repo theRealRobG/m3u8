@@ -68,16 +68,16 @@ macro_rules! reader_bench {
 }
 
 pub fn criterion_benchmark(c: &mut Criterion) {
-    let daterange_str = r#"#EXT-X-DATERANGE:ID="0x30-5-1749409044",START-DATE="2025-06-08T18:57:25Z",PLANNED-DURATION=60.000,SCTE35-OUT=0xfc303e0000000000000000b00506fe2587ed930028022643554549000000057fff00005265c00e1270636b5f455030333638373336353030313230010c6ad0769a"#;
-    let daterange_opt = ParsingOptionsBuilder::new()
-        .with_parsing_for_all_tags()
-        .build();
+    // let daterange_str = r#"#EXT-X-DATERANGE:ID="0x30-5-1749409044",START-DATE="2025-06-08T18:57:25Z",PLANNED-DURATION=60.000,SCTE35-OUT=0xfc303e0000000000000000b00506fe2587ed930028022643554549000000057fff00005265c00e1270636b5f455030333638373336353030313230010c6ad0769a"#;
+    // let daterange_opt = ParsingOptionsBuilder::new()
+    //     .with_parsing_for_all_tags()
+    //     .build();
 
-    // Benchmark our own parsing of EXT-X-DATERANGE
-    assert!(line::parse(daterange_str, &daterange_opt).is_ok());
-    c.bench_function("Bench EXT-X-DATERANGE", |b| {
-        b.iter(|| line::parse(daterange_str, &daterange_opt));
-    });
+    // // Benchmark our own parsing of EXT-X-DATERANGE
+    // assert!(line::parse(daterange_str, &daterange_opt).is_ok());
+    // c.bench_function("Bench EXT-X-DATERANGE", |b| {
+    //     b.iter(|| line::parse(daterange_str, &daterange_opt));
+    // });
 
     // Check some longer parsing of a whole manifest, once with all tags parsing bench, and once
     // no tag parsing, to compare the performance difference.
@@ -90,6 +90,9 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         assert!(line::parse(line, &playlist_all_tags_parse_options).is_ok());
         assert!(line::parse(line, &playlist_no_tags_parse_options).is_ok());
     }
+    let playlist = hls_m3u8::MediaPlaylist::try_from(LONG_MEDIA_PLAYLIST).unwrap();
+    assert_eq!(4, playlist.target_duration.as_secs());
+    assert_eq!(541647, playlist.media_sequence);
     // no write benches
     reader_bench!(
         NO_WRITE,
@@ -105,64 +108,72 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         playlist_no_tags_parse_options,
         from_str
     );
-    reader_bench!(
-        NO_WRITE,
-        c,
-        "Large playlist, all tags, using Reader::from_reader, no writing",
-        playlist_all_tags_parse_options,
-        from_reader[as_bytes]
-    );
-    reader_bench!(
-        NO_WRITE,
-        c,
-        "Large playlist, no tags, using Reader::from_reader, no writing",
-        playlist_no_tags_parse_options,
-        from_reader[as_bytes]
-    );
-    // from_str benches
-    reader_bench!(
-        c,
-        "Large playlist, all tags, Reader::from_str and Writer, no mutation",
-        playlist_all_tags_parse_options,
-        from_str,
-        NO_MUTATE
-    );
-    reader_bench!(
-        c,
-        "Large playlist, all tags, Reader::from_str and Writer, mutation on EXTINF",
-        playlist_all_tags_parse_options,
-        from_str,
-        MUTATE
-    );
-    reader_bench!(
-        c,
-        "Large playlist, no tags, Reader::from_str and Writer, no mutation",
-        playlist_no_tags_parse_options,
-        from_str,
-        NO_MUTATE
-    );
-    // try_from_reader benches
-    reader_bench!(
-        c,
-        "Large playlist, all tags, Reader::from_reader and Writer, no mutation",
-        playlist_all_tags_parse_options,
-        from_reader[as_bytes],
-        NO_MUTATE
-    );
-    reader_bench!(
-        c,
-        "Large playlist, all tags, Reader::from_reader and Writer, mutation on EXTINF",
-        playlist_all_tags_parse_options,
-        from_reader[as_bytes],
-        MUTATE
-    );
-    reader_bench!(
-        c,
-        "Large playlist, no tags, Reader::from_reader and Writer, no mutation",
-        playlist_no_tags_parse_options,
-        from_reader[as_bytes],
-        NO_MUTATE
-    );
+    // Quick test against competition
+    c.bench_function("Large playlist, using hls_m3u8, no writing", |b| {
+        b.iter(|| {
+            let _ = black_box(
+                hls_m3u8::MediaPlaylist::try_from(black_box(LONG_MEDIA_PLAYLIST)).unwrap(),
+            );
+        });
+    });
+    // reader_bench!(
+    //     NO_WRITE,
+    //     c,
+    //     "Large playlist, all tags, using Reader::from_reader, no writing",
+    //     playlist_all_tags_parse_options,
+    //     from_reader[as_bytes]
+    // );
+    // reader_bench!(
+    //     NO_WRITE,
+    //     c,
+    //     "Large playlist, no tags, using Reader::from_reader, no writing",
+    //     playlist_no_tags_parse_options,
+    //     from_reader[as_bytes]
+    // );
+    // // from_str benches
+    // reader_bench!(
+    //     c,
+    //     "Large playlist, all tags, Reader::from_str and Writer, no mutation",
+    //     playlist_all_tags_parse_options,
+    //     from_str,
+    //     NO_MUTATE
+    // );
+    // reader_bench!(
+    //     c,
+    //     "Large playlist, all tags, Reader::from_str and Writer, mutation on EXTINF",
+    //     playlist_all_tags_parse_options,
+    //     from_str,
+    //     MUTATE
+    // );
+    // reader_bench!(
+    //     c,
+    //     "Large playlist, no tags, Reader::from_str and Writer, no mutation",
+    //     playlist_no_tags_parse_options,
+    //     from_str,
+    //     NO_MUTATE
+    // );
+    // // try_from_reader benches
+    // reader_bench!(
+    //     c,
+    //     "Large playlist, all tags, Reader::from_reader and Writer, no mutation",
+    //     playlist_all_tags_parse_options,
+    //     from_reader[as_bytes],
+    //     NO_MUTATE
+    // );
+    // reader_bench!(
+    //     c,
+    //     "Large playlist, all tags, Reader::from_reader and Writer, mutation on EXTINF",
+    //     playlist_all_tags_parse_options,
+    //     from_reader[as_bytes],
+    //     MUTATE
+    // );
+    // reader_bench!(
+    //     c,
+    //     "Large playlist, no tags, Reader::from_reader and Writer, no mutation",
+    //     playlist_no_tags_parse_options,
+    //     from_reader[as_bytes],
+    //     NO_MUTATE
+    // );
 }
 
 criterion_group!(benches, criterion_benchmark);
