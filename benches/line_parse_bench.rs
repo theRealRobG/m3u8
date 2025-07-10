@@ -90,9 +90,19 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         assert!(line::parse(line, &playlist_all_tags_parse_options).is_ok());
         assert!(line::parse(line, &playlist_no_tags_parse_options).is_ok());
     }
+    // Validate hls_m3u8 works as expected
     let playlist = hls_m3u8::MediaPlaylist::try_from(LONG_MEDIA_PLAYLIST).unwrap();
     assert_eq!(4, playlist.target_duration.as_secs());
     assert_eq!(541647, playlist.media_sequence);
+    // Validate m3u8-rs works as expected
+    let (_, playlist) = m3u8_rs::parse_playlist(LONG_MEDIA_PLAYLIST.as_bytes()).unwrap();
+    match playlist {
+        m3u8_rs::Playlist::MasterPlaylist(_) => panic!("Not a multivariant playlist"),
+        m3u8_rs::Playlist::MediaPlaylist(playlist) => {
+            assert_eq!(4, playlist.target_duration);
+            assert_eq!(541647, playlist.media_sequence);
+        }
+    }
     // no write benches
     reader_bench!(
         NO_WRITE,
@@ -113,6 +123,13 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         b.iter(|| {
             let _ = black_box(
                 hls_m3u8::MediaPlaylist::try_from(black_box(LONG_MEDIA_PLAYLIST)).unwrap(),
+            );
+        });
+    });
+    c.bench_function("Large playlist, using m3u8-rs, no writing", |b| {
+        b.iter(|| {
+            let _ = black_box(
+                m3u8_rs::parse_playlist(black_box(LONG_MEDIA_PLAYLIST.as_bytes())).unwrap(),
             );
         });
     });
