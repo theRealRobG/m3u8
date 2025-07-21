@@ -1,6 +1,6 @@
 use crate::{
     config::ParsingOptions,
-    error::{SyntaxError, ValidationError},
+    error::{ReaderBytesError, ReaderStrError, ValidationError},
     line::{HlsLine, parse_bytes_with_custom, parse_with_custom},
     tag::known::{IsKnownName, NoCustomTag, ParsedTag, TagInformation},
 };
@@ -13,7 +13,7 @@ pub struct Reader<R, CustomTag> {
 }
 
 macro_rules! impl_reader {
-    ($type:ty, $parse_fn:ident, $from_fn_ident:ident, $from_custom_fn_ident:ident) => {
+    ($type:ty, $parse_fn:ident, $from_fn_ident:ident, $from_custom_fn_ident:ident, $error_type:ident) => {
         impl<'a> Reader<&'a $type, NoCustomTag> {
             // Creates a reader.
             pub fn $from_fn_ident(data: &'a $type, options: ParsingOptions) -> Self {
@@ -52,33 +52,51 @@ macro_rules! impl_reader {
             }
 
             /// Reads a single HLS line from the reference data.
-            pub fn read_line(&mut self) -> Result<Option<HlsLine<'a, CustomTag>>, SyntaxError> {
+            pub fn read_line(&mut self) -> Result<Option<HlsLine<'a, CustomTag>>, $error_type<'a>> {
                 if self.inner.is_empty() {
                     return Ok(None);
                 };
-                let slice = $parse_fn(self.inner, &self.options)?;
-                let parsed = slice.parsed;
-                let remaining = slice.remaining;
-                std::mem::swap(&mut self.inner, &mut remaining.unwrap_or_default());
-                Ok(Some(parsed))
+                match $parse_fn(self.inner, &self.options) {
+                    Ok(slice) => {
+                        let parsed = slice.parsed;
+                        let remaining = slice.remaining;
+                        std::mem::swap(&mut self.inner, &mut remaining.unwrap_or_default());
+                        Ok(Some(parsed))
+                    }
+                    Err(error) => {
+                        let remaining = error.errored_line_slice.remaining;
+                        std::mem::swap(&mut self.inner, &mut remaining.unwrap_or_default());
+                        Err($error_type {
+                            errored_line: error.errored_line_slice.parsed,
+                            error: error.error,
+                        })
+                    }
+                }
             }
         }
     };
 }
 
-impl_reader!(str, parse_with_custom, from_str, with_custom_from_str);
+impl_reader!(
+    str,
+    parse_with_custom,
+    from_str,
+    with_custom_from_str,
+    ReaderStrError
+);
 impl_reader!(
     [u8],
     parse_bytes_with_custom,
     from_bytes,
-    with_custom_from_bytes
+    with_custom_from_bytes,
+    ReaderBytesError
 );
 
 #[cfg(test)]
 mod tests {
     use crate::{
         config::ParsingOptionsBuilder,
-        error::ValidationErrorValueKind,
+        error::{SyntaxError, UnknownTagSyntaxError, ValidationErrorValueKind},
         tag::{
             hls::{
                 endlist::Endlist, inf::Inf, m3u::M3u, targetduration::Targetduration,
@@ -197,6 +215,26 @@ mod tests {
             read_line,
             Some(HlsLine::from(ExampleTag::new(42, "UNKNOWN")))
         );
+    }
+
+    #[test]
+    fn when_reader_fails_it_moves_to_next_line() {
+        let input = concat!("#EXTM3U\n", "#EXT\n", "#Comment");
+        let mut reader = Reader::from_bytes(
+            input.as_bytes(),
+            ParsingOptionsBuilder::new()
+                .with_parsing_for_all_tags()
+                .build(),
+        );
+        assert_eq!(Ok(Some(HlsLine::from(M3u))), reader.read_line());
+        assert_eq!(
+            Err(ReaderBytesError {
+                errored_line: b"#EXT",
+                error: SyntaxError::from(UnknownTagSyntaxError::UnexpectedNoTagName)
+            }),
+            reader.read_line()
+        );
+        assert_eq!(Ok(Some(HlsLine::Comment("Comment"))), reader.read_line());
     }
 
     // Example custom tag implementation for the tests above.
