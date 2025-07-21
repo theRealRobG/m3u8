@@ -264,9 +264,9 @@ const EXAMPLE_LINES: &str = r#"#EXT-X-IMAGES-ONLY
 #EXTINF:60.06,Indicates 20 320x180 images (laid out 5x4) each to be displayed for 3.003s
 image.1.jpeg"#;
 
-// The `from_str_with_custom_tag_parsing` method allows you to specify the custom tag type via
-// providing the type in PhantomData as the third parameter.
-let mut reader = Reader::from_str_with_custom_tag_parsing(
+// The `with_custom_from_str` method allows you to specify the custom tag type via providing the
+// type in PhantomData as the third parameter.
+let mut reader = Reader::with_custom_from_str(
     EXAMPLE_LINES,
     ParsingOptions::default(),
     PhantomData::<CustomImageTag>,

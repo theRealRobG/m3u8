@@ -1,15 +1,10 @@
 use crate::{
     config::ParsingOptions,
     error::{SyntaxError, ValidationError},
-    line::{HlsLine, ParsedByteSlice, ParsedLineSlice, parse_bytes_with_custom, parse_with_custom},
+    line::{HlsLine, parse_bytes_with_custom, parse_with_custom},
     tag::known::{IsKnownName, NoCustomTag, ParsedTag, TagInformation},
 };
-use std::{
-    error::Error,
-    fmt::{Debug, Display},
-    io::{self, BufRead},
-    marker::PhantomData,
-};
+use std::{fmt::Debug, marker::PhantomData};
 
 pub struct Reader<R, CustomTag> {
     inner: R,
@@ -17,147 +12,67 @@ pub struct Reader<R, CustomTag> {
     _marker: PhantomData<CustomTag>,
 }
 
-impl<'a> Reader<&'a str, NoCustomTag> {
-    // Creates a reader.
-    pub fn from_str(str: &'a str, options: ParsingOptions) -> Self {
-        Self {
-            inner: str,
-            options,
-            _marker: PhantomData::<NoCustomTag>,
+macro_rules! impl_reader {
+    ($type:ty, $parse_fn:ident, $from_fn_ident:ident, $from_custom_fn_ident:ident) => {
+        impl<'a> Reader<&'a $type, NoCustomTag> {
+            // Creates a reader.
+            pub fn $from_fn_ident(data: &'a $type, options: ParsingOptions) -> Self {
+                Self {
+                    inner: data,
+                    options,
+                    _marker: PhantomData::<NoCustomTag>,
+                }
+            }
         }
-    }
-}
+        impl<'a, CustomTag> Reader<&'a $type, CustomTag>
+        where
+            CustomTag: TryFrom<ParsedTag<'a>, Error = ValidationError>
+                + IsKnownName
+                + TagInformation
+                + Debug
+                + PartialEq,
+        {
+            /// Creates a reader that supports custom tag parsing for the type specified by the
+            /// `PhatomData`.
+            pub fn $from_custom_fn_ident(
+                str: &'a $type,
+                options: ParsingOptions,
+                custom: PhantomData<CustomTag>,
+            ) -> Self {
+                Self {
+                    inner: str,
+                    options,
+                    _marker: custom,
+                }
+            }
 
-impl<'a, CustomTag> Reader<&'a str, CustomTag>
-where
-    CustomTag: TryFrom<ParsedTag<'a>, Error = ValidationError>
-        + IsKnownName
-        + TagInformation
-        + Debug
-        + PartialEq,
-{
-    /// Creates a reader that supports custom tag parsing for the type specified by the
-    /// `PhatomData`.
-    pub fn from_str_with_custom_tag_parsing(
-        str: &'a str,
-        options: ParsingOptions,
-        custom: PhantomData<CustomTag>,
-    ) -> Self {
-        Self {
-            inner: str,
-            options,
-            _marker: custom,
+            /// Returns the inner data of the reader.
+            pub fn into_inner(self) -> &'a $type {
+                self.inner
+            }
+
+            /// Reads a single HLS line from the reference data.
+            pub fn read_line(&mut self) -> Result<Option<HlsLine<'a, CustomTag>>, SyntaxError> {
+                if self.inner.is_empty() {
+                    return Ok(None);
+                };
+                let slice = $parse_fn(self.inner, &self.options)?;
+                let parsed = slice.parsed;
+                let remaining = slice.remaining;
+                std::mem::swap(&mut self.inner, &mut remaining.unwrap_or_default());
+                Ok(Some(parsed))
+            }
         }
-    }
-
-    /// Reads a single HLS line from the reference str.
-    pub fn read_line(&mut self) -> Result<Option<HlsLine<'a, CustomTag>>, SyntaxError> {
-        if self.inner.is_empty() {
-            return Ok(None);
-        };
-        let ParsedLineSlice { parsed, remaining } = parse_with_custom(self.inner, &self.options)?;
-        std::mem::swap(&mut self.inner, &mut remaining.unwrap_or_default());
-        Ok(Some(parsed))
-    }
-
-    /// Returns the inner data of the reader.
-    pub fn into_inner(self) -> &'a str {
-        self.inner
-    }
+    };
 }
 
-pub struct BufReadHolder<R: BufRead> {
-    reader: R,
-    last_consume_count: usize,
-}
-
-#[derive(Debug)]
-pub enum BufReadError {
-    SyntaxError(SyntaxError),
-    IoError(io::Error),
-}
-impl Display for BufReadError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::SyntaxError(e) => std::fmt::Display::fmt(&e, f),
-            Self::IoError(e) => std::fmt::Display::fmt(&e, f),
-        }
-    }
-}
-impl Error for BufReadError {}
-impl From<SyntaxError> for BufReadError {
-    fn from(value: SyntaxError) -> Self {
-        Self::SyntaxError(value)
-    }
-}
-impl From<io::Error> for BufReadError {
-    fn from(value: io::Error) -> Self {
-        Self::IoError(value)
-    }
-}
-
-impl<R: BufRead> Reader<BufReadHolder<R>, NoCustomTag> {
-    /// Creates a Reader from a BufRead.
-    pub fn from_reader(reader: R, options: ParsingOptions) -> Self {
-        Self {
-            inner: BufReadHolder {
-                reader,
-                last_consume_count: 0,
-            },
-            options,
-            _marker: PhantomData::<NoCustomTag>,
-        }
-    }
-
-    /// Reads a single HLS line from the buffer.
-    ///
-    /// This method assumes no custom tag parsing is desired. If the user wants to include custom
-    /// tag parsing then use the `read_line_custom` method and indicate the custom tag type via
-    /// specialization of the generic.
-    pub fn read_line<'a>(&'a mut self) -> Result<Option<HlsLine<'a>>, BufReadError> {
-        self.read_line_custom::<NoCustomTag>()
-    }
-
-    // Annoyingly, unlike when using &'a str, I can't completely infer the custom type on
-    // construction. This is because if the custom tag has a generic lifetime, then when
-    // constructing the Reader the lifetime is assumed to be that of the Reader; however, that is
-    // incorrect per the read_line_into method, which expects the lifetime of the CustomTag within
-    // the HlsLine to be that of the input String parameter. This means when looping in the below
-    // tests, I cannot mutate the input String between loop iterations, because Rust expects that
-    // the CustomTag could be valid as long as the Reader which would then be a problem with the
-    // mutable borrow on String. There may be a better way of doing this but I don't know it yet.
-    /// Reads a single HLS line from the buffer.
-    pub fn read_line_custom<'a, CustomTag>(
-        &'a mut self,
-    ) -> Result<Option<HlsLine<'a, CustomTag>>, BufReadError>
-    where
-        CustomTag: TryFrom<ParsedTag<'a>, Error = ValidationError>
-            + IsKnownName
-            + TagInformation
-            + Debug
-            + PartialEq,
-    {
-        self.inner.reader.consume(self.inner.last_consume_count);
-        let available = match self.inner.reader.fill_buf() {
-            Ok([]) => return Ok(None),
-            Ok(n) => n,
-            Err(e) => return Err(BufReadError::from(e)),
-        };
-        let total_len = available.len();
-        let ParsedByteSlice { parsed, remaining } =
-            parse_bytes_with_custom::<CustomTag>(available, &self.options)?;
-        let remaining_len = remaining.map_or(0, |s| s.len());
-        let consumed = total_len - remaining_len;
-        self.inner.last_consume_count = consumed;
-        Ok(Some(parsed))
-    }
-
-    /// Returns the inner data of the reader.
-    pub fn into_inner(mut self) -> R {
-        self.inner.reader.consume(self.inner.last_consume_count);
-        self.inner.reader
-    }
-}
+impl_reader!(str, parse_with_custom, from_str, with_custom_from_str);
+impl_reader!(
+    [u8],
+    parse_bytes_with_custom,
+    from_bytes,
+    with_custom_from_bytes
+);
 
 #[cfg(test)]
 mod tests {
@@ -233,7 +148,7 @@ mod tests {
     #[test]
     fn reader_from_buf_read_should_read_as_expected() {
         let inner = EXAMPLE_MANIFEST.as_bytes();
-        let mut reader = Reader::from_reader(
+        let mut reader = Reader::from_bytes(
             inner,
             ParsingOptionsBuilder::new()
                 .with_parsing_for_all_tags()
@@ -253,7 +168,7 @@ mod tests {
 
     #[test]
     fn reader_from_str_with_custom_should_read_as_expected() {
-        let mut reader = Reader::from_str_with_custom_tag_parsing(
+        let mut reader = Reader::with_custom_from_str(
             EXAMPLE_MANIFEST,
             ParsingOptionsBuilder::new()
                 .with_parsing_for_all_tags()
@@ -270,15 +185,16 @@ mod tests {
     #[test]
     fn reader_from_buf_with_custom_read_should_read_as_expected() {
         let inner = EXAMPLE_MANIFEST.as_bytes();
-        let mut reader = Reader::from_reader(
+        let mut reader = Reader::with_custom_from_bytes(
             inner,
             ParsingOptionsBuilder::new()
                 .with_parsing_for_all_tags()
                 .build(),
+            PhantomData::<ExampleTag>,
         );
         reader_test!(
             reader,
-            read_line_custom,
+            read_line,
             Some(HlsLine::from(ExampleTag::new(42, "UNKNOWN")))
         );
     }

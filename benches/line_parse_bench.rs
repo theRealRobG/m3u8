@@ -108,16 +108,16 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     reader_bench!(
         NO_WRITE,
         c,
-        "Large playlist, all tags, using Reader::from_reader, no writing",
+        "Large playlist, all tags, using Reader::from_bytes, no writing",
         playlist_all_tags_parse_options,
-        from_reader[as_bytes]
+        from_bytes[as_bytes]
     );
     reader_bench!(
         NO_WRITE,
         c,
-        "Large playlist, no tags, using Reader::from_reader, no writing",
+        "Large playlist, no tags, using Reader::from_bytes, no writing",
         playlist_no_tags_parse_options,
-        from_reader[as_bytes]
+        from_bytes[as_bytes]
     );
     // from_str benches
     reader_bench!(
@@ -141,26 +141,26 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         from_str,
         NO_MUTATE
     );
-    // try_from_reader benches
+    // from_bytes benches
     reader_bench!(
         c,
-        "Large playlist, all tags, Reader::from_reader and Writer, no mutation",
+        "Large playlist, all tags, Reader::from_bytes and Writer, no mutation",
         playlist_all_tags_parse_options,
-        from_reader[as_bytes],
+        from_bytes[as_bytes],
         NO_MUTATE
     );
     reader_bench!(
         c,
-        "Large playlist, all tags, Reader::from_reader and Writer, mutation on EXTINF",
+        "Large playlist, all tags, Reader::from_bytes and Writer, mutation on EXTINF",
         playlist_all_tags_parse_options,
-        from_reader[as_bytes],
+        from_bytes[as_bytes],
         MUTATE
     );
     reader_bench!(
         c,
-        "Large playlist, no tags, Reader::from_reader and Writer, no mutation",
+        "Large playlist, no tags, Reader::from_bytes and Writer, no mutation",
         playlist_no_tags_parse_options,
-        from_reader[as_bytes],
+        from_bytes[as_bytes],
         NO_MUTATE
     );
 }
