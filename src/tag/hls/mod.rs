@@ -486,6 +486,18 @@ where
         }
     }
 }
+// Convenience Into implementation for where Cow has From T
+impl<'a, T> From<EnumeratedString<'a, T>> for Cow<'a, str>
+where
+    T: Into<Cow<'a, str>> + Clone + Copy + PartialEq + Debug + Display,
+{
+    fn from(value: EnumeratedString<'a, T>) -> Self {
+        match value {
+            EnumeratedString::Known(t) => t.into(),
+            EnumeratedString::Unknown(s) => Cow::Borrowed(s),
+        }
+    }
+}
 
 /// Provides a forward compatible wrapper for enumerated string lists.
 ///
@@ -880,7 +892,7 @@ mod tests {
     #[test]
     fn key() {
         assert_eq!(
-            Ok(Tag::Key(Key::builder(EnumeratedString::Known(key::Method::SampleAes))
+            Ok(Tag::Key(Key::builder(key::Method::SampleAes)
                 .with_uri("skd://some-key-id")
                 .with_iv("0xABCD")
                 .with_keyformat("com.apple.streamingkeydelivery")
@@ -906,9 +918,7 @@ mod tests {
             })
         );
         assert_eq!(
-            Ok(Tag::Key(
-                Key::builder(EnumeratedString::Known(key::Method::None)).finish()
-            )),
+            Ok(Tag::Key(Key::builder(key::Method::None).finish())),
             Tag::try_from(ParsedTag {
                 name: "-X-KEY",
                 value: SemiParsedTagValue::AttributeList(HashMap::from([(
@@ -1182,7 +1192,7 @@ mod tests {
     fn preload_hint() {
         assert_eq!(
             Ok(Tag::PreloadHint(
-                PreloadHint::builder(preload_hint::Type::Part.into(), "part.2.mp4")
+                PreloadHint::builder(preload_hint::Type::Part, "part.2.mp4")
                     .with_byterange_start(512)
                     .with_byterange_length(1024)
                     .finish()
@@ -1203,7 +1213,7 @@ mod tests {
         );
         assert_eq!(
             Ok(Tag::PreloadHint(
-                PreloadHint::builder(preload_hint::Type::Part.into(), "part.2.mp4").finish()
+                PreloadHint::builder(preload_hint::Type::Part, "part.2.mp4").finish()
             )),
             Tag::try_from(ParsedTag {
                 name: "-X-PRELOAD-HINT",
@@ -1254,7 +1264,7 @@ mod tests {
     fn media() {
         assert_eq!(
             Ok(Tag::Media(
-                Media::builder(media::Type::Audio.into(), "English", "stereo")
+                Media::builder(media::Type::Audio, "English", "stereo")
                     .with_uri("audio/en/stereo.m3u8")
                     .with_language("en")
                     .with_assoc_language("en")
@@ -1317,7 +1327,7 @@ mod tests {
         );
         assert_eq!(
             Ok(Tag::Media(
-                Media::builder(media::Type::ClosedCaptions.into(), "English", "cc")
+                Media::builder(media::Type::ClosedCaptions, "English", "cc")
                     .with_instream_id("CC1")
                     .finish()
             )),

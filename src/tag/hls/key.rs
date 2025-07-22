@@ -43,11 +43,16 @@ impl<'a> TryFrom<&'a str> for Method {
 }
 impl Display for Method {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Method::None => write!(f, "{NONE}"),
-            Method::Aes128 => write!(f, "{AES_128}"),
-            Method::SampleAes => write!(f, "{SAMPLE_AES}"),
-            Method::SampleAesCtr => write!(f, "{SAMPLE_AES_CTR}"),
+        write!(f, "{}", Cow::from(*self))
+    }
+}
+impl From<Method> for Cow<'_, str> {
+    fn from(value: Method) -> Self {
+        match value {
+            Method::None => Cow::Borrowed(NONE),
+            Method::Aes128 => Cow::Borrowed(AES_128),
+            Method::SampleAes => Cow::Borrowed(SAMPLE_AES),
+            Method::SampleAesCtr => Cow::Borrowed(SAMPLE_AES_CTR),
         }
     }
 }
@@ -63,7 +68,7 @@ const SAMPLE_AES_CTR: &str = "SAMPLE-AES-CTR";
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct KeyAttributeList<'a> {
-    pub method: EnumeratedString<'a, Method>,
+    pub method: Cow<'a, str>,
     pub uri: Option<Cow<'a, str>>,
     pub iv: Option<Cow<'a, str>>,
     pub keyformat: Option<Cow<'a, str>>,
@@ -72,16 +77,16 @@ pub struct KeyAttributeList<'a> {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct KeyBuilder<'a> {
-    method: EnumeratedString<'a, Method>,
+    method: Cow<'a, str>,
     uri: Option<Cow<'a, str>>,
     iv: Option<Cow<'a, str>>,
     keyformat: Option<Cow<'a, str>>,
     keyformatversions: Option<Cow<'a, str>>,
 }
 impl<'a> KeyBuilder<'a> {
-    pub fn new(method: EnumeratedString<'a, Method>) -> Self {
+    pub fn new(method: impl Into<Cow<'a, str>>) -> Self {
         Self {
-            method,
+            method: method.into(),
             uri: Default::default(),
             iv: Default::default(),
             keyformat: Default::default(),
@@ -123,7 +128,7 @@ impl<'a> KeyBuilder<'a> {
 /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.4.4
 #[derive(Debug, Clone)]
 pub struct Key<'a> {
-    method: EnumeratedString<'a, Method>,
+    method: Cow<'a, str>,
     uri: Option<Cow<'a, str>>,
     iv: Option<Cow<'a, str>>,
     keyformat: Option<Cow<'a, str>>,
@@ -156,7 +161,7 @@ impl<'a> TryFrom<ParsedTag<'a>> for Key<'a> {
             return Err(super::ValidationError::MissingRequiredAttribute(METHOD));
         };
         Ok(Self {
-            method: EnumeratedString::from(*method),
+            method: Cow::Borrowed(method),
             uri: None,
             iv: None,
             keyformat: None,
@@ -190,7 +195,7 @@ impl<'a> Key<'a> {
         }
     }
 
-    pub fn builder(method: EnumeratedString<'a, Method>) -> KeyBuilder<'a> {
+    pub fn builder(method: impl Into<Cow<'a, str>>) -> KeyBuilder<'a> {
         KeyBuilder::new(method)
     }
 
@@ -204,7 +209,7 @@ impl<'a> Key<'a> {
     }
 
     pub fn method(&self) -> EnumeratedString<Method> {
-        self.method
+        EnumeratedString::from(self.method.as_ref())
     }
 
     pub fn uri(&self) -> Option<&str> {
@@ -253,9 +258,9 @@ impl<'a> Key<'a> {
         }
     }
 
-    pub fn set_method(&mut self, method: EnumeratedString<'a, Method>) {
+    pub fn set_method(&mut self, method: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(METHOD);
-        self.method = method;
+        self.method = method.into();
         self.output_line_is_dirty = true;
     }
 
@@ -315,7 +320,7 @@ impl<'a> Key<'a> {
             Some(keyformat)
         };
         self.output_line = Cow::Owned(calculate_line(&KeyAttributeList {
-            method: self.method(),
+            method: self.method().into(),
             uri: self.uri().map(|x| x.into()),
             iv: self.iv().map(|x| x.into()),
             keyformat: keyformat.map(|x| x.into()),
@@ -398,7 +403,7 @@ mod tests {
             .with_keyformat("com.apple.streamingkeydelivery")
             .with_keyformatversions("1")
             .finish(),
-        (method, EnumeratedString::Unknown("EXAMPLE"), @Attr="METHOD=EXAMPLE"),
+        (method, EnumeratedString::<Method>::Unknown("EXAMPLE"), @Attr="METHOD=EXAMPLE"),
         (uri, @Option "example.key", @Attr="URI=\"example.key\""),
         (iv, @Option "0x1234", @Attr="IV=0x1234"),
         (keyformat, "example"; @Default="identity", @Attr="KEYFORMAT=\"example\""),

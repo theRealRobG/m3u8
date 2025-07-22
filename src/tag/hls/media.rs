@@ -29,11 +29,16 @@ impl<'a> TryFrom<&'a str> for Type {
 }
 impl Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Type::Audio => write!(f, "{AUDIO}"),
-            Type::Video => write!(f, "{VIDEO}"),
-            Type::Subtitles => write!(f, "{SUBTITLES}"),
-            Type::ClosedCaptions => write!(f, "{CLOSED_CAPTIONS}"),
+        write!(f, "{}", Cow::from(*self))
+    }
+}
+impl From<Type> for Cow<'_, str> {
+    fn from(value: Type) -> Self {
+        match value {
+            Type::Audio => Cow::Borrowed(AUDIO),
+            Type::Video => Cow::Borrowed(VIDEO),
+            Type::Subtitles => Cow::Borrowed(SUBTITLES),
+            Type::ClosedCaptions => Cow::Borrowed(CLOSED_CAPTIONS),
         }
     }
 }
@@ -49,7 +54,7 @@ const CLOSED_CAPTIONS: &str = "CLOSED-CAPTIONS";
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct MediaAttributeList<'a> {
-    pub media_type: EnumeratedString<'a, Type>,
+    pub media_type: Cow<'a, str>,
     pub name: Cow<'a, str>,
     pub group_id: Cow<'a, str>,
     pub uri: Option<Cow<'a, str>>,
@@ -68,7 +73,7 @@ pub struct MediaAttributeList<'a> {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct MediaBuilder<'a> {
-    media_type: EnumeratedString<'a, Type>,
+    media_type: Cow<'a, str>,
     name: Cow<'a, str>,
     group_id: Cow<'a, str>,
     uri: Option<Cow<'a, str>>,
@@ -86,12 +91,12 @@ pub struct MediaBuilder<'a> {
 }
 impl<'a> MediaBuilder<'a> {
     pub fn new(
-        media_type: EnumeratedString<'a, Type>,
+        media_type: impl Into<Cow<'a, str>>,
         name: impl Into<Cow<'a, str>>,
         group_id: impl Into<Cow<'a, str>>,
     ) -> Self {
         Self {
-            media_type,
+            media_type: media_type.into(),
             name: name.into(),
             group_id: group_id.into(),
             uri: Default::default(),
@@ -185,7 +190,7 @@ impl<'a> MediaBuilder<'a> {
 /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.6.1
 #[derive(Debug, Clone)]
 pub struct Media<'a> {
-    media_type: EnumeratedString<'a, Type>,
+    media_type: Cow<'a, str>,
     group_id: Cow<'a, str>,
     name: Cow<'a, str>,
     uri: Option<Cow<'a, str>>,
@@ -246,7 +251,7 @@ impl<'a> TryFrom<ParsedTag<'a>> for Media<'a> {
             return Err(super::ValidationError::MissingRequiredAttribute(NAME));
         };
         Ok(Self {
-            media_type: EnumeratedString::from(*media_type),
+            media_type: Cow::Borrowed(media_type),
             group_id: Cow::Borrowed(group_id),
             name: Cow::Borrowed(name),
             uri: None,
@@ -311,7 +316,7 @@ impl<'a> Media<'a> {
     }
 
     pub fn builder(
-        media_type: EnumeratedString<'a, Type>,
+        media_type: impl Into<Cow<'a, str>>,
         name: impl Into<Cow<'a, str>>,
         group_id: impl Into<Cow<'a, str>>,
     ) -> MediaBuilder<'a> {
@@ -327,8 +332,8 @@ impl<'a> Media<'a> {
         }
     }
 
-    pub fn media_type(&self) -> EnumeratedString<'a, Type> {
-        self.media_type
+    pub fn media_type(&self) -> EnumeratedString<Type> {
+        EnumeratedString::from(self.media_type.as_ref())
     }
     pub fn name(&self) -> &str {
         &self.name
@@ -457,9 +462,9 @@ impl<'a> Media<'a> {
         }
     }
 
-    pub fn set_media_type(&mut self, media_type: EnumeratedString<'a, Type>) {
+    pub fn set_media_type(&mut self, media_type: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(TYPE);
-        self.media_type = media_type;
+        self.media_type = media_type.into();
         self.output_line_is_dirty = true;
     }
     pub fn set_name(&mut self, name: impl Into<Cow<'a, str>>) {
@@ -694,7 +699,7 @@ mod tests {
                 "INSTREAM-ID=\"CC1\""
             )
             .as_bytes(),
-            Media::builder(Type::ClosedCaptions.into(), "English", "cc")
+            Media::builder(Type::ClosedCaptions, "English", "cc")
                 .with_instream_id("CC1")
                 .finish()
                 .into_inner()
@@ -723,7 +728,7 @@ mod tests {
                 "CHANNELS=\"2\"",
             )
             .as_bytes(),
-            Media::builder(Type::Audio.into(), "English", "stereo")
+            Media::builder(Type::Audio, "English", "stereo")
                 .with_uri("audio/en/stereo.m3u8")
                 .with_language("en")
                 .with_assoc_language("en")
@@ -742,7 +747,7 @@ mod tests {
     }
 
     mutation_tests!(
-        Media::builder(Type::Audio.into(), "English", "stereo")
+        Media::builder(Type::Audio, "English", "stereo")
             .with_uri("audio/en/stereo.m3u8")
             .with_language("en")
             .with_assoc_language("en")

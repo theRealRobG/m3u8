@@ -27,9 +27,14 @@ impl<'a> TryFrom<&'a str> for Type {
 }
 impl Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Part => write!(f, "{PART}"),
-            Self::Map => write!(f, "{MAP}"),
+        write!(f, "{}", Cow::from(*self))
+    }
+}
+impl From<Type> for Cow<'_, str> {
+    fn from(value: Type) -> Self {
+        match value {
+            Type::Part => Cow::Borrowed(PART),
+            Type::Map => Cow::Borrowed(MAP),
         }
     }
 }
@@ -43,7 +48,7 @@ const MAP: &str = "MAP";
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct PreloadHintAttributeList<'a> {
-    pub hint_type: EnumeratedString<'a, Type>,
+    pub hint_type: Cow<'a, str>,
     pub uri: Cow<'a, str>,
     pub byterange_start: Option<u64>,
     pub byterange_length: Option<u64>,
@@ -51,15 +56,15 @@ pub struct PreloadHintAttributeList<'a> {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct PreloadHintBuilder<'a> {
-    hint_type: EnumeratedString<'a, Type>,
+    hint_type: Cow<'a, str>,
     uri: Cow<'a, str>,
     byterange_start: Option<u64>,
     byterange_length: Option<u64>,
 }
 impl<'a> PreloadHintBuilder<'a> {
-    pub fn new(hint_type: EnumeratedString<'a, Type>, uri: impl Into<Cow<'a, str>>) -> Self {
+    pub fn new(hint_type: impl Into<Cow<'a, str>>, uri: impl Into<Cow<'a, str>>) -> Self {
         Self {
-            hint_type,
+            hint_type: hint_type.into(),
             uri: uri.into(),
             byterange_start: Default::default(),
             byterange_length: Default::default(),
@@ -89,7 +94,7 @@ impl<'a> PreloadHintBuilder<'a> {
 /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.5.3
 #[derive(Debug, Clone)]
 pub struct PreloadHint<'a> {
-    hint_type: EnumeratedString<'a, Type>,
+    hint_type: Cow<'a, str>,
     uri: Cow<'a, str>,
     byterange_start: Option<u64>,
     byterange_length: Option<u64>,
@@ -123,7 +128,7 @@ impl<'a> TryFrom<ParsedTag<'a>> for PreloadHint<'a> {
             return Err(ValidationError::MissingRequiredAttribute(URI));
         };
         Ok(Self {
-            hint_type: EnumeratedString::from(*hint_type),
+            hint_type: Cow::Borrowed(hint_type),
             uri: Cow::Borrowed(uri),
             byterange_start: None,
             byterange_length: None,
@@ -155,7 +160,7 @@ impl<'a> PreloadHint<'a> {
     }
 
     pub fn builder(
-        hint_type: EnumeratedString<'a, Type>,
+        hint_type: impl Into<Cow<'a, str>>,
         uri: impl Into<Cow<'a, str>>,
     ) -> PreloadHintBuilder<'a> {
         PreloadHintBuilder::new(hint_type, uri)
@@ -171,7 +176,7 @@ impl<'a> PreloadHint<'a> {
     }
 
     pub fn hint_type(&self) -> EnumeratedString<Type> {
-        self.hint_type
+        EnumeratedString::from(self.hint_type.as_ref())
     }
 
     pub fn uri(&self) -> &str {
@@ -200,9 +205,9 @@ impl<'a> PreloadHint<'a> {
         }
     }
 
-    pub fn set_hint_type(&mut self, hint_type: EnumeratedString<'a, Type>) {
+    pub fn set_hint_type(&mut self, hint_type: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(TYPE);
-        self.hint_type = hint_type;
+        self.hint_type = hint_type.into();
         self.output_line_is_dirty = true;
     }
 
@@ -284,7 +289,7 @@ mod tests {
     fn as_str_with_no_options_should_be_valid() {
         assert_eq!(
             b"#EXT-X-PRELOAD-HINT:TYPE=PART,URI=\"part.2.mp4\"",
-            PreloadHint::builder(Type::Part.into(), "part.2.mp4")
+            PreloadHint::builder(Type::Part, "part.2.mp4")
                 .finish()
                 .into_inner()
                 .value()
@@ -295,7 +300,7 @@ mod tests {
     fn as_str_with_options_should_be_valid() {
         assert_eq!(
             b"#EXT-X-PRELOAD-HINT:TYPE=PART,URI=\"part.2.mp4\",BYTERANGE-START=512,BYTERANGE-LENGTH=1024",
-            PreloadHint::builder(Type::Part.into(), "part.2.mp4")
+            PreloadHint::builder(Type::Part, "part.2.mp4")
                 .with_byterange_start(512)
                 .with_byterange_length(1024)
                 .finish()
@@ -305,7 +310,7 @@ mod tests {
     }
 
     mutation_tests!(
-        PreloadHint::builder(Type::Map.into(), "init.mp4")
+        PreloadHint::builder(Type::Map, "init.mp4")
             .with_byterange_start(512)
             .with_byterange_length(1024)
             .finish(),
