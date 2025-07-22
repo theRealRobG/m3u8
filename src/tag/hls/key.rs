@@ -1,16 +1,64 @@
 use crate::{
-    error::{ValidationError, ValidationErrorValueKind},
+    error::{UnrecognizedEnumerationError, ValidationError, ValidationErrorValueKind},
     tag::{
-        hls::TagInner,
+        hls::{EnumeratedString, TagInner},
         known::ParsedTag,
         value::{ParsedAttributeValue, SemiParsedTagValue},
     },
 };
-use std::{borrow::Cow, collections::HashMap};
+use std::{borrow::Cow, collections::HashMap, fmt::Display};
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Method {
+    /// Media Segments are not encrypted.
+    None,
+    /// Media Segments are completely encrypted using the Advanced Encryption Standard (AES) with a
+    /// 128-bit key, Cipher Block Chaining (CBC), and Public-Key Cryptography Standards #7 (PKCS7)
+    /// padding [RFC5652]. CBC is restarted on each segment boundary, using either the
+    /// Initialization Vector (IV) attribute value or the Media Sequence Number as the IV.
+    Aes128,
+    /// the Media Segments are Sample Encrypted using the Advanced Encryption Standard. How these
+    /// media streams are encrypted and encapsulated in a segment depends on the media encoding and
+    /// the media format of the segment. fMP4 Media Segments are encrypted using the 'cbcs' scheme
+    /// of Common Encryption. Encryption of other Media Segment formats containing H.264, AAC, AC-3,
+    /// and Enhanced AC-3 media streams is described in the HTTP Live Streaming (HLS) Sample
+    /// Encryption specification.
+    SampleAes,
+    /// An encryption method of SAMPLE-AES-CTR is similar to SAMPLE-AES. However, fMP4 Media
+    /// Segments are encrypted using the 'cenc' scheme of Common Encryption. Encryption of other
+    /// Media Segment formats is not defined for SAMPLE-AES-CTR.
+    SampleAesCtr,
+}
+impl<'a> TryFrom<&'a str> for Method {
+    type Error = UnrecognizedEnumerationError<'a>;
+    fn try_from(value: &'a str) -> Result<Self, Self::Error> {
+        match value {
+            NONE => Ok(Self::None),
+            AES_128 => Ok(Self::Aes128),
+            SAMPLE_AES => Ok(Self::SampleAes),
+            SAMPLE_AES_CTR => Ok(Self::SampleAesCtr),
+            _ => Err(UnrecognizedEnumerationError::new(value)),
+        }
+    }
+}
+impl Display for Method {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Method::None => write!(f, "{NONE}"),
+            Method::Aes128 => write!(f, "{AES_128}"),
+            Method::SampleAes => write!(f, "{SAMPLE_AES}"),
+            Method::SampleAesCtr => write!(f, "{SAMPLE_AES_CTR}"),
+        }
+    }
+}
+const NONE: &str = "NONE";
+const AES_128: &str = "AES-128";
+const SAMPLE_AES: &str = "SAMPLE-AES";
+const SAMPLE_AES_CTR: &str = "SAMPLE-AES-CTR";
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct KeyAttributeList<'a> {
-    pub method: Cow<'a, str>,
+    pub method: EnumeratedString<'a, Method>,
     pub uri: Option<Cow<'a, str>>,
     pub iv: Option<Cow<'a, str>>,
     pub keyformat: Option<Cow<'a, str>>,
@@ -19,16 +67,16 @@ pub struct KeyAttributeList<'a> {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct KeyBuilder<'a> {
-    method: Cow<'a, str>,
+    method: EnumeratedString<'a, Method>,
     uri: Option<Cow<'a, str>>,
     iv: Option<Cow<'a, str>>,
     keyformat: Option<Cow<'a, str>>,
     keyformatversions: Option<Cow<'a, str>>,
 }
 impl<'a> KeyBuilder<'a> {
-    pub fn new(method: impl Into<Cow<'a, str>>) -> Self {
+    pub fn new(method: EnumeratedString<'a, Method>) -> Self {
         Self {
-            method: method.into(),
+            method,
             uri: Default::default(),
             iv: Default::default(),
             keyformat: Default::default(),
@@ -44,11 +92,6 @@ impl<'a> KeyBuilder<'a> {
             keyformat: self.keyformat,
             keyformatversions: self.keyformatversions,
         })
-    }
-
-    pub fn with_method(mut self, method: impl Into<Cow<'a, str>>) -> Self {
-        self.method = method.into();
-        self
     }
 
     pub fn with_uri(mut self, uri: impl Into<Cow<'a, str>>) -> Self {
@@ -75,7 +118,7 @@ impl<'a> KeyBuilder<'a> {
 /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.4.4
 #[derive(Debug, Clone)]
 pub struct Key<'a> {
-    method: Cow<'a, str>,
+    method: EnumeratedString<'a, Method>,
     uri: Option<Cow<'a, str>>,
     iv: Option<Cow<'a, str>>,
     keyformat: Option<Cow<'a, str>>,
@@ -108,7 +151,7 @@ impl<'a> TryFrom<ParsedTag<'a>> for Key<'a> {
             return Err(super::ValidationError::MissingRequiredAttribute(METHOD));
         };
         Ok(Self {
-            method: Cow::Borrowed(method),
+            method: EnumeratedString::from(*method),
             uri: None,
             iv: None,
             keyformat: None,
@@ -142,7 +185,7 @@ impl<'a> Key<'a> {
         }
     }
 
-    pub fn builder(method: impl Into<Cow<'a, str>>) -> KeyBuilder<'a> {
+    pub fn builder(method: EnumeratedString<'a, Method>) -> KeyBuilder<'a> {
         KeyBuilder::new(method)
     }
 
@@ -155,8 +198,8 @@ impl<'a> Key<'a> {
         }
     }
 
-    pub fn method(&self) -> &str {
-        &self.method
+    pub fn method(&self) -> EnumeratedString<Method> {
+        self.method
     }
 
     pub fn uri(&self) -> Option<&str> {
@@ -205,9 +248,9 @@ impl<'a> Key<'a> {
         }
     }
 
-    pub fn set_method(&mut self, method: impl Into<Cow<'a, str>>) {
+    pub fn set_method(&mut self, method: EnumeratedString<'a, Method>) {
         self.attribute_list.remove(METHOD);
-        self.method = method.into();
+        self.method = method;
         self.output_line_is_dirty = true;
     }
 
@@ -267,7 +310,7 @@ impl<'a> Key<'a> {
             Some(keyformat)
         };
         self.output_line = Cow::Owned(calculate_line(&KeyAttributeList {
-            method: self.method().into(),
+            method: self.method(),
             uri: self.uri().map(|x| x.into()),
             iv: self.iv().map(|x| x.into()),
             keyformat: keyformat.map(|x| x.into()),
@@ -321,7 +364,7 @@ mod tests {
                 "KEYFORMAT=\"com.apple.streamingkeydelivery\",KEYFORMATVERSIONS=\"1\"",
             )
             .as_bytes(),
-            Key::builder("SAMPLE-AES")
+            Key::builder(EnumeratedString::Known(Method::SampleAes))
                 .with_uri("skd://some-key-id")
                 .with_iv("0xABCD")
                 .with_keyformat("com.apple.streamingkeydelivery")
@@ -336,18 +379,21 @@ mod tests {
     fn as_str_with_options_should_be_valid() {
         assert_eq!(
             b"#EXT-X-KEY:METHOD=NONE",
-            Key::builder("NONE").finish().into_inner().value()
+            Key::builder(EnumeratedString::Known(Method::None))
+                .finish()
+                .into_inner()
+                .value()
         )
     }
 
     mutation_tests!(
-        Key::builder("SAMPLE-AES")
+        Key::builder(EnumeratedString::Known(Method::SampleAes))
             .with_uri("skd://some-key-id")
             .with_iv("0xABCD")
             .with_keyformat("com.apple.streamingkeydelivery")
             .with_keyformatversions("1")
             .finish(),
-        (method, "EXAMPLE", @Attr="METHOD=EXAMPLE"),
+        (method, EnumeratedString::Unknown("EXAMPLE"), @Attr="METHOD=EXAMPLE"),
         (uri, @Option "example.key", @Attr="URI=\"example.key\""),
         (iv, @Option "0x1234", @Attr="IV=0x1234"),
         (keyformat, "example"; @Default="identity", @Attr="KEYFORMAT=\"example\""),

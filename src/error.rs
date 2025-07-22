@@ -429,3 +429,21 @@ impl Display for ParseFloatError {
     }
 }
 impl Error for ParseFloatError {}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct UnrecognizedEnumerationError<'a> {
+    pub value: &'a str,
+}
+impl<'a> UnrecognizedEnumerationError<'a> {
+    pub fn new(value: &'a str) -> Self {
+        Self {
+            value: value.into(),
+        }
+    }
+}
+impl<'a> Display for UnrecognizedEnumerationError<'a> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} is not a recognized enumeration", self.value)
+    }
+}
+impl Error for UnrecognizedEnumerationError<'_> {}

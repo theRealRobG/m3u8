@@ -1,5 +1,5 @@
 use crate::{
-    error::ValidationError,
+    error::{UnrecognizedEnumerationError, ValidationError},
     tag::{
         hls::{
             bitrate::Bitrate, byterange::Byterange, content_steering::ContentSteering,
@@ -18,7 +18,11 @@ use crate::{
     },
     utils::split_on_new_line,
 };
-use std::borrow::Cow;
+use std::{
+    borrow::Cow,
+    fmt::{Debug, Display},
+    usize,
+};
 
 pub mod bitrate;
 pub mod byterange;
@@ -426,6 +430,118 @@ pub enum TagType {
     MultivariantPlaylist,
 }
 
+/// Provides a forward compatible wrapper for enumerated string values.
+///
+/// The intent is that all cases of an enumerated string are captured within `T`; however, in case a
+/// new value is added to HLS and this library has not been updated to support it yet, this enum
+/// also supports an `Unknown` case that contains a custom string. In this way, parsing won't break
+/// as new cases are added to the specification.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum EnumeratedString<'a, T>
+where
+    T: Clone + Copy + PartialEq + Debug + Display,
+{
+    Known(T),
+    Unknown(&'a str),
+}
+impl<T> EnumeratedString<'_, T>
+where
+    T: Clone + Copy + PartialEq + Debug + Display,
+{
+    /// A convenience method for getting the known value. This may be most helpful when chaining on
+    /// an already optional attribute.
+    pub fn known(&self) -> Option<&T> {
+        match self {
+            Self::Known(t) => Some(t),
+            Self::Unknown(_) => None,
+        }
+    }
+}
+// Display is needed for writing mutated values to output
+impl<T> Display for EnumeratedString<'_, T>
+where
+    T: Clone + Copy + PartialEq + Debug + Display,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Known(t) => Display::fmt(&t, f),
+            Self::Unknown(s) => Display::fmt(&s, f),
+        }
+    }
+}
+// Convenience From implementation for where T has implemented TryFrom
+impl<'a, T> From<&'a str> for EnumeratedString<'a, T>
+where
+    T: TryFrom<&'a str, Error = UnrecognizedEnumerationError<'a>>
+        + Clone
+        + Copy
+        + PartialEq
+        + Debug
+        + Display,
+{
+    fn from(value: &'a str) -> Self {
+        match T::try_from(value) {
+            Ok(known) => Self::Known(known),
+            Err(_) => Self::Unknown(value),
+        }
+    }
+}
+
+/// Provides a forward compatible wrapper for enumerated string lists.
+///
+/// [`EnumeratedString`] makes sure that any new enum cases added to the specification will not
+/// break parsing. This type extends this concept to lists and provides support for mixed lists of
+/// known and unknown values.
+#[derive(Debug, Clone, PartialEq)]
+pub struct EnumeratedStringList<'a, T>(pub Vec<EnumeratedString<'a, T>>)
+where
+    T: Clone + Copy + PartialEq + Debug + Display;
+// Convenience initializer using a known sized array of known types.
+impl<'a, T, const N: usize> From<[T; N]> for EnumeratedStringList<'a, T>
+where
+    T: Clone + Copy + PartialEq + Debug + Display,
+{
+    fn from(value: [T; N]) -> Self {
+        Self(value.into_iter().map(EnumeratedString::Known).collect())
+    }
+}
+// Display is needed for writing mutated values to output
+impl<T> Display for EnumeratedStringList<'_, T>
+where
+    T: Clone + Copy + PartialEq + Debug + Display,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            self.0
+                .iter()
+                .map(|item| format!("{item}"))
+                .collect::<Vec<String>>()
+                .join(",")
+        )
+    }
+}
+// Convenience From implementation for where T has implemented TryFrom
+impl<'a, T> From<&'a str> for EnumeratedStringList<'a, T>
+where
+    T: TryFrom<&'a str, Error = UnrecognizedEnumerationError<'a>>
+        + Clone
+        + Copy
+        + PartialEq
+        + Debug
+        + Display,
+{
+    fn from(value: &'a str) -> Self {
+        Self(
+            value
+                .split(',')
+                .map(|s| EnumeratedString::from(s.trim()))
+                .collect(),
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -764,7 +880,7 @@ mod tests {
     #[test]
     fn key() {
         assert_eq!(
-            Ok(Tag::Key(Key::builder("SAMPLE-AES")
+            Ok(Tag::Key(Key::builder(EnumeratedString::Known(key::Method::SampleAes))
                 .with_uri("skd://some-key-id")
                 .with_iv("0xABCD")
                 .with_keyformat("com.apple.streamingkeydelivery")
@@ -790,7 +906,9 @@ mod tests {
             })
         );
         assert_eq!(
-            Ok(Tag::Key(Key::builder("NONE").finish())),
+            Ok(Tag::Key(
+                Key::builder(EnumeratedString::Known(key::Method::None)).finish()
+            )),
             Tag::try_from(ParsedTag {
                 name: "-X-KEY",
                 value: SemiParsedTagValue::AttributeList(HashMap::from([(
@@ -944,7 +1062,7 @@ mod tests {
             Ok(Tag::Daterange(
                 Daterange::builder("test", date_time!(2025-06-05 T 20:38:42.149 -05:00))
                     .with_class("com.m3u8.test")
-                    .with_cue("ONCE")
+                    .with_cue(EnumeratedStringList::from([daterange::Cue::Once]))
                     .with_end_date(date_time!(2025-06-05 T 20:40:42.149 -05:00))
                     .with_duration(120.0)
                     .with_planned_duration(180.0)

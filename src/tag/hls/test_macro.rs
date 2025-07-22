@@ -1,30 +1,52 @@
+macro_rules! assert_setter_works {
+    (
+        $init:expr,
+        $field:ident,
+        $val:expr,
+        @Setter=$setter:ident$(($set_val:expr))?,
+        @Expected=$expected:expr,
+        @Message=$msg:literal,
+        @Attr=$(($not:tt))?$attr:literal,
+        @AttrMessage=$attr_msg:literal
+    ) => {
+        let mut test = $init;
+        test.$setter($($set_val)?);
+        assert_eq!($expected, test.$field(), $msg);
+        let inner = test.into_inner();
+        let output_line = $crate::utils::str_from(inner.value());
+        assert!(
+            $($not)?output_line.contains($attr),
+            $attr_msg,
+            $attr,
+            output_line,
+        );
+    };
+}
+
 macro_rules! mutation_test {
     ($init:expr, $field:ident, @Option $val:expr, @Attr=$attr:literal) => {
         paste::paste! {
             #[test]
             fn [<set_ $field>]() {
-                let mut test = $init;
-                test.[<set_ $field>]($val);
-                assert_eq!(Some($val), test.$field(), "setter failed");
-                let inner = test.into_inner();
-                let output_line = $crate::utils::str_from(inner.value());
-                assert!(
-                    output_line.contains($attr),
-                    "into_inner for setter failed ({} not found in {})",
-                    $attr,
-                    output_line,
+                $crate::tag::hls::test_macro::assert_setter_works!(
+                    $init,
+                    $field,
+                    $val,
+                    @Setter=[<set_ $field>]($val),
+                    @Expected=Some($val),
+                    @Message="setter failed",
+                    @Attr=$attr,
+                    @AttrMessage="into_inner for setter failed ({} not found in {})"
                 );
-
-                let mut test = $init;
-                test.[<unset_ $field>]();
-                assert_eq!(None, test.$field(), "unsetter failed");
-                let inner = test.into_inner();
-                let output_line = $crate::utils::str_from(inner.value());
-                assert!(
-                    !output_line.contains($attr),
-                    "into_inner for unsetter failed ({} found in {})",
-                    $attr,
-                    output_line,
+                $crate::tag::hls::test_macro::assert_setter_works!(
+                    $init,
+                    $field,
+                    $val,
+                    @Setter=[<unset_ $field>],
+                    @Expected=None,
+                    @Message="unsetter failed",
+                    @Attr=(!)$attr,
+                    @AttrMessage="into_inner for unsetter failed ({} found in {})"
                 );
             }
         }
@@ -33,28 +55,25 @@ macro_rules! mutation_test {
         paste::paste! {
             #[test]
             fn [<set_ $field>]() {
-                let mut test = $init;
-                test.[<set_ $field>]($val);
-                assert_eq!($val, test.$field(), "setter failed");
-                let inner = test.into_inner();
-                let output_line = $crate::utils::str_from(inner.value());
-                assert!(
-                    output_line.contains($attr),
-                    "into_inner for setter failed ({} not found in {})",
-                    $attr,
-                    output_line,
+                $crate::tag::hls::test_macro::assert_setter_works!(
+                    $init,
+                    $field,
+                    $val,
+                    @Setter=[<set_ $field>]($val),
+                    @Expected=$val,
+                    @Message="setter failed",
+                    @Attr=$attr,
+                    @AttrMessage="into_inner for setter failed ({} not found in {})"
                 );
-
-                let mut test = $init;
-                test.[<unset_ $field>]();
-                assert_eq!($default, test.$field(), "unsetter to default value failed");
-                let inner = test.into_inner();
-                let output_line = $crate::utils::str_from(inner.value());
-                assert!(
-                    !output_line.contains($attr),
-                    "into_inner for unsetter failed ({} found in {})",
-                    $attr,
-                    output_line,
+                $crate::tag::hls::test_macro::assert_setter_works!(
+                    $init,
+                    $field,
+                    $val,
+                    @Setter=[<unset_ $field>],
+                    @Expected=$default,
+                    @Message="unsetter failed",
+                    @Attr=(!)$attr,
+                    @AttrMessage="into_inner for unsetter failed ({} found in {})"
                 );
             }
         }
@@ -63,16 +82,32 @@ macro_rules! mutation_test {
         paste::paste! {
             #[test]
             fn [<set_ $field>]() {
-                let mut test = $init;
-                test.[<set_ $field>]($val);
-                assert_eq!($val, test.$field(), "setter failed");
-                let inner = test.into_inner();
-                let output_line = $crate::utils::str_from(inner.value());
-                assert!(
-                    output_line.contains($attr),
-                    "into_inner for setter failed ({} not found in {})",
-                    $attr,
-                    output_line,
+                $crate::tag::hls::test_macro::assert_setter_works!(
+                    $init,
+                    $field,
+                    $val,
+                    @Setter=[<set_ $field>]($val),
+                    @Expected=$val,
+                    @Message="setter failed",
+                    @Attr=$attr,
+                    @AttrMessage="into_inner for setter failed ({} not found in {})"
+                );
+            }
+        }
+    };
+    ($init:expr, $field:ident, $val:expr => @Expected=$exp:expr, @Attr=$attr:literal) => {
+        paste::paste! {
+            #[test]
+            fn [<set_ $field>]() {
+                $crate::tag::hls::test_macro::assert_setter_works!(
+                    $init,
+                    $field,
+                    $val,
+                    @Setter=[<set_ $field>]($val),
+                    @Expected=$exp,
+                    @Message="setter failed",
+                    @Attr=$attr,
+                    @AttrMessage="into_inner for setter failed ({} not found in {})"
                 );
             }
         }
@@ -190,18 +225,19 @@ macro_rules! mutation_tests {
         (,
             (
                 $field:ident,
-                $(@$opt:ident )?$val:expr$(; @Default=$default:literal)?,
+                $(@$opt:ident )?$val:expr$( => @Expected=$exp:expr)?$(; @Default=$default:literal)?,
                 @Attr=$attr:literal
             )
         )+
     ) => {
         $(
             $crate::tag::hls::test_macro::mutation_test!(
-                $init, $field, $(@$opt )?$val$(; @Default=$default)?, @Attr=$attr
+                $init, $field, $(@$opt )?$val$( => @Expected=$exp)?$(; @Default=$default)?, @Attr=$attr
             );
         )+
     };
 }
 
+pub(crate) use assert_setter_works;
 pub(crate) use mutation_test;
 pub(crate) use mutation_tests;

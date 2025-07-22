@@ -1,8 +1,8 @@
 use crate::{
     date::{self, DateTime},
-    error::{ValidationError, ValidationErrorValueKind},
+    error::{UnrecognizedEnumerationError, ValidationError, ValidationErrorValueKind},
     tag::{
-        hls::{TagInner, TagName},
+        hls::{EnumeratedStringList, TagInner, TagName},
         known::ParsedTag,
         value::{ParsedAttributeValue, SemiParsedTagValue},
     },
@@ -10,14 +10,51 @@ use crate::{
 use std::{
     borrow::Cow,
     collections::{HashMap, HashSet},
+    fmt::Display,
 };
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Cue {
+    /// Indicates that an action is to be triggered before playback of the primary asset begins,
+    /// regardless of where playback begins in the primary asset.
+    Pre,
+    /// Indicates that an action is to be triggered after the primary asset has been played to its
+    /// end without error.
+    Post,
+    /// Indicates that an action is to be triggered once. It SHOULD NOT be triggered again, even if
+    /// the user replays the portion of the primary asset that includes the trigger point.
+    Once,
+}
+impl<'a> TryFrom<&'a str> for Cue {
+    type Error = UnrecognizedEnumerationError<'a>;
+    fn try_from(value: &'a str) -> Result<Self, Self::Error> {
+        match value {
+            PRE => Ok(Self::Pre),
+            POST => Ok(Self::Post),
+            ONCE => Ok(Self::Once),
+            _ => Err(UnrecognizedEnumerationError::new(value)),
+        }
+    }
+}
+impl Display for Cue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Cue::Pre => write!(f, "{PRE}"),
+            Cue::Post => write!(f, "{POST}"),
+            Cue::Once => write!(f, "{ONCE}"),
+        }
+    }
+}
+const PRE: &str = "PRE";
+const POST: &str = "POST";
+const ONCE: &str = "ONCE";
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct DaterangeAttributeList<'a> {
     pub id: Cow<'a, str>,
     pub start_date: DateTime,
     pub class: Option<Cow<'a, str>>,
-    pub cue: Option<Cow<'a, str>>,
+    pub cue: Option<EnumeratedStringList<'a, Cue>>,
     pub end_date: Option<DateTime>,
     pub duration: Option<f64>,
     pub planned_duration: Option<f64>,
@@ -33,7 +70,7 @@ pub struct DaterangeBuilder<'a> {
     id: Cow<'a, str>,
     start_date: DateTime,
     class: Option<Cow<'a, str>>,
-    cue: Option<Cow<'a, str>>,
+    cue: Option<EnumeratedStringList<'a, Cue>>,
     end_date: Option<DateTime>,
     duration: Option<f64>,
     planned_duration: Option<f64>,
@@ -83,8 +120,8 @@ impl<'a> DaterangeBuilder<'a> {
         self
     }
 
-    pub fn with_cue(mut self, cue: impl Into<Cow<'a, str>>) -> Self {
-        self.cue = Some(cue.into());
+    pub fn with_cue(mut self, cue: EnumeratedStringList<'a, Cue>) -> Self {
+        self.cue = Some(cue);
         self
     }
 
@@ -148,7 +185,7 @@ pub struct Daterange<'a> {
     id: Cow<'a, str>,
     start_date: DateTime,
     class: Option<Cow<'a, str>>,
-    cue: Option<Cow<'a, str>>,
+    cue: Option<EnumeratedStringList<'a, Cue>>,
     end_date: Option<DateTime>,
     duration: Option<f64>,
     planned_duration: Option<f64>,
@@ -287,12 +324,22 @@ impl<'a> Daterange<'a> {
         self.start_date
     }
 
-    pub fn cue(&self) -> Option<&str> {
-        if let Some(cue) = &self.cue {
+    pub fn cue(&self) -> Option<EnumeratedStringList<Cue>> {
+        // TODO: Fix this clone.
+        // The tricky part is that as things stand EnumeratedStringList contains a Vec which is not
+        // Copy so we're kind of stuck. Returning a reference won't work either because we are late
+        // parsing (constructing) the value in the else case where we haven't set it and so can't
+        // construct anything that will have a lifetime long enough. My thinking is that I could
+        // change the EnumeratedStringList type to just hold the string slice contents and then
+        // implemnet all the same traits as something like HashSet so that it behaves as one would
+        // expect... That way I think we can make it Copy.
+        if let Some(cue) = self.cue.clone() {
             Some(cue)
         } else {
             match self.attribute_list.get(CUE) {
-                Some(ParsedAttributeValue::QuotedString(cue)) => Some(cue),
+                Some(ParsedAttributeValue::QuotedString(cue)) => {
+                    Some(EnumeratedStringList::from(*cue))
+                }
                 _ => None,
             }
         }
@@ -445,9 +492,9 @@ impl<'a> Daterange<'a> {
         self.output_line_is_dirty = true;
     }
 
-    pub fn set_cue(&mut self, cue: impl Into<Cow<'a, str>>) {
+    pub fn set_cue(&mut self, cue: EnumeratedStringList<'a, Cue>) {
         self.attribute_list.remove(CUE);
-        self.cue = Some(cue.into());
+        self.cue = Some(cue);
         self.output_line_is_dirty = true;
     }
 
@@ -753,7 +800,7 @@ mod tests {
     fn new_with_optionals_should_be_valid() {
         let tag = Daterange::builder("some-id", date_time!(2025-06-14 T 23:41:42.000 -05:00))
             .with_class("com.example.class")
-            .with_cue("ONCE")
+            .with_cue(EnumeratedStringList::from([Cue::Once]))
             .with_end_date(date_time!(2025-06-14 T 23:43:42.000 -05:00))
             .with_duration(120.0)
             .with_planned_duration(180.0)
@@ -835,7 +882,7 @@ mod tests {
     #[test]
     fn mutation_should_work() {
         let mut daterange = Daterange::builder("some-id", DateTime::default())
-            .with_cue("ONCE")
+            .with_cue(EnumeratedStringList::from([Cue::Once]))
             .with_extension_attribute(
                 "X-TO-REMOVE",
                 ExtensionAttributeValue::QuotedString("remove me".into()),
@@ -870,7 +917,7 @@ mod tests {
     mutation_tests!(
         Daterange::builder("some-id", date_time!(2025-06-14 T 23:41:42.000 -05:00))
             .with_class("com.example.class")
-            .with_cue("ONCE")
+            .with_cue(EnumeratedStringList::from([Cue::Once]))
             .with_end_date(date_time!(2025-06-14 T 23:43:42.000 -05:00))
             .with_duration(120.0)
             .with_planned_duration(180.0)
@@ -881,7 +928,7 @@ mod tests {
         (id, "another-id", @Attr="ID=\"another-id\""),
         (start_date, DateTime::default(), @Attr="START-DATE=\"1970-01-01T00:00:00.000Z\""),
         (class, @Option "com.test.class", @Attr="CLASS=\"com.test.class\""),
-        (cue, @Option "ONCE,PRE", @Attr="CUE=\"ONCE,PRE\""),
+        (cue, @Option EnumeratedStringList::from([Cue::Once, Cue::Pre]), @Attr="CUE=\"ONCE,PRE\""),
         (end_date, @Option DateTime::default(), @Attr="END-DATE=\"1970-01-01T00:00:00.000Z\""),
         (duration, @Option 60.0, @Attr="DURATION=60"),
         (planned_duration, @Option 80.0, @Attr="PLANNED-DURATION=80"),
