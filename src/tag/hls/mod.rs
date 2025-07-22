@@ -1182,7 +1182,7 @@ mod tests {
     fn preload_hint() {
         assert_eq!(
             Ok(Tag::PreloadHint(
-                PreloadHint::builder("PART", "part.2.mp4")
+                PreloadHint::builder(preload_hint::Type::Part.into(), "part.2.mp4")
                     .with_byterange_start(512)
                     .with_byterange_length(1024)
                     .finish()
@@ -1203,7 +1203,7 @@ mod tests {
         );
         assert_eq!(
             Ok(Tag::PreloadHint(
-                PreloadHint::builder("PART", "part.2.mp4").finish()
+                PreloadHint::builder(preload_hint::Type::Part.into(), "part.2.mp4").finish()
             )),
             Tag::try_from(ParsedTag {
                 name: "-X-PRELOAD-HINT",
@@ -1254,7 +1254,7 @@ mod tests {
     fn media() {
         assert_eq!(
             Ok(Tag::Media(
-                Media::builder("AUDIO", "English", "stereo")
+                Media::builder(media::Type::Audio.into(), "English", "stereo")
                     .with_uri("audio/en/stereo.m3u8")
                     .with_language("en")
                     .with_assoc_language("en")
@@ -1317,7 +1317,7 @@ mod tests {
         );
         assert_eq!(
             Ok(Tag::Media(
-                Media::builder("CLOSED-CAPTIONS", "English", "cc")
+                Media::builder(media::Type::ClosedCaptions.into(), "English", "cc")
                     .with_instream_id("CC1")
                     .finish()
             )),

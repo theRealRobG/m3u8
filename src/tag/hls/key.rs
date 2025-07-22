@@ -51,6 +51,11 @@ impl Display for Method {
         }
     }
 }
+impl From<Method> for EnumeratedString<'_, Method> {
+    fn from(value: Method) -> Self {
+        Self::Known(value)
+    }
+}
 const NONE: &str = "NONE";
 const AES_128: &str = "AES-128";
 const SAMPLE_AES: &str = "SAMPLE-AES";

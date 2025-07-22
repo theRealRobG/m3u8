@@ -2,7 +2,7 @@ use crate::{
     date::{self, DateTime},
     error::{UnrecognizedEnumerationError, ValidationError, ValidationErrorValueKind},
     tag::{
-        hls::{EnumeratedStringList, TagInner, TagName},
+        hls::{EnumeratedString, EnumeratedStringList, TagInner, TagName},
         known::ParsedTag,
         value::{ParsedAttributeValue, SemiParsedTagValue},
     },
@@ -43,6 +43,11 @@ impl Display for Cue {
             Cue::Post => write!(f, "{POST}"),
             Cue::Once => write!(f, "{ONCE}"),
         }
+    }
+}
+impl From<Cue> for EnumeratedString<'_, Cue> {
+    fn from(value: Cue) -> Self {
+        Self::Known(value)
     }
 }
 const PRE: &str = "PRE";

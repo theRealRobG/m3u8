@@ -1,16 +1,49 @@
 use crate::{
-    error::{ValidationError, ValidationErrorValueKind},
+    error::{UnrecognizedEnumerationError, ValidationError, ValidationErrorValueKind},
     tag::{
-        hls::TagInner,
+        hls::{EnumeratedString, TagInner},
         known::ParsedTag,
         value::{ParsedAttributeValue, SemiParsedTagValue},
     },
 };
-use std::{borrow::Cow, collections::HashMap};
+use std::{borrow::Cow, collections::HashMap, fmt::Display};
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Type {
+    /// The resource is a Partial Segment.
+    Part,
+    /// The resource is a Media Initialization Section.
+    Map,
+}
+impl<'a> TryFrom<&'a str> for Type {
+    type Error = UnrecognizedEnumerationError<'a>;
+    fn try_from(value: &'a str) -> Result<Self, Self::Error> {
+        match value {
+            PART => Ok(Self::Part),
+            MAP => Ok(Self::Map),
+            _ => Err(UnrecognizedEnumerationError::new(value)),
+        }
+    }
+}
+impl Display for Type {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Part => write!(f, "{PART}"),
+            Self::Map => write!(f, "{MAP}"),
+        }
+    }
+}
+impl From<Type> for EnumeratedString<'_, Type> {
+    fn from(value: Type) -> Self {
+        Self::Known(value)
+    }
+}
+const PART: &str = "PART";
+const MAP: &str = "MAP";
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct PreloadHintAttributeList<'a> {
-    pub hint_type: Cow<'a, str>,
+    pub hint_type: EnumeratedString<'a, Type>,
     pub uri: Cow<'a, str>,
     pub byterange_start: Option<u64>,
     pub byterange_length: Option<u64>,
@@ -18,15 +51,15 @@ pub struct PreloadHintAttributeList<'a> {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct PreloadHintBuilder<'a> {
-    hint_type: Cow<'a, str>,
+    hint_type: EnumeratedString<'a, Type>,
     uri: Cow<'a, str>,
     byterange_start: Option<u64>,
     byterange_length: Option<u64>,
 }
 impl<'a> PreloadHintBuilder<'a> {
-    pub fn new(hint_type: impl Into<Cow<'a, str>>, uri: impl Into<Cow<'a, str>>) -> Self {
+    pub fn new(hint_type: EnumeratedString<'a, Type>, uri: impl Into<Cow<'a, str>>) -> Self {
         Self {
-            hint_type: hint_type.into(),
+            hint_type,
             uri: uri.into(),
             byterange_start: Default::default(),
             byterange_length: Default::default(),
@@ -56,7 +89,7 @@ impl<'a> PreloadHintBuilder<'a> {
 /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.5.3
 #[derive(Debug, Clone)]
 pub struct PreloadHint<'a> {
-    hint_type: Cow<'a, str>,
+    hint_type: EnumeratedString<'a, Type>,
     uri: Cow<'a, str>,
     byterange_start: Option<u64>,
     byterange_length: Option<u64>,
@@ -90,7 +123,7 @@ impl<'a> TryFrom<ParsedTag<'a>> for PreloadHint<'a> {
             return Err(ValidationError::MissingRequiredAttribute(URI));
         };
         Ok(Self {
-            hint_type: Cow::Borrowed(hint_type),
+            hint_type: EnumeratedString::from(*hint_type),
             uri: Cow::Borrowed(uri),
             byterange_start: None,
             byterange_length: None,
@@ -122,7 +155,7 @@ impl<'a> PreloadHint<'a> {
     }
 
     pub fn builder(
-        hint_type: impl Into<Cow<'a, str>>,
+        hint_type: EnumeratedString<'a, Type>,
         uri: impl Into<Cow<'a, str>>,
     ) -> PreloadHintBuilder<'a> {
         PreloadHintBuilder::new(hint_type, uri)
@@ -137,8 +170,8 @@ impl<'a> PreloadHint<'a> {
         }
     }
 
-    pub fn hint_type(&self) -> &str {
-        &self.hint_type
+    pub fn hint_type(&self) -> EnumeratedString<Type> {
+        self.hint_type
     }
 
     pub fn uri(&self) -> &str {
@@ -167,9 +200,9 @@ impl<'a> PreloadHint<'a> {
         }
     }
 
-    pub fn set_hint_type(&mut self, hint_type: impl Into<Cow<'a, str>>) {
+    pub fn set_hint_type(&mut self, hint_type: EnumeratedString<'a, Type>) {
         self.attribute_list.remove(TYPE);
-        self.hint_type = hint_type.into();
+        self.hint_type = hint_type;
         self.output_line_is_dirty = true;
     }
 
@@ -251,7 +284,7 @@ mod tests {
     fn as_str_with_no_options_should_be_valid() {
         assert_eq!(
             b"#EXT-X-PRELOAD-HINT:TYPE=PART,URI=\"part.2.mp4\"",
-            PreloadHint::builder("PART", "part.2.mp4")
+            PreloadHint::builder(Type::Part.into(), "part.2.mp4")
                 .finish()
                 .into_inner()
                 .value()
@@ -262,7 +295,7 @@ mod tests {
     fn as_str_with_options_should_be_valid() {
         assert_eq!(
             b"#EXT-X-PRELOAD-HINT:TYPE=PART,URI=\"part.2.mp4\",BYTERANGE-START=512,BYTERANGE-LENGTH=1024",
-            PreloadHint::builder("PART", "part.2.mp4")
+            PreloadHint::builder(Type::Part.into(), "part.2.mp4")
                 .with_byterange_start(512)
                 .with_byterange_length(1024)
                 .finish()
@@ -272,11 +305,11 @@ mod tests {
     }
 
     mutation_tests!(
-        PreloadHint::builder("PART", "part.2.mp4")
+        PreloadHint::builder(Type::Map.into(), "init.mp4")
             .with_byterange_start(512)
             .with_byterange_length(1024)
             .finish(),
-        (hint_type, "PART", @Attr="TYPE=PART"),
+        (hint_type, EnumeratedString::Known(Type::Part), @Attr="TYPE=PART"),
         (uri, "part.2.mp4", @Attr="URI=\"part.2.mp4\""),
         (byterange_start, 100; @Default=0, @Attr="BYTERANGE-START=100"),
         (byterange_length, @Option 200, @Attr="BYTERANGE-LENGTH=200")
