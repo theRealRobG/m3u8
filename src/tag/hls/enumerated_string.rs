@@ -183,6 +183,41 @@ where
         std::mem::swap(&mut self.inner, &mut Cow::Owned(new_inner));
         true
     }
+
+    pub fn to_string(&self) -> String {
+        self.inner.to_string()
+    }
+}
+impl<'a, T> AsRef<str> for EnumeratedStringList<'a, T>
+where
+    T: TryFrom<&'a str, Error = UnrecognizedEnumerationError<'a>>
+        + AsStaticStr
+        + Clone
+        + Copy
+        + PartialEq
+        + Debug
+        + Display,
+{
+    fn as_ref(&self) -> &str {
+        &self.inner
+    }
+}
+impl<'a, T> From<String> for EnumeratedStringList<'a, T>
+where
+    T: TryFrom<&'a str, Error = UnrecognizedEnumerationError<'a>>
+        + AsStaticStr
+        + Clone
+        + Copy
+        + PartialEq
+        + Debug
+        + Display,
+{
+    fn from(value: String) -> Self {
+        Self {
+            inner: Cow::Owned(value),
+            t: PhantomData::<T>,
+        }
+    }
 }
 impl<'a, T> From<&'a str> for EnumeratedStringList<'a, T>
 where

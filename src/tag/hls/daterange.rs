@@ -922,6 +922,26 @@ mod tests {
         );
     }
 
+    #[test]
+    fn mutating_cue_works_as_expected() {
+        // This is actually not as I expected. For some reason clone doesn't work as I was expecting
+        // it would. When I clone EnumeratedStringList, I thought that the references into Daterange
+        // would be removed, as it would now be newly owned data. In fact, this definitely should be
+        // possible, because I worked around this by adding a "to_string" method which is basically
+        // doing what I thought Clone would be doing. I need to look into this more because this way
+        // of mutating the tag (as will be with any EnumeratedStringList) is very awkward/ugly.
+        let mut daterange = Daterange::builder("some-id", DateTime::default())
+            .with_cue(EnumeratedStringList::from([Cue::Once]))
+            .finish();
+        let mut cue = daterange.cue().unwrap();
+        cue.insert(Cue::Pre);
+        daterange.set_cue(cue.to_string());
+        assert_eq!(
+            EnumeratedStringList::from([Cue::Once, Cue::Pre]),
+            daterange.cue().unwrap()
+        );
+    }
+
     mutation_tests!(
         Daterange::builder("some-id", date_time!(2025-06-14 T 23:41:42.000 -05:00))
             .with_class("com.example.class")
