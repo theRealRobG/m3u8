@@ -1,5 +1,5 @@
 use crate::{
-    error::{UnrecognizedEnumerationError, ValidationError},
+    error::ValidationError,
     tag::{
         hls::{
             bitrate::Bitrate, byterange::Byterange, content_steering::ContentSteering,
@@ -18,11 +18,8 @@ use crate::{
     },
     utils::split_on_new_line,
 };
-use std::{
-    borrow::Cow,
-    fmt::{Debug, Display},
-    usize,
-};
+pub use enumerated_string::*;
+use std::{borrow::Cow, fmt::Debug};
 
 pub mod bitrate;
 pub mod byterange;
@@ -32,6 +29,7 @@ pub mod define;
 pub mod discontinuity;
 pub mod discontinuity_sequence;
 pub mod endlist;
+mod enumerated_string;
 pub mod gap;
 pub mod i_frame_stream_inf;
 pub mod i_frames_only;
@@ -428,130 +426,6 @@ pub enum TagType {
     MediaMetadata,
     /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.6
     MultivariantPlaylist,
-}
-
-/// Provides a forward compatible wrapper for enumerated string values.
-///
-/// The intent is that all cases of an enumerated string are captured within `T`; however, in case a
-/// new value is added to HLS and this library has not been updated to support it yet, this enum
-/// also supports an `Unknown` case that contains a custom string. In this way, parsing won't break
-/// as new cases are added to the specification.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum EnumeratedString<'a, T>
-where
-    T: Clone + Copy + PartialEq + Debug + Display,
-{
-    Known(T),
-    Unknown(&'a str),
-}
-impl<T> EnumeratedString<'_, T>
-where
-    T: Clone + Copy + PartialEq + Debug + Display,
-{
-    /// A convenience method for getting the known value. This may be most helpful when chaining on
-    /// an already optional attribute.
-    pub fn known(&self) -> Option<&T> {
-        match self {
-            Self::Known(t) => Some(t),
-            Self::Unknown(_) => None,
-        }
-    }
-}
-// Display is needed for writing mutated values to output
-impl<T> Display for EnumeratedString<'_, T>
-where
-    T: Clone + Copy + PartialEq + Debug + Display,
-{
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Known(t) => Display::fmt(&t, f),
-            Self::Unknown(s) => Display::fmt(&s, f),
-        }
-    }
-}
-// Convenience From implementation for where T has implemented TryFrom
-impl<'a, T> From<&'a str> for EnumeratedString<'a, T>
-where
-    T: TryFrom<&'a str, Error = UnrecognizedEnumerationError<'a>>
-        + Clone
-        + Copy
-        + PartialEq
-        + Debug
-        + Display,
-{
-    fn from(value: &'a str) -> Self {
-        match T::try_from(value) {
-            Ok(known) => Self::Known(known),
-            Err(_) => Self::Unknown(value),
-        }
-    }
-}
-// Convenience Into implementation for where Cow has From T
-impl<'a, T> From<EnumeratedString<'a, T>> for Cow<'a, str>
-where
-    T: Into<Cow<'a, str>> + Clone + Copy + PartialEq + Debug + Display,
-{
-    fn from(value: EnumeratedString<'a, T>) -> Self {
-        match value {
-            EnumeratedString::Known(t) => t.into(),
-            EnumeratedString::Unknown(s) => Cow::Borrowed(s),
-        }
-    }
-}
-
-/// Provides a forward compatible wrapper for enumerated string lists.
-///
-/// [`EnumeratedString`] makes sure that any new enum cases added to the specification will not
-/// break parsing. This type extends this concept to lists and provides support for mixed lists of
-/// known and unknown values.
-#[derive(Debug, Clone, PartialEq)]
-pub struct EnumeratedStringList<'a, T>(pub Vec<EnumeratedString<'a, T>>)
-where
-    T: Clone + Copy + PartialEq + Debug + Display;
-// Convenience initializer using a known sized array of known types.
-impl<'a, T, const N: usize> From<[T; N]> for EnumeratedStringList<'a, T>
-where
-    T: Clone + Copy + PartialEq + Debug + Display,
-{
-    fn from(value: [T; N]) -> Self {
-        Self(value.into_iter().map(EnumeratedString::Known).collect())
-    }
-}
-// Display is needed for writing mutated values to output
-impl<T> Display for EnumeratedStringList<'_, T>
-where
-    T: Clone + Copy + PartialEq + Debug + Display,
-{
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            self.0
-                .iter()
-                .map(|item| format!("{item}"))
-                .collect::<Vec<String>>()
-                .join(",")
-        )
-    }
-}
-// Convenience From implementation for where T has implemented TryFrom
-impl<'a, T> From<&'a str> for EnumeratedStringList<'a, T>
-where
-    T: TryFrom<&'a str, Error = UnrecognizedEnumerationError<'a>>
-        + Clone
-        + Copy
-        + PartialEq
-        + Debug
-        + Display,
-{
-    fn from(value: &'a str) -> Self {
-        Self(
-            value
-                .split(',')
-                .map(|s| EnumeratedString::from(s.trim()))
-                .collect(),
-        )
-    }
 }
 
 #[cfg(test)]

@@ -6,6 +6,7 @@ use crate::{
         known::ParsedTag,
         value::{ParsedAttributeValue, SemiParsedTagValue},
     },
+    utils::AsStaticStr,
 };
 use std::{
     borrow::Cow,
@@ -38,11 +39,21 @@ impl<'a> TryFrom<&'a str> for Cue {
 }
 impl Display for Cue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+impl AsStaticStr for Cue {
+    fn as_str(&self) -> &'static str {
         match self {
-            Cue::Pre => write!(f, "{PRE}"),
-            Cue::Post => write!(f, "{POST}"),
-            Cue::Once => write!(f, "{ONCE}"),
+            Cue::Pre => PRE,
+            Cue::Post => POST,
+            Cue::Once => ONCE,
         }
+    }
+}
+impl From<Cue> for Cow<'_, str> {
+    fn from(value: Cue) -> Self {
+        Cow::Borrowed(value.as_str())
     }
 }
 impl From<Cue> for EnumeratedString<'_, Cue> {
@@ -59,7 +70,7 @@ pub struct DaterangeAttributeList<'a> {
     pub id: Cow<'a, str>,
     pub start_date: DateTime,
     pub class: Option<Cow<'a, str>>,
-    pub cue: Option<EnumeratedStringList<'a, Cue>>,
+    pub cue: Option<Cow<'a, str>>,
     pub end_date: Option<DateTime>,
     pub duration: Option<f64>,
     pub planned_duration: Option<f64>,
@@ -75,7 +86,7 @@ pub struct DaterangeBuilder<'a> {
     id: Cow<'a, str>,
     start_date: DateTime,
     class: Option<Cow<'a, str>>,
-    cue: Option<EnumeratedStringList<'a, Cue>>,
+    cue: Option<Cow<'a, str>>,
     end_date: Option<DateTime>,
     duration: Option<f64>,
     planned_duration: Option<f64>,
@@ -125,8 +136,8 @@ impl<'a> DaterangeBuilder<'a> {
         self
     }
 
-    pub fn with_cue(mut self, cue: EnumeratedStringList<'a, Cue>) -> Self {
-        self.cue = Some(cue);
+    pub fn with_cue(mut self, cue: impl Into<Cow<'a, str>>) -> Self {
+        self.cue = Some(cue.into());
         self
     }
 
@@ -190,7 +201,7 @@ pub struct Daterange<'a> {
     id: Cow<'a, str>,
     start_date: DateTime,
     class: Option<Cow<'a, str>>,
-    cue: Option<EnumeratedStringList<'a, Cue>>,
+    cue: Option<Cow<'a, str>>,
     end_date: Option<DateTime>,
     duration: Option<f64>,
     planned_duration: Option<f64>,
@@ -330,16 +341,8 @@ impl<'a> Daterange<'a> {
     }
 
     pub fn cue(&self) -> Option<EnumeratedStringList<Cue>> {
-        // TODO: Fix this clone.
-        // The tricky part is that as things stand EnumeratedStringList contains a Vec which is not
-        // Copy so we're kind of stuck. Returning a reference won't work either because we are late
-        // parsing (constructing) the value in the else case where we haven't set it and so can't
-        // construct anything that will have a lifetime long enough. My thinking is that I could
-        // change the EnumeratedStringList type to just hold the string slice contents and then
-        // implemnet all the same traits as something like HashSet so that it behaves as one would
-        // expect... That way I think we can make it Copy.
-        if let Some(cue) = self.cue.clone() {
-            Some(cue)
+        if let Some(cue) = &self.cue {
+            Some(EnumeratedStringList::from(cue.as_ref()))
         } else {
             match self.attribute_list.get(CUE) {
                 Some(ParsedAttributeValue::QuotedString(cue)) => {
@@ -497,9 +500,9 @@ impl<'a> Daterange<'a> {
         self.output_line_is_dirty = true;
     }
 
-    pub fn set_cue(&mut self, cue: EnumeratedStringList<'a, Cue>) {
+    pub fn set_cue(&mut self, cue: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(CUE);
-        self.cue = Some(cue);
+        self.cue = Some(cue.into());
         self.output_line_is_dirty = true;
     }
 

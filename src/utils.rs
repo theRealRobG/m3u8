@@ -5,6 +5,10 @@ use crate::{
 };
 use memchr::{memchr, memchr3};
 
+pub trait AsStaticStr {
+    fn as_str(&self) -> &'static str;
+}
+
 pub fn split_on_new_line<'a>(bytes: &'a [u8]) -> ParsedByteSlice<'a, &'a [u8]> {
     match memchr(b'\n', bytes) {
         Some(n) if n > 0 && bytes[n - 1] == b'\r' => ParsedByteSlice {

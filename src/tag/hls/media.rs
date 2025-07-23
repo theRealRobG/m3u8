@@ -5,6 +5,7 @@ use crate::{
         known::ParsedTag,
         value::{ParsedAttributeValue, SemiParsedTagValue},
     },
+    utils::AsStaticStr,
 };
 use std::{borrow::Cow, collections::HashMap, fmt::Display};
 
@@ -29,17 +30,22 @@ impl<'a> TryFrom<&'a str> for Type {
 }
 impl Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", Cow::from(*self))
+        write!(f, "{}", self.as_str())
+    }
+}
+impl AsStaticStr for Type {
+    fn as_str(&self) -> &'static str {
+        match self {
+            Type::Audio => AUDIO,
+            Type::Video => VIDEO,
+            Type::Subtitles => SUBTITLES,
+            Type::ClosedCaptions => CLOSED_CAPTIONS,
+        }
     }
 }
 impl From<Type> for Cow<'_, str> {
     fn from(value: Type) -> Self {
-        match value {
-            Type::Audio => Cow::Borrowed(AUDIO),
-            Type::Video => Cow::Borrowed(VIDEO),
-            Type::Subtitles => Cow::Borrowed(SUBTITLES),
-            Type::ClosedCaptions => Cow::Borrowed(CLOSED_CAPTIONS),
-        }
+        Cow::Borrowed(value.as_str())
     }
 }
 impl From<Type> for EnumeratedString<'_, Type> {

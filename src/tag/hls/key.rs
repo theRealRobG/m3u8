@@ -5,6 +5,7 @@ use crate::{
         known::ParsedTag,
         value::{ParsedAttributeValue, SemiParsedTagValue},
     },
+    utils::AsStaticStr,
 };
 use std::{borrow::Cow, collections::HashMap, fmt::Display};
 
@@ -43,17 +44,22 @@ impl<'a> TryFrom<&'a str> for Method {
 }
 impl Display for Method {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", Cow::from(*self))
+        write!(f, "{}", self.as_str())
+    }
+}
+impl AsStaticStr for Method {
+    fn as_str(&self) -> &'static str {
+        match self {
+            Method::None => NONE,
+            Method::Aes128 => AES_128,
+            Method::SampleAes => SAMPLE_AES,
+            Method::SampleAesCtr => SAMPLE_AES_CTR,
+        }
     }
 }
 impl From<Method> for Cow<'_, str> {
     fn from(value: Method) -> Self {
-        match value {
-            Method::None => Cow::Borrowed(NONE),
-            Method::Aes128 => Cow::Borrowed(AES_128),
-            Method::SampleAes => Cow::Borrowed(SAMPLE_AES),
-            Method::SampleAesCtr => Cow::Borrowed(SAMPLE_AES_CTR),
-        }
+        Cow::Borrowed(value.as_str())
     }
 }
 impl From<Method> for EnumeratedString<'_, Method> {
