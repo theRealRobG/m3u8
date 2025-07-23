@@ -1,4 +1,4 @@
-use crate::{error::UnrecognizedEnumerationError, utils::AsStaticStr};
+use crate::{error::UnrecognizedEnumerationError, utils::AsStaticCow};
 use std::{
     borrow::Cow,
     fmt::{Debug, Display},
@@ -75,15 +75,15 @@ where
         }
     }
 }
-// If T is AsStaticStr then EnumeratedString can have an as_str method
+// If T is AsStaticCow then EnumeratedString can have an as_cow method
 impl<'a, T> EnumeratedString<'a, T>
 where
-    T: Clone + Copy + PartialEq + Debug + Display + AsStaticStr,
+    T: Clone + Copy + PartialEq + Debug + Display + AsStaticCow,
 {
-    pub fn as_str(&self) -> &'a str {
+    pub fn as_cow(&self) -> Cow<'a, str> {
         match self {
-            EnumeratedString::Unknown(s) => s,
-            EnumeratedString::Known(t) => t.as_str(),
+            EnumeratedString::Unknown(s) => Cow::Borrowed(s),
+            EnumeratedString::Known(t) => t.as_cow(),
         }
     }
 }
@@ -96,25 +96,29 @@ where
 #[derive(Debug, Clone, PartialEq)]
 pub struct EnumeratedStringList<'a, T>
 where
-    T: AsStaticStr + Clone + Copy + PartialEq + Debug + Display,
+    T: AsStaticCow + Clone + Copy + PartialEq + Debug + Display,
 {
     inner: Cow<'a, str>,
     t: PhantomData<T>,
 }
 impl<'a, T> EnumeratedStringList<'a, T>
 where
-    T: AsStaticStr + Clone + Copy + PartialEq + Debug + Display,
+    T: AsStaticCow + Clone + Copy + PartialEq + Debug + Display,
 {
     pub fn contains(&self, value: impl Into<EnumeratedString<'a, T>>) -> bool {
         let value = value.into();
         let value_str = match value {
             EnumeratedString::Unknown(s) => s,
-            EnumeratedString::Known(t) => t.as_str(),
+            EnumeratedString::Known(t) => &t.as_cow(),
         };
         self.inner
             .split(',')
             .find(|item| *item == value_str)
             .is_some()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.inner.trim().is_empty()
     }
 
     pub fn insert<Item: Into<EnumeratedString<'a, T>>>(&mut self, value: Item) -> bool {
@@ -126,7 +130,7 @@ where
         if !new_inner.is_empty() {
             new_inner.push_str(",");
         }
-        new_inner.push_str(value.as_str());
+        new_inner.push_str(&value.as_cow());
         self.inner = Cow::Owned(new_inner);
         true
     }
@@ -136,7 +140,7 @@ where
         if !self.contains(value) {
             return false;
         }
-        let value = value.as_str();
+        let value = &value.as_cow();
         let mut new_inner = String::new();
         let old_inner = std::mem::take(&mut self.inner).to_string();
         let mut iter = old_inner.split(',');
@@ -173,9 +177,17 @@ where
         EnumeratedStringList::from(self.to_string())
     }
 }
+impl<T> Display for EnumeratedStringList<'_, T>
+where
+    T: AsStaticCow + Clone + Copy + PartialEq + Debug + Display,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.inner)
+    }
+}
 impl<'a, T> AsRef<str> for EnumeratedStringList<'a, T>
 where
-    T: AsStaticStr + Clone + Copy + PartialEq + Debug + Display,
+    T: AsStaticCow + Clone + Copy + PartialEq + Debug + Display,
 {
     fn as_ref(&self) -> &str {
         &self.inner
@@ -183,7 +195,7 @@ where
 }
 impl<'a, T> From<String> for EnumeratedStringList<'a, T>
 where
-    T: AsStaticStr + Clone + Copy + PartialEq + Debug + Display,
+    T: AsStaticCow + Clone + Copy + PartialEq + Debug + Display,
 {
     fn from(value: String) -> Self {
         Self {
@@ -194,7 +206,7 @@ where
 }
 impl<'a, T> From<&'a str> for EnumeratedStringList<'a, T>
 where
-    T: AsStaticStr + Clone + Copy + PartialEq + Debug + Display,
+    T: AsStaticCow + Clone + Copy + PartialEq + Debug + Display,
 {
     fn from(value: &'a str) -> Self {
         Self {
@@ -205,7 +217,7 @@ where
 }
 impl<'a, T> From<EnumeratedStringList<'a, T>> for Cow<'a, str>
 where
-    T: AsStaticStr + Clone + Copy + PartialEq + Debug + Display,
+    T: AsStaticCow + Clone + Copy + PartialEq + Debug + Display,
 {
     fn from(value: EnumeratedStringList<'a, T>) -> Self {
         value.inner
@@ -213,7 +225,7 @@ where
 }
 impl<'a, T, S, const N: usize> From<[S; N]> for EnumeratedStringList<'a, T>
 where
-    T: AsStaticStr + Clone + Copy + PartialEq + Debug + Display,
+    T: AsStaticCow + Clone + Copy + PartialEq + Debug + Display,
     S: Into<EnumeratedString<'a, T>>,
 {
     fn from(value: [S; N]) -> Self {
@@ -226,7 +238,7 @@ where
 }
 impl<'a, T, S> From<Vec<S>> for EnumeratedStringList<'a, T>
 where
-    T: AsStaticStr + Clone + Copy + PartialEq + Debug + Display,
+    T: AsStaticCow + Clone + Copy + PartialEq + Debug + Display,
     S: Into<EnumeratedString<'a, T>>,
 {
     fn from(value: Vec<S>) -> Self {
@@ -241,7 +253,7 @@ where
 impl<'a, T> EnumeratedStringList<'a, T>
 where
     T: TryFrom<&'a str, Error = UnrecognizedEnumerationError<'a>>
-        + AsStaticStr
+        + AsStaticCow
         + Clone
         + Copy
         + PartialEq
@@ -260,7 +272,7 @@ where
 pub struct EnumeratedStringListIter<'a, T>
 where
     T: TryFrom<&'a str, Error = UnrecognizedEnumerationError<'a>>
-        + AsStaticStr
+        + AsStaticCow
         + Clone
         + Copy
         + PartialEq
@@ -273,7 +285,7 @@ where
 impl<'a, T> Iterator for EnumeratedStringListIter<'a, T>
 where
     T: TryFrom<&'a str, Error = UnrecognizedEnumerationError<'a>>
-        + AsStaticStr
+        + AsStaticCow
         + Clone
         + Copy
         + PartialEq
@@ -311,21 +323,21 @@ mod tests {
     }
     impl Display for TestEnum {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            write!(f, "{}", self.as_str())
+            write!(f, "{}", self.as_cow())
         }
     }
-    impl AsStaticStr for TestEnum {
-        fn as_str(&self) -> &'static str {
+    impl AsStaticCow for TestEnum {
+        fn as_cow(&self) -> Cow<'static, str> {
             match self {
-                TestEnum::One => "ONE",
-                TestEnum::Two => "TWO",
-                TestEnum::Three => "THREE",
+                TestEnum::One => Cow::Borrowed("ONE"),
+                TestEnum::Two => Cow::Borrowed("TWO"),
+                TestEnum::Three => Cow::Borrowed("THREE"),
             }
         }
     }
     impl From<TestEnum> for Cow<'_, str> {
         fn from(value: TestEnum) -> Self {
-            Cow::Borrowed(value.as_str())
+            value.as_cow()
         }
     }
     impl From<TestEnum> for EnumeratedString<'_, TestEnum> {
@@ -389,6 +401,24 @@ mod tests {
             "list should not contain THREE"
         );
         assert!(!list.contains(EnumeratedString::Unknown("UNKNOWN")));
+    }
+
+    #[test]
+    fn enumerated_string_list_is_empty_when_no_values_present() {
+        let list = EnumeratedStringList {
+            inner: Cow::Borrowed(""),
+            t: PhantomData::<TestEnum>,
+        };
+        assert!(list.is_empty(), "list should be empty")
+    }
+
+    #[test]
+    fn enumerated_string_list_is_not_empty_when_values_present() {
+        let list = EnumeratedStringList {
+            inner: Cow::Borrowed("ONE"),
+            t: PhantomData::<TestEnum>,
+        };
+        assert!(!list.is_empty(), "list should not be empty")
     }
 
     #[test]

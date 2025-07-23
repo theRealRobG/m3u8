@@ -6,7 +6,7 @@ use crate::{
         known::ParsedTag,
         value::{ParsedAttributeValue, SemiParsedTagValue},
     },
-    utils::AsStaticStr,
+    utils::AsStaticCow,
 };
 use std::{
     borrow::Cow,
@@ -39,21 +39,21 @@ impl<'a> TryFrom<&'a str> for Cue {
 }
 impl Display for Cue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.as_str())
+        write!(f, "{}", self.as_cow())
     }
 }
-impl AsStaticStr for Cue {
-    fn as_str(&self) -> &'static str {
+impl AsStaticCow for Cue {
+    fn as_cow(&self) -> Cow<'static, str> {
         match self {
-            Cue::Pre => PRE,
-            Cue::Post => POST,
-            Cue::Once => ONCE,
+            Cue::Pre => Cow::Borrowed(PRE),
+            Cue::Post => Cow::Borrowed(POST),
+            Cue::Once => Cow::Borrowed(ONCE),
         }
     }
 }
 impl From<Cue> for Cow<'_, str> {
     fn from(value: Cue) -> Self {
-        Cow::Borrowed(value.as_str())
+        value.as_cow()
     }
 }
 impl From<Cue> for EnumeratedString<'_, Cue> {

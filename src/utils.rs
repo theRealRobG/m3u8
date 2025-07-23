@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use crate::{
     date::{DateTime, DateTimeTimezoneOffset},
     error::{DateTimeSyntaxError, GenericSyntaxError, ParseNumberError},
@@ -5,8 +7,8 @@ use crate::{
 };
 use memchr::{memchr, memchr3};
 
-pub trait AsStaticStr {
-    fn as_str(&self) -> &'static str;
+pub trait AsStaticCow {
+    fn as_cow(&self) -> Cow<'static, str>;
 }
 
 pub fn split_on_new_line<'a>(bytes: &'a [u8]) -> ParsedByteSlice<'a, &'a [u8]> {
