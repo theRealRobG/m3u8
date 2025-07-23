@@ -96,26 +96,14 @@ where
 #[derive(Debug, Clone, PartialEq)]
 pub struct EnumeratedStringList<'a, T>
 where
-    T: TryFrom<&'a str, Error = UnrecognizedEnumerationError<'a>>
-        + AsStaticStr
-        + Clone
-        + Copy
-        + PartialEq
-        + Debug
-        + Display,
+    T: AsStaticStr + Clone + Copy + PartialEq + Debug + Display,
 {
     inner: Cow<'a, str>,
     t: PhantomData<T>,
 }
 impl<'a, T> EnumeratedStringList<'a, T>
 where
-    T: TryFrom<&'a str, Error = UnrecognizedEnumerationError<'a>>
-        + AsStaticStr
-        + Clone
-        + Copy
-        + PartialEq
-        + Debug
-        + Display,
+    T: AsStaticStr + Clone + Copy + PartialEq + Debug + Display,
 {
     pub fn contains(&self, value: impl Into<EnumeratedString<'a, T>>) -> bool {
         let value = value.into();
@@ -127,13 +115,6 @@ where
             .split(',')
             .find(|item| *item == value_str)
             .is_some()
-    }
-
-    pub fn iter(&'a self) -> EnumeratedStringListIter<'a, T> {
-        EnumeratedStringListIter {
-            inner: self.inner.split(','),
-            t: PhantomData::<T>,
-        }
     }
 
     pub fn insert<Item: Into<EnumeratedString<'a, T>>>(&mut self, value: Item) -> bool {
@@ -187,16 +168,14 @@ where
     pub fn to_string(&self) -> String {
         self.inner.to_string()
     }
+
+    pub fn to_owned<'b>(&self) -> EnumeratedStringList<'b, T> {
+        EnumeratedStringList::from(self.to_string())
+    }
 }
 impl<'a, T> AsRef<str> for EnumeratedStringList<'a, T>
 where
-    T: TryFrom<&'a str, Error = UnrecognizedEnumerationError<'a>>
-        + AsStaticStr
-        + Clone
-        + Copy
-        + PartialEq
-        + Debug
-        + Display,
+    T: AsStaticStr + Clone + Copy + PartialEq + Debug + Display,
 {
     fn as_ref(&self) -> &str {
         &self.inner
@@ -204,13 +183,7 @@ where
 }
 impl<'a, T> From<String> for EnumeratedStringList<'a, T>
 where
-    T: TryFrom<&'a str, Error = UnrecognizedEnumerationError<'a>>
-        + AsStaticStr
-        + Clone
-        + Copy
-        + PartialEq
-        + Debug
-        + Display,
+    T: AsStaticStr + Clone + Copy + PartialEq + Debug + Display,
 {
     fn from(value: String) -> Self {
         Self {
@@ -221,13 +194,7 @@ where
 }
 impl<'a, T> From<&'a str> for EnumeratedStringList<'a, T>
 where
-    T: TryFrom<&'a str, Error = UnrecognizedEnumerationError<'a>>
-        + AsStaticStr
-        + Clone
-        + Copy
-        + PartialEq
-        + Debug
-        + Display,
+    T: AsStaticStr + Clone + Copy + PartialEq + Debug + Display,
 {
     fn from(value: &'a str) -> Self {
         Self {
@@ -238,13 +205,7 @@ where
 }
 impl<'a, T> From<EnumeratedStringList<'a, T>> for Cow<'a, str>
 where
-    T: TryFrom<&'a str, Error = UnrecognizedEnumerationError<'a>>
-        + AsStaticStr
-        + Clone
-        + Copy
-        + PartialEq
-        + Debug
-        + Display,
+    T: AsStaticStr + Clone + Copy + PartialEq + Debug + Display,
 {
     fn from(value: EnumeratedStringList<'a, T>) -> Self {
         value.inner
@@ -252,13 +213,7 @@ where
 }
 impl<'a, T, S, const N: usize> From<[S; N]> for EnumeratedStringList<'a, T>
 where
-    T: TryFrom<&'a str, Error = UnrecognizedEnumerationError<'a>>
-        + AsStaticStr
-        + Clone
-        + Copy
-        + PartialEq
-        + Debug
-        + Display,
+    T: AsStaticStr + Clone + Copy + PartialEq + Debug + Display,
     S: Into<EnumeratedString<'a, T>>,
 {
     fn from(value: [S; N]) -> Self {
@@ -271,13 +226,7 @@ where
 }
 impl<'a, T, S> From<Vec<S>> for EnumeratedStringList<'a, T>
 where
-    T: TryFrom<&'a str, Error = UnrecognizedEnumerationError<'a>>
-        + AsStaticStr
-        + Clone
-        + Copy
-        + PartialEq
-        + Debug
-        + Display,
+    T: AsStaticStr + Clone + Copy + PartialEq + Debug + Display,
     S: Into<EnumeratedString<'a, T>>,
 {
     fn from(value: Vec<S>) -> Self {
@@ -286,6 +235,24 @@ where
             list.insert(item.into());
         }
         list
+    }
+}
+
+impl<'a, T> EnumeratedStringList<'a, T>
+where
+    T: TryFrom<&'a str, Error = UnrecognizedEnumerationError<'a>>
+        + AsStaticStr
+        + Clone
+        + Copy
+        + PartialEq
+        + Debug
+        + Display,
+{
+    pub fn iter(&'a self) -> EnumeratedStringListIter<'a, T> {
+        EnumeratedStringListIter {
+            inner: self.inner.split(','),
+            t: PhantomData::<T>,
+        }
     }
 }
 
