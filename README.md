@@ -61,13 +61,14 @@ use m3u8::{
 };
 use std::fmt::Debug;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum HlsLine<'a, CustomTag = NoCustomTag>
 where
     CustomTag: TryFrom<ParsedTag<'a>, Error = ValidationError>
         + IsKnownName
         + TagInformation
         + Debug
+        + Clone
         + PartialEq,
 {
     KnownTag(known::Tag<'a, CustomTag>),
@@ -143,7 +144,7 @@ pub struct Resolution {
 // To support multiple custom tags the preferred strategy is to encapsulate each within a single
 // enum. For this example I am only demonstrating an implementation for the media playlist tags
 // defined in the Roku developer docs.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum CustomImageTag<'a> {
     ImagesOnly,
     Tiles(Tiles<'a>),
@@ -200,7 +201,7 @@ impl<'a> TagInformation for CustomImageTag<'a> {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Tiles<'a> {
     pub resolution: Resolution,
     pub layout: Resolution,

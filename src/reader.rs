@@ -30,6 +30,7 @@ macro_rules! impl_reader {
                 + IsKnownName
                 + TagInformation
                 + Debug
+                + Clone
                 + PartialEq,
         {
             /// Creates a reader that supports custom tag parsing for the type specified by the
@@ -238,7 +239,7 @@ mod tests {
     }
 
     // Example custom tag implementation for the tests above.
-    #[derive(Debug, PartialEq)]
+    #[derive(Debug, PartialEq, Clone)]
     struct ExampleTag<'a> {
         answer: u64,
         question: &'a str,

@@ -57,7 +57,7 @@ pub mod targetduration;
 mod test_macro;
 pub mod version;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Tag<'a> {
     /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.1.1
     M3u(M3u),

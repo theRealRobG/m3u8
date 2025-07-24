@@ -112,7 +112,7 @@ where
     /// # use m3u8::tag::known::{ParsedTag, IsKnownName, TagInformation};
     /// # use m3u8::tag::value::{SemiParsedTagValue, UnparsedTagValue};
     /// # use m3u8::error::{ValidationError, ValidationErrorValueKind};
-    /// #[derive(Debug, PartialEq)]
+    /// #[derive(Debug, PartialEq, Clone)]
     /// struct ExampleCustomTag<'a> {
     ///     answer: u64,
     ///     original_value: &'a [u8],
@@ -165,6 +165,7 @@ where
             + IsKnownName
             + TagInformation
             + Debug
+            + Clone
             + PartialEq,
     {
         self.write_custom_line(HlsLine::from(tag))
@@ -181,6 +182,7 @@ where
             + IsKnownName
             + TagInformation
             + Debug
+            + Clone
             + PartialEq,
     {
         let mut count = 0usize;

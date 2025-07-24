@@ -10,7 +10,7 @@ use crate::{
 };
 use std::{cmp::PartialEq, fmt::Debug};
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 #[allow(clippy::large_enum_variant)] // See comment on crate::tag::known::Tag.
 pub enum HlsLine<'a, CustomTag = NoCustomTag>
 where
@@ -18,6 +18,7 @@ where
         + IsKnownName
         + TagInformation
         + Debug
+        + Clone
         + PartialEq,
 {
     KnownTag(known::Tag<'a, CustomTag>),
@@ -33,6 +34,7 @@ where
         + IsKnownName
         + TagInformation
         + Debug
+        + Clone
         + PartialEq,
 {
     fn from(tag: hls::Tag<'a>) -> Self {
@@ -46,6 +48,7 @@ where
         + IsKnownName
         + TagInformation
         + Debug
+        + Clone
         + PartialEq,
 {
     fn from(tag: CustomTag) -> Self {
@@ -59,6 +62,7 @@ where
         + IsKnownName
         + TagInformation
         + Debug
+        + Clone
         + PartialEq,
 {
     fn from(tag: unknown::Tag<'a>) -> Self {
@@ -88,6 +92,7 @@ macro_rules! impl_line_from_tag {
                 + IsKnownName
                 + TagInformation
                 + Debug
+                + Clone
                 + PartialEq,
         {
             fn from(tag: $tag_mod_path) -> Self {
@@ -174,6 +179,7 @@ where
         + IsKnownName
         + TagInformation
         + Debug
+        + Clone
         + PartialEq,
 {
     parse_bytes_with_custom(input.as_bytes(), options)
@@ -208,6 +214,7 @@ where
         + IsKnownName
         + TagInformation
         + Debug
+        + Clone
         + PartialEq,
 {
     if input.is_empty() {
@@ -330,7 +337,7 @@ mod tests {
     #[test]
     fn custom_tag() {
         // Set up custom tag
-        #[derive(Debug, PartialEq)]
+        #[derive(Debug, PartialEq, Clone)]
         struct TestTag<'a> {
             greeting_type: &'a str,
             message: &'a str,
