@@ -303,6 +303,292 @@ assert_eq!(
 assert_eq!(reader.read_line(), Ok(Some(HlsLine::Uri("image.1.jpeg"))));
 ```
 
+### Enumerated strings
+
+HLS defines an `enumerated-string` in
+[section 4.2](https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.2) as:
+>*  enumerated-string: an unquoted character string from a set that is
+>   explicitly defined by the AttributeName.  An enumerated-string
+>   will never contain double quotes ("), commas (,), or whitespace.
+
+By principle, this library is very lax on validation, and does not want to get in the way of
+extracting information from playlists being parsed if it detects issues. As such, for enumerated
+string attributes, we do not restrict to only the defined enumerated values; however, the library
+does provide a convenience type for reasoning about the known values, while also exposing any that
+are found which are unknown. The library has made best efforts to be convenient about the usage of
+enumerated strings (in terms of strong typing) while still maintaining the flexibility of being
+forward compatible against new cases introduced in specification updates (or just custom or bad
+content).
+
+Below is an example demonstrating the flexibility as applied to the `VideoRange` enumerated string
+on the `EXT-X-STREAM-INF` tag:
+```rust
+use m3u8::{
+    Reader,
+    config::ParsingOptionsBuilder,
+    line::HlsLine,
+    tag::{
+        hls::{self, EnumeratedString, stream_inf::VideoRange},
+        known,
+    },
+};
+
+let mut reader = Reader::from_str(
+    "#EXT-X-STREAM-INF:BANDWIDTH=10000000,VIDEO-RANGE=SDR",
+    ParsingOptionsBuilder::new()
+        .with_parsing_for_stream_inf()
+        .build(),
+);
+match reader.read_line() {
+    Ok(Some(HlsLine::KnownTag(known::Tag::Hls(hls::Tag::StreamInf(mut tag))))) => {
+        // You can see that the value is strongly typed using the VideoRange enum.
+        assert_eq!(
+            Some(EnumeratedString::Known(VideoRange::Sdr)),
+            tag.video_range()
+        );
+        // We can set the value on the tag to whatever we want (impl Into<Cow<str>>).
+        tag.set_video_range("EXAMPLE");
+        // Now we can see that we still can obtain the underlying value even though it is
+        // unknown to the library.
+        assert_eq!(
+            Some(EnumeratedString::Unknown("EXAMPLE")),
+            tag.video_range()
+        );
+        // All of the `EnumeratedString` implementations also implement `Into<Cow<str>>`.
+        // This means that they can be used to set values on tags. Moreover, all of the
+        // known types that `EnumeratedString` has wrapped also implement `Into<Cow<str>>`,
+        // and so those can be used directly when setting values.
+        tag.set_video_range(VideoRange::Pq);
+        assert_eq!(
+            Some(EnumeratedString::Known(VideoRange::Pq)),
+            tag.video_range()
+        );
+    }
+    _ => panic!("oh no, my demo failed"),
+}
+```
+
+### Enumerated string lists
+
+HLS defines an `enumerated-string-list` in
+[section 4.2](https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.2) as:
+>*  enumerated-string-list: a quoted-string containing a comma-
+>   separated list of enumerated-strings from a set that is explicitly
+>   defined by the AttributeName.  Each enumerated-string in the list
+>   is a string consisting of characters valid in an enumerated-
+>   string.  The list SHOULD NOT repeat any enumerated-string.  To
+>   support forward compatibility, clients MUST ignore any
+>   unrecognized enumerated-strings in an enumerated-string-list.
+
+Similar to the reasoning given above for `EnumeratedString` the library also aims to be flexible in
+how these values are exposed. With string lists, there is an extra goal, that the library does not
+want to unconditionally penalize performance for the added convenience, and so we've avoided using a
+`Vec<T>` as it would introduce a heap allocation (just to read the string slice). The library
+provides the `EnumeratedStringList` struct as a wrapper around the string contents to provide access
+to enumerated values within (as split by `,`). The `contains` method provides a way to check if a
+value exists in the list, and the `is_empty` method checks if there are any values in the list. For
+convenience of mutating existing values on a tag, the `insert` and `remove` methods have been
+provided, but normally to use this `to_owned` will also have to be called (`clone` is not enough),
+as otherwise Rust will not allow mutation with an existing reference to tag data (a custom
+`to_owned` method was introduced that erases the existing lifetimes to new ones so that it severs
+the link from the tag).
+
+Below is an example demonstrating the flexibility as applied to the `Cue` enumerated string list on
+the `EXT-X-DATERANGE` tag:
+```rust
+use m3u8::{
+    Reader,
+    config::ParsingOptionsBuilder,
+    line::HlsLine,
+    tag::{
+        hls::{self, EnumeratedString, EnumeratedStringList, daterange::Cue},
+        known,
+    },
+};
+
+let mut reader = Reader::from_str(
+    r#"#EXT-X-DATERANGE:ID="1",START-DATE="2025-07-24T15:26:34.000Z",CUE="ONCE""#,
+    ParsingOptionsBuilder::new()
+        .with_parsing_for_daterange()
+        .build(),
+);
+match reader.read_line() {
+    Ok(Some(HlsLine::KnownTag(known::Tag::Hls(hls::Tag::Daterange(mut tag))))) => {
+        // Since the `contains` method accepts `impl Into<Cow<str>>`, and all of the library
+        // implementations of `EnumeratedString` also implement `Into<Cow<str>>`, we can use
+        // the enumeration directly to validate if a value is contained within the list. The
+        // following are essentially equivalent
+        assert!(tag.cue().unwrap().contains(Cue::Once));
+        assert!(tag.cue().unwrap().contains(EnumeratedString::Known(Cue::Once)));
+        assert!(tag.cue().unwrap().contains("ONCE"));
+        // We can set the value on the tag to whatever we want (impl Into<Cow<str>>).
+        tag.set_cue("ONE,TWO,THREE");
+        // We can still access the enumerated string list methods as expected.
+        let mut cue = tag.cue().unwrap();
+        assert!(cue.contains("ONE"));
+        assert!(cue.contains("TWO"));
+        assert!(cue.contains("THREE"));
+        // We can also mutate the string list (even with these custom values) and mix in
+        // known values (again, because it's all based on Cow<str> underneath).
+        cue.remove("TWO");
+        cue.insert(Cue::Post);
+        assert!(!cue.contains("TWO"));
+        assert!(cue.contains(Cue::Post));
+        // At any stage we can escape hatch out of the string list to work with the inner
+        // Cow<str>
+        assert_eq!("ONE,THREE,POST", cue.as_ref());
+        // We can now set our mutated `cue` back onto the tag; however, we must call
+        // `to_owned` first.
+        tag.set_cue(cue.to_owned());
+        assert_eq!("ONE,THREE,POST", tag.cue().unwrap().as_ref());
+        // We can also construct completely new enumerated string lists, and the library
+        // provides a few convenience `Into` implementations to make this easier. The
+        // following are essentially equivalent (though the `Vec` approach means a heap
+        // allocation, while using an array (if the size is known) can avoid this).
+        tag.set_cue(EnumeratedStringList::from([Cue::Pre, Cue::Once]));
+        assert_eq!("PRE,ONCE", tag.cue().unwrap().as_ref());
+        tag.set_cue(EnumeratedStringList::from(vec![Cue::Pre, Cue::Once]));
+        assert_eq!("PRE,ONCE", tag.cue().unwrap().as_ref());
+        tag.set_cue(EnumeratedStringList::<Cue>::from("PRE,ONCE"));
+        assert_eq!("PRE,ONCE", tag.cue().unwrap().as_ref());
+    }
+    _ => panic!("oh no, my demo failed"),
+}
+```
+
+### Slash separated lists
+
+HLS defines a few attribute values using "slash separated lists". This library currently supports
+(strongly types) the `EXT-X-MEDIA:CHANNELS` attribute and the `EXT-X-STREAM-INF:REQ-VIDEO-LAYOUT`
+attribute. In the future it may also add support for `EXT-X-STREAM-INF:ALLOWED-CPC`. The support for
+each of these are built on top of what has been discussed above for `EnumeratedString` and
+`EnumeratedStringList`.
+
+Below is a demonstration of the features that each wrapping type provides:
+```rust
+use m3u8::{
+    Reader,
+    config::ParsingOptionsBuilder,
+    line::HlsLine,
+    tag::{
+        hls::{
+            self,
+            media::{
+                AudioCodingIdentifier, ChannelSpecialUsageIdentifier, Channels, ValidChannels,
+            },
+            stream_inf::{VideoChannelSpecifier, VideoProjectionSpecifier},
+        },
+        known,
+    },
+};
+
+let tags = concat!(
+    r#"#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="A",NAME="A",URI="a.m3u8",CHANNELS="2""#,
+    "\n",
+    r#"#EXT-X-STREAM-INF:BANDWIDTH=10000000,REQ-VIDEO-LAYOUT="CH-STEREO""#,
+);
+let mut reader = Reader::from_str(
+    tags,
+    ParsingOptionsBuilder::new()
+        .with_parsing_for_media()
+        .with_parsing_for_stream_inf()
+        .build(),
+);
+match reader.read_line() {
+    Ok(Some(HlsLine::KnownTag(known::Tag::Hls(hls::Tag::Media(mut tag))))) => {
+        // Since channels must provide a valid count, the return value is `Channels` which
+        // is an enum that has a `Valid` and `Invalid` case. To use the `Valid` case this
+        // must be extracted.
+        let channels = tag.channels();
+        let valid_channels = channels.as_ref().and_then(|c| c.valid()).unwrap();
+        assert_eq!(2, valid_channels.count());
+        assert!(valid_channels.spatial_audio().is_empty());
+        assert!(valid_channels.special_usage().is_empty());
+        // The library supports the newly defined OA (order of ambisonics), BED, and DOF
+        // (degrees of freedom) identifiers.
+        tag.set_channels("16/3OA/BED-4,DOF-6");
+        let channels = tag.channels();
+        let valid_channels = channels.as_ref().and_then(|c| c.valid()).unwrap();
+        assert_eq!(16, valid_channels.count());
+        assert!(
+            valid_channels
+                .spatial_audio()
+                .contains(AudioCodingIdentifier::OrderOfAmbisonics(3))
+        );
+        assert!(
+            valid_channels
+                .special_usage()
+                .contains(ChannelSpecialUsageIdentifier::Bed(4))
+        );
+        assert!(
+            valid_channels
+                .special_usage()
+                .contains(ChannelSpecialUsageIdentifier::DegreesOfFreedom(6))
+        );
+        // Since it's all built on top of enumerated string lists discussed above, the same
+        // convenience initializers exist.
+        tag.set_channels(Channels::Valid(ValidChannels::new(
+            12,
+            [AudioCodingIdentifier::JointObjectCoding],
+            [ChannelSpecialUsageIdentifier::Binaural],
+        )));
+        assert_eq!("12/JOC/BINAURAL", tag.channels().unwrap().as_ref());
+    }
+    _ => panic!("oh no, my demo failed"),
+}
+match reader.read_line() {
+    Ok(Some(HlsLine::KnownTag(known::Tag::Hls(hls::Tag::StreamInf(mut tag))))) => {
+        // REQ-VIDEO-LAYOUT has no mandatory parameters and so there is no "valid/invalid"
+        // wrapping enum.
+        let video_layout = tag.req_video_layout().unwrap();
+        assert!(
+            video_layout
+                .channels()
+                .contains(VideoChannelSpecifier::Stereo)
+        );
+        assert!(video_layout.projection().is_empty());
+        // The library supports the newly defined projection specifiers.
+        tag.set_req_video_layout("CH-STEREO/PROJ-PRIM");
+        let video_layout = tag.req_video_layout().unwrap();
+        assert!(
+            video_layout
+                .channels()
+                .contains(VideoChannelSpecifier::Stereo)
+        );
+        assert!(
+            video_layout
+                .projection()
+                .contains(VideoProjectionSpecifier::ParametricImmersive)
+        );
+        // HLS defines that the slash separated usage identifier entries list is unordered,
+        // which is why values from each entry have a common prefix. The library accounts
+        // for this and makes no assumption on ordering of entries.
+        tag.set_req_video_layout("PROJ-PRIM/CH-STEREO");
+        let video_layout = tag.req_video_layout().unwrap();
+        assert!(
+            video_layout
+                .channels()
+                .contains(VideoChannelSpecifier::Stereo)
+        );
+        assert!(
+            video_layout
+                .projection()
+                .contains(VideoProjectionSpecifier::ParametricImmersive)
+        );
+        // To support forwards compatibility while still maintaining useful strong types for
+        // what we know today, the `VideoLayout` also exposes any unknown entries via an
+        // iterator (that is a filter on a `Split<char>` removing entries prefixed with
+        // `"CH"` and `"PROJ"`).
+        tag.set_req_video_layout("AA-HELLO/BB-WORLD");
+        let video_layout = tag.req_video_layout().unwrap();
+        let mut unknown_entries = video_layout.unknown_entries();
+        assert_eq!(Some("AA-HELLO"), unknown_entries.next());
+        assert_eq!(Some("BB-WORLD"), unknown_entries.next());
+    }
+    _ => panic!("oh no, my demo failed"),
+}
+```
+
 ## Configuring known tags for parsing
 
 The parsing function allows the user to specify a subset of the known HLS tags that they would like
