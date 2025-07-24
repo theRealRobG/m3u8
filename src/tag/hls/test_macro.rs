@@ -51,7 +51,7 @@ macro_rules! mutation_test {
             }
         }
     };
-    ($init:expr, $field:ident, $val:expr; @Default=$default:literal, @Attr=$attr:literal) => {
+    ($init:expr, $field:ident, $val:expr; @Default=$default:expr, @Attr=$attr:literal) => {
         paste::paste! {
             #[test]
             fn [<set_ $field>]() {
@@ -225,7 +225,7 @@ macro_rules! mutation_tests {
         (,
             (
                 $field:ident,
-                $(@$opt:ident )?$val:expr$( => @Expected=$exp:expr)?$(; @Default=$default:literal)?,
+                $(@$opt:ident )?$val:expr$( => @Expected=$exp:expr)?$(; @Default=$default:expr)?,
                 @Attr=$attr:literal
             )
         )+

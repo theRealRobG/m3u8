@@ -1,12 +1,56 @@
 use crate::{
-    error::{ValidationError, ValidationErrorValueKind},
+    error::{UnrecognizedEnumerationError, ValidationError, ValidationErrorValueKind},
     tag::{
-        hls::TagInner,
+        hls::{EnumeratedString, TagInner},
         known::ParsedTag,
         value::{ParsedAttributeValue, SemiParsedTagValue},
     },
+    utils::AsStaticCow,
 };
-use std::{borrow::Cow, collections::HashMap};
+use std::{borrow::Cow, collections::HashMap, fmt::Display};
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Format {
+    /// The URI MUST reference a JSON (RFC8259) format file.
+    Json,
+    /// The URI SHALL be treated as a binary file.
+    Raw,
+}
+impl<'a> TryFrom<&'a str> for Format {
+    type Error = UnrecognizedEnumerationError<'a>;
+    fn try_from(value: &'a str) -> Result<Self, Self::Error> {
+        match value {
+            JSON => Ok(Self::Json),
+            RAW => Ok(Self::Raw),
+            _ => Err(UnrecognizedEnumerationError::new(value)),
+        }
+    }
+}
+impl Display for Format {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_cow())
+    }
+}
+impl AsStaticCow for Format {
+    fn as_cow(&self) -> Cow<'static, str> {
+        match self {
+            Self::Json => Cow::Borrowed(JSON),
+            Self::Raw => Cow::Borrowed(RAW),
+        }
+    }
+}
+impl From<Format> for Cow<'_, str> {
+    fn from(value: Format) -> Self {
+        value.as_cow()
+    }
+}
+impl From<Format> for EnumeratedString<'_, Format> {
+    fn from(value: Format) -> Self {
+        Self::Known(value)
+    }
+}
+const JSON: &str = "JSON";
+const RAW: &str = "RAW";
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct SessionDataAttributeList<'a> {
@@ -173,13 +217,13 @@ impl<'a> SessionData<'a> {
         }
     }
 
-    pub fn format(&self) -> &str {
+    pub fn format(&self) -> EnumeratedString<Format> {
         if let Some(format) = &self.format {
-            format
+            EnumeratedString::from(format.as_ref())
         } else {
             match self.attribute_list.get(FORMAT) {
-                Some(ParsedAttributeValue::UnquotedString(s)) => s,
-                _ => "JSON",
+                Some(ParsedAttributeValue::UnquotedString(s)) => EnumeratedString::from(*s),
+                _ => EnumeratedString::Known(Format::Json),
             }
         }
     }
@@ -251,7 +295,11 @@ impl<'a> SessionData<'a> {
 
     fn recalculate_output_line(&mut self) {
         let format = self.format();
-        let format = if format == "JSON" { None } else { Some(format) };
+        let format = if format == EnumeratedString::Known(Format::Json) {
+            None
+        } else {
+            Some(format)
+        };
         self.output_line = Cow::Owned(calculate_line(&SessionDataAttributeList {
             data_id: self.data_id().into(),
             value: self.value().map(|x| x.into()),
@@ -336,6 +384,10 @@ mod tests {
         (data_id, "abcd", @Attr="DATA-ID=\"abcd\""),
         (language, @Option "es", @Attr="LANGUAGE=\"es\""),
         (uri, @Option "example.bin", @Attr="URI=\"example.bin\""),
-        (format, "INVALID"; @Default="JSON", @Attr="FORMAT=INVALID")
+        (
+            format,
+            EnumeratedString::<Format>::Unknown("INVALID");
+            @Default=EnumeratedString::Known(Format::Json),
+            @Attr="FORMAT=INVALID")
     );
 }
