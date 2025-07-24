@@ -1,12 +1,291 @@
 use crate::{
-    error::{ValidationError, ValidationErrorValueKind},
+    error::{UnrecognizedEnumerationError, ValidationError, ValidationErrorValueKind},
     tag::{
-        hls::TagInner,
+        hls::{EnumeratedString, EnumeratedStringList, TagInner},
         known::ParsedTag,
         value::{DecimalResolution, ParsedAttributeValue, SemiParsedTagValue},
     },
+    utils::AsStaticCow,
 };
-use std::{borrow::Cow, collections::HashMap};
+use std::{borrow::Cow, collections::HashMap, fmt::Display};
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum HdcpLevel {
+    /// Indicates that the content does not require output copy protection.
+    None,
+    /// Indicates that the Variant Stream could fail to play unless the output is protected by
+    /// High-bandwidth Digital Content Protection (HDCP) Type 0 or equivalent.
+    Type0,
+    /// Indicates that the Variant Stream could fail to play unless the output is protected by HDCP
+    /// Type 1 or equivalent.
+    Type1,
+}
+impl<'a> TryFrom<&'a str> for HdcpLevel {
+    type Error = UnrecognizedEnumerationError<'a>;
+    fn try_from(value: &'a str) -> Result<Self, Self::Error> {
+        match value {
+            NONE => Ok(Self::None),
+            TYPE_0 => Ok(Self::Type0),
+            TYPE_1 => Ok(Self::Type1),
+            _ => Err(UnrecognizedEnumerationError::new(value)),
+        }
+    }
+}
+impl Display for HdcpLevel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_cow())
+    }
+}
+impl AsStaticCow for HdcpLevel {
+    fn as_cow(&self) -> Cow<'static, str> {
+        match self {
+            Self::None => Cow::Borrowed(NONE),
+            Self::Type0 => Cow::Borrowed(TYPE_0),
+            Self::Type1 => Cow::Borrowed(TYPE_1),
+        }
+    }
+}
+impl From<HdcpLevel> for Cow<'_, str> {
+    fn from(value: HdcpLevel) -> Self {
+        value.as_cow()
+    }
+}
+impl From<HdcpLevel> for EnumeratedString<'_, HdcpLevel> {
+    fn from(value: HdcpLevel) -> Self {
+        Self::Known(value)
+    }
+}
+const NONE: &str = "NONE";
+const TYPE_0: &str = "TYPE-0";
+const TYPE_1: &str = "TYPE-1";
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum VideoRange {
+    /// The video in the Variant Stream is encoded using one of the following reference
+    /// opto-electronic transfer characteristic functions specified by the TransferCharacteristics
+    /// code point: 1, 6, 13, 14, 15. Note that different TransferCharacteristics code points can
+    /// use the same transfer function.
+    Sdr,
+    /// The video in the Variant Stream is encoded using a reference opto-electronic transfer
+    /// characteristic function specified by the TransferCharacteristics code point 18, or consists
+    /// of such video mixed with video qualifying as SDR (see above).
+    Hlg,
+    /// The video in the Variant Stream is encoded using a reference opto-electronic transfer
+    /// characteristic function specified by the TransferCharacteristics code point 16, or consists
+    /// of such video mixed with video qualifying as SDR or HLG (see above).
+    Pq,
+}
+impl<'a> TryFrom<&'a str> for VideoRange {
+    type Error = UnrecognizedEnumerationError<'a>;
+    fn try_from(value: &'a str) -> Result<Self, Self::Error> {
+        match value {
+            SDR => Ok(Self::Sdr),
+            HLG => Ok(Self::Hlg),
+            PQ => Ok(Self::Pq),
+            _ => Err(UnrecognizedEnumerationError::new(value)),
+        }
+    }
+}
+impl Display for VideoRange {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_cow())
+    }
+}
+impl AsStaticCow for VideoRange {
+    fn as_cow(&self) -> Cow<'static, str> {
+        match self {
+            Self::Sdr => Cow::Borrowed(SDR),
+            Self::Hlg => Cow::Borrowed(HLG),
+            Self::Pq => Cow::Borrowed(PQ),
+        }
+    }
+}
+impl From<VideoRange> for Cow<'_, str> {
+    fn from(value: VideoRange) -> Self {
+        value.as_cow()
+    }
+}
+impl From<VideoRange> for EnumeratedString<'_, VideoRange> {
+    fn from(value: VideoRange) -> Self {
+        Self::Known(value)
+    }
+}
+const SDR: &str = "SDR";
+const HLG: &str = "HLG";
+const PQ: &str = "PQ";
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum VideoChannelSpecifier {
+    /// Indicates that both left and right eye images are present (stereoscopic).
+    Stereo,
+    /// Indicates that a single image is present (monoscopic).
+    Mono,
+}
+impl<'a> TryFrom<&'a str> for VideoChannelSpecifier {
+    type Error = UnrecognizedEnumerationError<'a>;
+    fn try_from(value: &'a str) -> Result<Self, Self::Error> {
+        match value {
+            CH_STEREO => Ok(Self::Stereo),
+            CH_MONO => Ok(Self::Mono),
+            _ => Err(UnrecognizedEnumerationError::new(value)),
+        }
+    }
+}
+impl Display for VideoChannelSpecifier {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_cow())
+    }
+}
+impl AsStaticCow for VideoChannelSpecifier {
+    fn as_cow(&self) -> Cow<'static, str> {
+        match self {
+            Self::Stereo => Cow::Borrowed(CH_STEREO),
+            Self::Mono => Cow::Borrowed(CH_MONO),
+        }
+    }
+}
+impl From<VideoChannelSpecifier> for Cow<'_, str> {
+    fn from(value: VideoChannelSpecifier) -> Self {
+        value.as_cow()
+    }
+}
+impl From<VideoChannelSpecifier> for EnumeratedString<'_, VideoChannelSpecifier> {
+    fn from(value: VideoChannelSpecifier) -> Self {
+        Self::Known(value)
+    }
+}
+const CH_STEREO: &str = "CH-STEREO";
+const CH_MONO: &str = "CH-MONO";
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum VideoProjectionSpecifier {
+    /// Indicates that there is no projection.
+    Rectilinear,
+    /// Indicates a 360 degree spherical projection.
+    Equirectangular,
+    /// Indicates a 180 degree spherical projection.
+    HalfEquirectangular,
+    /// Indicates that the image is a parametric spherical projection.
+    ParametricImmersive,
+}
+impl<'a> TryFrom<&'a str> for VideoProjectionSpecifier {
+    type Error = UnrecognizedEnumerationError<'a>;
+    fn try_from(value: &'a str) -> Result<Self, Self::Error> {
+        match value {
+            PROJ_RECT => Ok(Self::Rectilinear),
+            PROJ_EQUI => Ok(Self::Equirectangular),
+            PROJ_HEQU => Ok(Self::HalfEquirectangular),
+            PROJ_PRIM => Ok(Self::ParametricImmersive),
+            _ => Err(UnrecognizedEnumerationError::new(value)),
+        }
+    }
+}
+impl Display for VideoProjectionSpecifier {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_cow())
+    }
+}
+impl AsStaticCow for VideoProjectionSpecifier {
+    fn as_cow(&self) -> Cow<'static, str> {
+        match self {
+            Self::Rectilinear => Cow::Borrowed(PROJ_RECT),
+            Self::Equirectangular => Cow::Borrowed(PROJ_EQUI),
+            Self::HalfEquirectangular => Cow::Borrowed(PROJ_HEQU),
+            Self::ParametricImmersive => Cow::Borrowed(PROJ_PRIM),
+        }
+    }
+}
+impl From<VideoProjectionSpecifier> for Cow<'_, str> {
+    fn from(value: VideoProjectionSpecifier) -> Self {
+        value.as_cow()
+    }
+}
+impl From<VideoProjectionSpecifier> for EnumeratedString<'_, VideoProjectionSpecifier> {
+    fn from(value: VideoProjectionSpecifier) -> Self {
+        Self::Known(value)
+    }
+}
+const PROJ_RECT: &str = "PROJ-RECT";
+const PROJ_EQUI: &str = "PROJ-EQUI";
+const PROJ_HEQU: &str = "PROJ-HEQU";
+const PROJ_PRIM: &str = "PROJ-PRIM";
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct VideoLayout<'a> {
+    inner: Cow<'a, str>,
+}
+impl<'a> VideoLayout<'a> {
+    pub fn new(
+        channels: impl Into<EnumeratedStringList<'a, VideoChannelSpecifier>>,
+        projection: impl Into<EnumeratedStringList<'a, VideoProjectionSpecifier>>,
+    ) -> Self {
+        let channels = channels.into();
+        let projection = projection.into();
+        let projection_empty = projection.is_empty();
+        let channels_empty = channels.is_empty();
+        let inner = match (channels_empty, projection_empty) {
+            (true, true) => Cow::Borrowed(""),
+            (true, false) => Cow::Owned(format!("{projection}")),
+            (false, true) => Cow::Owned(format!("{channels}")),
+            (false, false) => Cow::Owned(format!("{channels}/{projection}")),
+        };
+        Self { inner }
+    }
+}
+impl VideoLayout<'_> {
+    /// Defines the video channels.
+    pub fn channels(&self) -> EnumeratedStringList<VideoChannelSpecifier> {
+        let mut split = self.inner.split('/');
+        while let Some(entries) = split.next() {
+            if entries.starts_with("CH") {
+                return EnumeratedStringList::from(entries);
+            }
+        }
+        EnumeratedStringList::from("")
+    }
+    /// Defines how a two-dimensional rectangular image must be transformed in order to display it
+    /// faithfully to a viewer.
+    pub fn projection(&self) -> EnumeratedStringList<VideoProjectionSpecifier> {
+        let mut split = self.inner.split('/');
+        while let Some(entries) = split.next() {
+            if entries.starts_with("PROJ") {
+                return EnumeratedStringList::from(entries);
+            }
+        }
+        EnumeratedStringList::from("")
+    }
+    /// At the time of writing the HLS specification only defined 2 entries (described here via
+    /// [`Self::channels`] and [`Self::projection`]). In case more entries are added later, this
+    /// method will expose those as a split on `'/'`, filtered to remove the `channels` and
+    /// `projection` parts.
+    pub fn unknown_entries(&self) -> impl Iterator<Item = &str> {
+        self.inner
+            .split('/')
+            .filter(|entries| !entries.starts_with("CH") && !entries.starts_with("PROJ"))
+    }
+}
+impl<'a> From<&'a str> for VideoLayout<'a> {
+    fn from(value: &'a str) -> Self {
+        Self {
+            inner: Cow::Borrowed(value),
+        }
+    }
+}
+impl Display for VideoLayout<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_ref())
+    }
+}
+impl AsRef<str> for VideoLayout<'_> {
+    fn as_ref(&self) -> &str {
+        &self.inner
+    }
+}
+impl<'a> From<VideoLayout<'a>> for Cow<'a, str> {
+    fn from(value: VideoLayout<'a>) -> Self {
+        value.inner
+    }
+}
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct StreamInfAttributeList<'a> {
@@ -386,12 +665,12 @@ impl<'a> StreamInf<'a> {
         }
     }
 
-    pub fn hdcp_level(&self) -> Option<&str> {
+    pub fn hdcp_level(&self) -> Option<EnumeratedString<HdcpLevel>> {
         if let Some(hdcp_level) = &self.hdcp_level {
-            Some(hdcp_level)
+            Some(EnumeratedString::from(hdcp_level.as_ref()))
         } else {
             match self.attribute_list.get(HDCP_LEVEL) {
-                Some(ParsedAttributeValue::UnquotedString(s)) => Some(s),
+                Some(ParsedAttributeValue::UnquotedString(s)) => Some(EnumeratedString::from(*s)),
                 _ => None,
             }
         }
@@ -408,23 +687,23 @@ impl<'a> StreamInf<'a> {
         }
     }
 
-    pub fn video_range(&self) -> Option<&str> {
+    pub fn video_range(&self) -> Option<EnumeratedString<VideoRange>> {
         if let Some(video_range) = &self.video_range {
-            Some(video_range)
+            Some(EnumeratedString::from(video_range.as_ref()))
         } else {
             match self.attribute_list.get(VIDEO_RANGE) {
-                Some(ParsedAttributeValue::UnquotedString(s)) => Some(s),
+                Some(ParsedAttributeValue::UnquotedString(s)) => Some(EnumeratedString::from(*s)),
                 _ => None,
             }
         }
     }
 
-    pub fn req_video_layout(&self) -> Option<&str> {
+    pub fn req_video_layout(&self) -> Option<VideoLayout> {
         if let Some(req_video_layout) = &self.req_video_layout {
-            Some(req_video_layout)
+            Some(VideoLayout::from(req_video_layout.as_ref()))
         } else {
             match self.attribute_list.get(REQ_VIDEO_LAYOUT) {
-                Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
+                Some(ParsedAttributeValue::QuotedString(s)) => Some(VideoLayout::from(*s)),
                 _ => None,
             }
         }
@@ -872,6 +1151,68 @@ mod tests {
         )
     }
 
+    #[test]
+    fn new_view_presentation_entries_displays_as_expected() {
+        assert_eq!(
+            "CH-STEREO",
+            format!("{}", VideoLayout::new([VideoChannelSpecifier::Stereo], ""))
+        );
+        assert_eq!(
+            "CH-MONO,CH-STEREO",
+            format!(
+                "{}",
+                VideoLayout::new(
+                    [VideoChannelSpecifier::Mono, VideoChannelSpecifier::Stereo],
+                    ""
+                )
+            )
+        );
+        assert_eq!(
+            "PROJ-EQUI",
+            format!(
+                "{}",
+                VideoLayout::new("", [VideoProjectionSpecifier::Equirectangular])
+            )
+        );
+        assert_eq!(
+            "CH-STEREO/PROJ-PRIM",
+            format!(
+                "{}",
+                VideoLayout::new(
+                    [VideoChannelSpecifier::Stereo],
+                    [VideoProjectionSpecifier::ParametricImmersive]
+                )
+            )
+        );
+    }
+
+    #[test]
+    fn view_presentation_entries_ordering_does_not_matter() {
+        let entries = VideoLayout::from("CH-STEREO/PROJ-HEQU");
+        assert!(
+            entries.channels().contains(VideoChannelSpecifier::Stereo),
+            "should contain Stereo entry"
+        );
+        assert!(
+            entries
+                .projection()
+                .contains(VideoProjectionSpecifier::HalfEquirectangular),
+            "should contain HalfEqurectangular entry"
+        );
+
+        let entries = VideoLayout::from("PROJ-HEQU/CH-STEREO");
+        assert!(
+            entries.channels().contains(VideoChannelSpecifier::Stereo),
+            "should contain Stereo entry"
+        );
+        assert!(
+            entries
+                .projection()
+                .contains(VideoProjectionSpecifier::HalfEquirectangular),
+            "should contain HalfEqurectangular entry"
+        );
+    }
+
     mutation_tests!(
         StreamInf::builder(10000000)
             .with_average_bandwidth(9000000)
@@ -901,10 +1242,14 @@ mod tests {
         (supplemental_codecs, @Option "example", @Attr="SUPPLEMENTAL-CODECS=\"example\""),
         (resolution, @Option DecimalResolution { width: 2, height: 4 }, @Attr="RESOLUTION=2x4"),
         (frame_rate, @Option 60.0, @Attr="FRAME-RATE=60"),
-        (hdcp_level, @Option "NONE", @Attr="HDCP-LEVEL=NONE"),
+        (hdcp_level, @Option EnumeratedString::Known(HdcpLevel::None), @Attr="HDCP-LEVEL=NONE"),
         (allowed_cpc, @Option "example", @Attr="ALLOWED-CPC=\"example\""),
-        (video_range, @Option "HLG", @Attr="VIDEO-RANGE=HLG"),
-        (req_video_layout, @Option "CH-STEREO", @Attr="REQ-VIDEO-LAYOUT=\"CH-STEREO\""),
+        (video_range, @Option EnumeratedString::Known(VideoRange::Hlg), @Attr="VIDEO-RANGE=HLG"),
+        (
+            req_video_layout,
+            @Option VideoLayout::new([VideoChannelSpecifier::Stereo], ""),
+            @Attr="REQ-VIDEO-LAYOUT=\"CH-STEREO\""
+        ),
         (stable_variant_id, @Option "abcd", @Attr="STABLE-VARIANT-ID=\"abcd\""),
         (audio, @Option "stereo", @Attr="AUDIO=\"stereo\""),
         (video, @Option "video", @Attr="VIDEO=\"video\""),
