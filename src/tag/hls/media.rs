@@ -1,12 +1,457 @@
 use crate::{
-    error::{ValidationError, ValidationErrorValueKind},
+    error::{UnrecognizedEnumerationError, ValidationError, ValidationErrorValueKind},
     tag::{
-        hls::TagInner,
+        hls::{EnumeratedString, EnumeratedStringList, TagInner},
         known::ParsedTag,
         value::{ParsedAttributeValue, SemiParsedTagValue},
     },
+    utils::AsStaticCow,
 };
-use std::{borrow::Cow, collections::HashMap};
+use std::{borrow::Cow, collections::HashMap, fmt::Display, str::Split};
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Type {
+    /// Specifies an audio rendition.
+    Audio,
+    /// Specifies a video rendition.
+    Video,
+    /// Specifies a subtitles rendition.
+    Subtitles,
+    /// Typically, closed-caption media is carried in the video stream. Therefore, an EXT-X-MEDIA
+    /// tag with TYPE of CLOSED-CAPTIONS does not specify a Rendition; the closed-caption media is
+    /// present in the Media Segments of every video Rendition.
+    ClosedCaptions,
+}
+impl<'a> TryFrom<&'a str> for Type {
+    type Error = UnrecognizedEnumerationError<'a>;
+    fn try_from(value: &'a str) -> Result<Self, Self::Error> {
+        match value {
+            AUDIO => Ok(Self::Audio),
+            VIDEO => Ok(Self::Video),
+            SUBTITLES => Ok(Self::Subtitles),
+            CLOSED_CAPTIONS => Ok(Self::ClosedCaptions),
+            _ => Err(UnrecognizedEnumerationError::new(value)),
+        }
+    }
+}
+impl Display for Type {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_cow())
+    }
+}
+impl AsStaticCow for Type {
+    fn as_cow(&self) -> Cow<'static, str> {
+        match self {
+            Type::Audio => Cow::Borrowed(AUDIO),
+            Type::Video => Cow::Borrowed(VIDEO),
+            Type::Subtitles => Cow::Borrowed(SUBTITLES),
+            Type::ClosedCaptions => Cow::Borrowed(CLOSED_CAPTIONS),
+        }
+    }
+}
+impl From<Type> for Cow<'_, str> {
+    fn from(value: Type) -> Self {
+        value.as_cow()
+    }
+}
+impl From<Type> for EnumeratedString<'_, Type> {
+    fn from(value: Type) -> Self {
+        Self::Known(value)
+    }
+}
+const AUDIO: &str = "AUDIO";
+const VIDEO: &str = "VIDEO";
+const SUBTITLES: &str = "SUBTITLES";
+const CLOSED_CAPTIONS: &str = "CLOSED-CAPTIONS";
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Cea608InstreamId {
+    Cc1,
+    Cc2,
+    Cc3,
+    Cc4,
+}
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum InstreamId {
+    /// The value identifies a Line 21 Data Services (CEA608) channel.
+    Cea608(Cea608InstreamId),
+    /// The value identifies a Digital Television Closed Captioning (CEA708) service block number.
+    Cea708(u8),
+}
+impl<'a> TryFrom<&'a str> for InstreamId {
+    type Error = UnrecognizedEnumerationError<'a>;
+    fn try_from(value: &'a str) -> Result<Self, Self::Error> {
+        match value {
+            CC1 => Ok(Self::Cea608(Cea608InstreamId::Cc1)),
+            CC2 => Ok(Self::Cea608(Cea608InstreamId::Cc2)),
+            CC3 => Ok(Self::Cea608(Cea608InstreamId::Cc3)),
+            CC4 => Ok(Self::Cea608(Cea608InstreamId::Cc4)),
+            s if s.starts_with(SERVICE) => Ok(Self::Cea708(
+                s[7..]
+                    .parse::<u8>()
+                    .map_err(|_| UnrecognizedEnumerationError::new(s))?,
+            )),
+            _ => Err(UnrecognizedEnumerationError::new(value)),
+        }
+    }
+}
+impl Display for InstreamId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_cow())
+    }
+}
+impl AsStaticCow for InstreamId {
+    fn as_cow(&self) -> Cow<'static, str> {
+        match self {
+            InstreamId::Cea608(Cea608InstreamId::Cc1) => Cow::Borrowed(CC1),
+            InstreamId::Cea608(Cea608InstreamId::Cc2) => Cow::Borrowed(CC2),
+            InstreamId::Cea608(Cea608InstreamId::Cc3) => Cow::Borrowed(CC3),
+            InstreamId::Cea608(Cea608InstreamId::Cc4) => Cow::Borrowed(CC4),
+            InstreamId::Cea708(id) => Cow::Owned(format!("{SERVICE}{id}")),
+        }
+    }
+}
+impl From<InstreamId> for Cow<'_, str> {
+    fn from(value: InstreamId) -> Self {
+        value.as_cow()
+    }
+}
+impl From<InstreamId> for EnumeratedString<'_, InstreamId> {
+    fn from(value: InstreamId) -> Self {
+        Self::Known(value)
+    }
+}
+const CC1: &str = "CC1";
+const CC2: &str = "CC2";
+const CC3: &str = "CC3";
+const CC4: &str = "CC4";
+const SERVICE: &str = "SERVICE";
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum MediaCharacteristicTag {
+    /// Indicates that the rendition includes legible content that transcribes spoken dialog. It's
+    /// possible for a legible media rendition to include both transcriptions of spoken dialog and
+    /// descriptions of music and sound effects.
+    TranscribesSpokenDialog,
+    /// Indicates that the rendition includes legible content. Legible media may include
+    /// transcriptions of spoken dialog and descriptions of music and sound effects.
+    DescribesMusicAndSound,
+    /// Indicates that subtitles have been edited for ease of reading. Closed caption tracks that
+    /// carry "easy reader" captions, as the CEA-608 specification defines, should have this
+    /// characteristic.
+    EasyToRead,
+    /// Indicates the media includes audible content that describes the visual portion of the
+    /// presentation.
+    DescribesVideo,
+    /// Indicates that the Rendition was authored or translated programmatically.
+    MachineGenerated,
+}
+impl<'a> TryFrom<&'a str> for MediaCharacteristicTag {
+    type Error = UnrecognizedEnumerationError<'a>;
+    fn try_from(value: &'a str) -> Result<Self, Self::Error> {
+        match value {
+            TRANSCRIBES_SPOKEN_DIALOG => Ok(Self::TranscribesSpokenDialog),
+            DESCRIBES_MUSIC_AND_SOUND => Ok(Self::DescribesMusicAndSound),
+            EASY_TO_READ => Ok(Self::EasyToRead),
+            DESCRIBES_VIDEO => Ok(Self::DescribesVideo),
+            MACHINE_GENERATED => Ok(Self::MachineGenerated),
+            _ => Err(UnrecognizedEnumerationError::new(value)),
+        }
+    }
+}
+impl Display for MediaCharacteristicTag {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_cow())
+    }
+}
+impl AsStaticCow for MediaCharacteristicTag {
+    fn as_cow(&self) -> Cow<'static, str> {
+        match self {
+            Self::TranscribesSpokenDialog => Cow::Borrowed(TRANSCRIBES_SPOKEN_DIALOG),
+            Self::DescribesMusicAndSound => Cow::Borrowed(DESCRIBES_MUSIC_AND_SOUND),
+            Self::EasyToRead => Cow::Borrowed(EASY_TO_READ),
+            Self::DescribesVideo => Cow::Borrowed(DESCRIBES_VIDEO),
+            Self::MachineGenerated => Cow::Borrowed(MACHINE_GENERATED),
+        }
+    }
+}
+impl From<MediaCharacteristicTag> for Cow<'_, str> {
+    fn from(value: MediaCharacteristicTag) -> Self {
+        value.as_cow()
+    }
+}
+impl From<MediaCharacteristicTag> for EnumeratedString<'_, MediaCharacteristicTag> {
+    fn from(value: MediaCharacteristicTag) -> Self {
+        Self::Known(value)
+    }
+}
+const TRANSCRIBES_SPOKEN_DIALOG: &str = "public.accessibility.transcribes-spoken-dialog";
+const DESCRIBES_MUSIC_AND_SOUND: &str = "public.accessibility.describes-music-and-sound";
+const EASY_TO_READ: &str = "public.easy-to-read";
+const DESCRIBES_VIDEO: &str = "public.accessibility.describes-video";
+const MACHINE_GENERATED: &str = "public.machine-generated";
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ChannelSpecialUsageIdentifier {
+    /// The audio is binaural (either recorded or synthesized). It SHOULD NOT be dynamically
+    /// spatialized. It is best suited for delivery to headphones.
+    Binaural,
+    /// The audio is pre-processed content that SHOULD NOT be dynamically spatialized. It is
+    /// suitable to deliver to either headphones or speakers.
+    Immersive,
+    /// The audio is a downmix derivative of some other audio. If desired, the downmix may be used
+    /// as a substitute for alternative Renditions in the same group with compatible attributes and
+    /// a greater channel count. It MAY be dynamically spatialized.
+    Downmix,
+    /// The audio is prepared for routing to a specific speaker location. The associated value
+    /// indicates count of channels prepared for specific routing. An example Display output is
+    /// "BED-4".
+    Bed(u32),
+    /// The audio represents degrees of freedom. The associated value indicates a numerical value
+    /// associated with degrees of freedom. Valid values for this special usage identifier are 3 or
+    /// 6, indicating display outputs of "DOF-3" or "DOF-6".
+    DegreesOfFreedom(u32),
+}
+impl<'a> TryFrom<&'a str> for ChannelSpecialUsageIdentifier {
+    type Error = UnrecognizedEnumerationError<'a>;
+    fn try_from(value: &'a str) -> Result<Self, Self::Error> {
+        match value {
+            BINAURAL => Ok(Self::Binaural),
+            IMMERSIVE => Ok(Self::Immersive),
+            DOWNMIX => Ok(Self::Downmix),
+            s if s.starts_with(BED) && s.bytes().nth(3) == Some(b'-') => {
+                let count = s[4..]
+                    .parse::<u32>()
+                    .map_err(|_| UnrecognizedEnumerationError::new(s))?;
+                Ok(Self::Bed(count))
+            }
+            s if s.starts_with(DOF) && s.bytes().nth(3) == Some(b'-') => {
+                let count = s[4..]
+                    .parse::<u32>()
+                    .map_err(|_| UnrecognizedEnumerationError::new(s))?;
+                Ok(Self::DegreesOfFreedom(count))
+            }
+            _ => Err(UnrecognizedEnumerationError::new(value)),
+        }
+    }
+}
+impl Display for ChannelSpecialUsageIdentifier {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_cow())
+    }
+}
+impl AsStaticCow for ChannelSpecialUsageIdentifier {
+    fn as_cow(&self) -> Cow<'static, str> {
+        match self {
+            Self::Binaural => Cow::Borrowed(BINAURAL),
+            Self::Immersive => Cow::Borrowed(IMMERSIVE),
+            Self::Downmix => Cow::Borrowed(DOWNMIX),
+            Self::Bed(n) => Cow::Owned(format!("{BED}-{n}")),
+            Self::DegreesOfFreedom(n) => Cow::Owned(format!("{DOF}-{n}")),
+        }
+    }
+}
+impl From<ChannelSpecialUsageIdentifier> for Cow<'_, str> {
+    fn from(value: ChannelSpecialUsageIdentifier) -> Self {
+        value.as_cow()
+    }
+}
+impl From<ChannelSpecialUsageIdentifier> for EnumeratedString<'_, ChannelSpecialUsageIdentifier> {
+    fn from(value: ChannelSpecialUsageIdentifier) -> Self {
+        Self::Known(value)
+    }
+}
+const BINAURAL: &str = "BINAURAL";
+const IMMERSIVE: &str = "IMMERSIVE";
+const DOWNMIX: &str = "DOWNMIX";
+const BED: &str = "BED";
+const DOF: &str = "DOF";
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum AudioCodingIdentifier {
+    /// A coding technique that allows up to 15 full range channels or objects, plus LFE channel, to
+    /// be carried within a Dolby Digital Plus bitstream in a backward-compatible manner.
+    JointObjectCoding,
+    /// Signals the order of ambisonics (for example, an associated value of `3` indicates third
+    /// order ambisonics).
+    OrderOfAmbisonics(u32),
+}
+impl<'a> TryFrom<&'a str> for AudioCodingIdentifier {
+    type Error = UnrecognizedEnumerationError<'a>;
+    fn try_from(value: &'a str) -> Result<Self, Self::Error> {
+        match value {
+            JOC => Ok(Self::JointObjectCoding),
+            s if s.ends_with(OA) => {
+                let len = s.len();
+                let count = s[..(len - 2)]
+                    .parse::<u32>()
+                    .map_err(|_| UnrecognizedEnumerationError::new(s))?;
+                Ok(Self::OrderOfAmbisonics(count))
+            }
+            _ => Err(UnrecognizedEnumerationError::new(value)),
+        }
+    }
+}
+impl Display for AudioCodingIdentifier {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_cow())
+    }
+}
+impl AsStaticCow for AudioCodingIdentifier {
+    fn as_cow(&self) -> Cow<'static, str> {
+        match self {
+            AudioCodingIdentifier::JointObjectCoding => Cow::Borrowed(JOC),
+            AudioCodingIdentifier::OrderOfAmbisonics(n) => Cow::Owned(format!("{n}{OA}")),
+        }
+    }
+}
+impl From<AudioCodingIdentifier> for Cow<'_, str> {
+    fn from(value: AudioCodingIdentifier) -> Self {
+        value.as_cow()
+    }
+}
+impl From<AudioCodingIdentifier> for EnumeratedString<'_, AudioCodingIdentifier> {
+    fn from(value: AudioCodingIdentifier) -> Self {
+        Self::Known(value)
+    }
+}
+const JOC: &str = "JOC";
+const OA: &str = "OA";
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ValidChannels<'a> {
+    count: u32,
+    inner: Cow<'a, str>,
+}
+impl<'a> ValidChannels<'a> {
+    pub fn new(
+        count: u32,
+        spatial_audio: impl Into<EnumeratedStringList<'a, AudioCodingIdentifier>>,
+        special_usage: impl Into<EnumeratedStringList<'a, ChannelSpecialUsageIdentifier>>,
+    ) -> Self {
+        let spatial_audio = spatial_audio.into();
+        let special_usage = special_usage.into();
+        let special_usage_empty = special_usage.is_empty();
+        let spatial_audio_empty = spatial_audio.is_empty();
+        let inner = match (spatial_audio_empty, special_usage_empty) {
+            (true, true) => Cow::Owned(format!("{count}")),
+            (true, false) => Cow::Owned(format!("{count}/-/{special_usage}")),
+            (false, true) => Cow::Owned(format!("{count}/{spatial_audio}")),
+            (false, false) => Cow::Owned(format!("{count}/{spatial_audio}/{special_usage}")),
+        };
+        Self { count, inner }
+    }
+}
+impl ValidChannels<'_> {
+    /// Incicates a count of audio, incicating the maximum number of independent, simultaneous audio
+    /// channels present in any Media Segment in the Rendition. For example, an AC-3 5.1 Rendition
+    /// would have a value of `6`.
+    pub fn count(&self) -> u32 {
+        self.count
+    }
+    /// Identifies the presence of spatial audio of some kind, for example, object-based audio, in
+    /// the Rendition. This is described as a list of audio coding identifiers (which can be codec
+    /// specific).
+    pub fn spatial_audio(&self) -> EnumeratedStringList<AudioCodingIdentifier> {
+        let mut split = self.inner.splitn(3, '/');
+        split.next();
+        let Some(aci_str) = split.next().map(str::trim) else {
+            return EnumeratedStringList::from("");
+        };
+        if aci_str == "-" {
+            return EnumeratedStringList::from("");
+        }
+        EnumeratedStringList::from(aci_str)
+    }
+    /// Provides supplementary indications of special channel usage that are necessary for informed
+    /// selection and processing.
+    pub fn special_usage(&self) -> EnumeratedStringList<ChannelSpecialUsageIdentifier> {
+        let mut split = self.inner.splitn(4, '/');
+        split.next();
+        split.next();
+        let Some(sui_str) = split.next().map(str::trim) else {
+            return EnumeratedStringList::from("");
+        };
+        if sui_str == "-" {
+            return EnumeratedStringList::from("");
+        }
+        EnumeratedStringList::from(sui_str)
+    }
+    /// At the time of writing the HLS specification only defined 3 parameters (described here via
+    /// [`Self::count`], [`Self::spatial_audio`], and [`Self::special_usage`]). In case more
+    /// parameters are added later, this method will expose those as a split on `'/'`.
+    pub fn unknown_parameters(&self) -> Split<char> {
+        let mut split = self.inner.split('/');
+        split.next();
+        split.next();
+        split.next();
+        split
+    }
+}
+impl<'a> TryFrom<&'a str> for ValidChannels<'a> {
+    type Error = UnrecognizedEnumerationError<'a>;
+    fn try_from(value: &'a str) -> Result<Self, Self::Error> {
+        match value.splitn(2, '/').next().map(str::parse::<u32>) {
+            Some(Ok(count)) => Ok(Self {
+                count,
+                inner: Cow::Borrowed(value),
+            }),
+            _ => Err(UnrecognizedEnumerationError::new(value)),
+        }
+    }
+}
+impl Display for ValidChannels<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_ref())
+    }
+}
+impl AsRef<str> for ValidChannels<'_> {
+    fn as_ref(&self) -> &str {
+        &self.inner
+    }
+}
+impl<'a> From<ValidChannels<'a>> for Cow<'a, str> {
+    fn from(value: ValidChannels<'a>) -> Self {
+        value.inner
+    }
+}
+#[derive(Debug, Clone, PartialEq)]
+pub enum Channels<'a> {
+    Valid(ValidChannels<'a>),
+    Invalid(&'a str),
+}
+impl<'a> Channels<'a> {
+    pub fn valid(&self) -> Option<&ValidChannels<'a>> {
+        match self {
+            Channels::Valid(valid_channels) => Some(valid_channels),
+            Channels::Invalid(_) => None,
+        }
+    }
+}
+impl AsRef<str> for Channels<'_> {
+    fn as_ref(&self) -> &str {
+        match self {
+            Channels::Valid(valid_channels) => valid_channels.as_ref(),
+            Channels::Invalid(s) => s,
+        }
+    }
+}
+impl<'a> From<&'a str> for Channels<'a> {
+    fn from(value: &'a str) -> Self {
+        match ValidChannels::try_from(value) {
+            Ok(valid) => Self::Valid(valid),
+            Err(e) => Self::Invalid(e.value),
+        }
+    }
+}
+impl<'a> From<Channels<'a>> for Cow<'a, str> {
+    fn from(value: Channels<'a>) -> Self {
+        match value {
+            Channels::Valid(valid_channels) => Cow::from(valid_channels),
+            Channels::Invalid(s) => Cow::Borrowed(s),
+        }
+    }
+}
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct MediaAttributeList<'a> {
@@ -90,18 +535,6 @@ impl<'a> MediaBuilder<'a> {
         })
     }
 
-    pub fn with_media_type(mut self, media_type: impl Into<Cow<'a, str>>) -> Self {
-        self.media_type = media_type.into();
-        self
-    }
-    pub fn with_name(mut self, name: impl Into<Cow<'a, str>>) -> Self {
-        self.name = name.into();
-        self
-    }
-    pub fn with_group_id(mut self, group_id: impl Into<Cow<'a, str>>) -> Self {
-        self.group_id = group_id.into();
-        self
-    }
     pub fn with_uri(mut self, uri: impl Into<Cow<'a, str>>) -> Self {
         self.uri = Some(uri.into());
         self
@@ -300,8 +733,8 @@ impl<'a> Media<'a> {
         }
     }
 
-    pub fn media_type(&self) -> &str {
-        &self.media_type
+    pub fn media_type(&self) -> EnumeratedString<Type> {
+        EnumeratedString::from(self.media_type.as_ref())
     }
     pub fn name(&self) -> &str {
         &self.name
@@ -379,12 +812,12 @@ impl<'a> Media<'a> {
             )
         }
     }
-    pub fn instream_id(&self) -> Option<&str> {
+    pub fn instream_id(&self) -> Option<EnumeratedString<InstreamId>> {
         if let Some(instream_id) = &self.instream_id {
-            Some(instream_id)
+            Some(EnumeratedString::from(instream_id.as_ref()))
         } else {
             match self.attribute_list.get(INSTREAM_ID) {
-                Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
+                Some(ParsedAttributeValue::QuotedString(s)) => Some(EnumeratedString::from(*s)),
                 _ => None,
             }
         }
@@ -409,22 +842,22 @@ impl<'a> Media<'a> {
             }
         }
     }
-    pub fn characteristics(&self) -> Option<&str> {
+    pub fn characteristics(&self) -> Option<EnumeratedStringList<MediaCharacteristicTag>> {
         if let Some(characteristics) = &self.characteristics {
-            Some(characteristics)
+            Some(EnumeratedStringList::from(characteristics.as_ref()))
         } else {
             match self.attribute_list.get(CHARACTERISTICS) {
-                Some(ParsedAttributeValue::QuotedString(c)) => Some(c),
+                Some(ParsedAttributeValue::QuotedString(c)) => Some(EnumeratedStringList::from(*c)),
                 _ => None,
             }
         }
     }
-    pub fn channels(&self) -> Option<&str> {
+    pub fn channels(&self) -> Option<Channels> {
         if let Some(channels) = &self.channels {
-            Some(channels)
+            Some(Channels::from(channels.as_ref()))
         } else {
             match self.attribute_list.get(CHANNELS) {
-                Some(ParsedAttributeValue::QuotedString(c)) => Some(c),
+                Some(ParsedAttributeValue::QuotedString(c)) => Some(Channels::from(*c)),
                 _ => None,
             }
         }
@@ -667,7 +1100,7 @@ mod tests {
                 "INSTREAM-ID=\"CC1\""
             )
             .as_bytes(),
-            Media::builder("CLOSED-CAPTIONS", "English", "cc")
+            Media::builder(Type::ClosedCaptions, "English", "cc")
                 .with_instream_id("CC1")
                 .finish()
                 .into_inner()
@@ -696,7 +1129,7 @@ mod tests {
                 "CHANNELS=\"2\"",
             )
             .as_bytes(),
-            Media::builder("AUDIO", "English", "stereo")
+            Media::builder(Type::Audio, "English", "stereo")
                 .with_uri("audio/en/stereo.m3u8")
                 .with_language("en")
                 .with_assoc_language("en")
@@ -715,7 +1148,7 @@ mod tests {
     }
 
     mutation_tests!(
-        Media::builder("AUDIO", "English", "stereo")
+        Media::builder(Type::Audio, "English", "stereo")
             .with_uri("audio/en/stereo.m3u8")
             .with_language("en")
             .with_assoc_language("en")
@@ -726,7 +1159,7 @@ mod tests {
             .with_characteristics("public.accessibility.describes-video")
             .with_channels("2")
             .finish(),
-        (media_type, "VIDEO", @Attr="TYPE=VIDEO"),
+        (media_type, EnumeratedString::Known(Type::Video), @Attr="TYPE=VIDEO"),
         (name, "Spanish", @Attr="NAME=\"Spanish\""),
         (group_id, "surround", @Attr="GROUP-ID=\"surround\""),
         (uri, @Option "example", @Attr="URI=\"example\""),
@@ -736,10 +1169,142 @@ mod tests {
         (default, true, @Attr="DEFAULT=YES"),
         (autoselect, true, @Attr="AUTOSELECT=YES"),
         (forced, true, @Attr="FORCED=YES"),
-        (instream_id, @Option "ID2", @Attr="INSTREAM-ID=\"ID2\""),
+        (
+            instream_id,
+            @Option EnumeratedString::<InstreamId>::Unknown("ID2"),
+            @Attr="INSTREAM-ID=\"ID2\""
+        ),
         (bit_depth, @Option 10, @Attr="BIT-DEPTH=10"),
         (sample_rate, @Option 42, @Attr="SAMPLE-RATE=42"),
-        (characteristics, @Option "example", @Attr="CHARACTERISTICS=\"example\""),
-        (channels, @Option "6", @Attr="CHANNELS=\"6\"")
+        (
+            characteristics,
+            @Option EnumeratedStringList::<MediaCharacteristicTag>::from("example"),
+            @Attr="CHARACTERISTICS=\"example\""
+        ),
+        (channels, @Option Channels::Valid(ValidChannels::new(6, "", "")), @Attr="CHANNELS=\"6\"")
     );
+
+    #[test]
+    fn instream_id_cea_708_values_parse_and_display_as_expected() {
+        let s = "SERVICE42";
+        assert_eq!(Ok(InstreamId::Cea708(42)), InstreamId::try_from(s));
+        assert_eq!(s, format!("{}", InstreamId::Cea708(42)));
+    }
+
+    #[test]
+    fn channel_special_usage_identifier_bed_parses_and_displays_as_expected() {
+        let s = "BED-4";
+        assert_eq!(
+            Ok(ChannelSpecialUsageIdentifier::Bed(4)),
+            ChannelSpecialUsageIdentifier::try_from(s)
+        );
+        assert_eq!(s, format!("{}", ChannelSpecialUsageIdentifier::Bed(4)));
+    }
+
+    #[test]
+    fn channel_special_usage_identifier_dof_parses_and_displays_as_expected() {
+        let s = "DOF-3";
+        assert_eq!(
+            Ok(ChannelSpecialUsageIdentifier::DegreesOfFreedom(3)),
+            ChannelSpecialUsageIdentifier::try_from(s)
+        );
+        assert_eq!(
+            s,
+            format!("{}", ChannelSpecialUsageIdentifier::DegreesOfFreedom(3))
+        );
+    }
+
+    #[test]
+    fn audio_coding_identifier_order_of_ambisonics_parses_and_displays_as_expected() {
+        let s = "3OA";
+        assert_eq!(
+            Ok(AudioCodingIdentifier::OrderOfAmbisonics(3)),
+            AudioCodingIdentifier::try_from(s)
+        );
+        assert_eq!(
+            s,
+            format!("{}", AudioCodingIdentifier::OrderOfAmbisonics(3))
+        );
+    }
+
+    #[test]
+    fn new_channels_displays_as_expected() {
+        let test_instances = channels_test_instances();
+        assert_eq!("2", format!("{}", test_instances[0]));
+        assert_eq!("2", test_instances[0].as_ref());
+
+        assert_eq!("12/JOC", format!("{}", test_instances[1]));
+        assert_eq!("12/JOC", test_instances[1].as_ref());
+
+        assert_eq!("16/3OA/IMMERSIVE,DOF-6", format!("{}", test_instances[2]));
+        assert_eq!("16/3OA/IMMERSIVE,DOF-6", test_instances[2].as_ref());
+    }
+
+    #[test]
+    fn channels_count_works_as_expected() {
+        let test_instances = channels_test_instances();
+        assert_eq!(2, test_instances[0].count());
+        assert_eq!(12, test_instances[1].count());
+        assert_eq!(16, test_instances[2].count());
+    }
+
+    #[test]
+    fn channels_spatial_works_as_expected() {
+        let test_instances = channels_test_instances();
+        assert!(
+            test_instances[0].spatial_audio().is_empty(),
+            "spatial should be empty"
+        );
+        assert!(
+            test_instances[1]
+                .spatial_audio()
+                .contains(AudioCodingIdentifier::JointObjectCoding),
+            "spatial should contain JOC"
+        );
+        assert!(
+            test_instances[2]
+                .spatial_audio()
+                .contains(AudioCodingIdentifier::OrderOfAmbisonics(3)),
+            "spatial should contain 3OA"
+        );
+    }
+
+    #[test]
+    fn channels_special_works_as_expected() {
+        let test_instances = channels_test_instances();
+        assert!(
+            test_instances[0].special_usage().is_empty(),
+            "special should be empty"
+        );
+        assert!(
+            test_instances[1].special_usage().is_empty(),
+            "special should be empty"
+        );
+        assert!(
+            test_instances[2]
+                .special_usage()
+                .contains(ChannelSpecialUsageIdentifier::Immersive),
+            "spatial should contain 3OA"
+        );
+        assert!(
+            test_instances[2]
+                .special_usage()
+                .contains(ChannelSpecialUsageIdentifier::DegreesOfFreedom(6))
+        )
+    }
+
+    fn channels_test_instances<'a>() -> [ValidChannels<'a>; 3] {
+        [
+            ValidChannels::new(2, "", ""),
+            ValidChannels::new(12, [AudioCodingIdentifier::JointObjectCoding], ""),
+            ValidChannels::new(
+                16,
+                [AudioCodingIdentifier::OrderOfAmbisonics(3)],
+                [
+                    ChannelSpecialUsageIdentifier::Immersive,
+                    ChannelSpecialUsageIdentifier::DegreesOfFreedom(6),
+                ],
+            ),
+        ]
+    }
 }

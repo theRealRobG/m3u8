@@ -4,7 +4,7 @@ use crate::{
 };
 use std::{cmp::PartialEq, fmt::Debug};
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 #[allow(clippy::large_enum_variant)]
 pub enum Tag<'a, CustomTag = NoCustomTag>
 where
@@ -12,6 +12,7 @@ where
         + IsKnownName
         + TagInformation
         + Debug
+        + Clone
         + PartialEq,
 {
     // Clippy suggests that the `Tag` within the `Hls` case should be put in a Box, based on
@@ -54,7 +55,7 @@ pub struct ParsedTag<'a> {
     pub(crate) original_input: &'a [u8],
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct NoCustomTag;
 impl TryFrom<ParsedTag<'_>> for NoCustomTag {
     type Error = ValidationError;
@@ -84,6 +85,7 @@ where
         + IsKnownName
         + TagInformation
         + Debug
+        + Clone
         + PartialEq,
 {
     type Error = ValidationError;

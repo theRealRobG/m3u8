@@ -1,9 +1,51 @@
-use crate::tag::value::SemiParsedTagValue;
+use crate::{
+    line::{ParsedByteSlice, ParsedLineSlice},
+    tag::value::SemiParsedTagValue,
+};
 use std::{
     error::Error,
     fmt::{Display, Formatter},
     str::Utf8Error,
 };
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct ReaderStrError<'a> {
+    pub errored_line: &'a str,
+    pub error: SyntaxError,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct ReaderBytesError<'a> {
+    pub errored_line: &'a [u8],
+    pub error: SyntaxError,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct ParseLineStrError<'a> {
+    pub errored_line_slice: ParsedLineSlice<'a, &'a str>,
+    pub error: SyntaxError,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct ParseLineBytesError<'a> {
+    pub errored_line_slice: ParsedByteSlice<'a, &'a [u8]>,
+    pub error: SyntaxError,
+}
+
+macro_rules! impl_error {
+    ($type:ident) => {
+        impl Display for $type<'_> {
+            fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+                self.error.fmt(f)
+            }
+        }
+        impl Error for $type<'_> {}
+    };
+}
+impl_error!(ReaderStrError);
+impl_error!(ReaderBytesError);
+impl_error!(ParseLineStrError);
+impl_error!(ParseLineBytesError);
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum SyntaxError {
@@ -387,3 +429,21 @@ impl Display for ParseFloatError {
     }
 }
 impl Error for ParseFloatError {}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct UnrecognizedEnumerationError<'a> {
+    pub value: &'a str,
+}
+impl<'a> UnrecognizedEnumerationError<'a> {
+    pub fn new(value: &'a str) -> Self {
+        Self {
+            value: value.into(),
+        }
+    }
+}
+impl<'a> Display for UnrecognizedEnumerationError<'a> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} is not a recognized enumeration", self.value)
+    }
+}
+impl Error for UnrecognizedEnumerationError<'_> {}

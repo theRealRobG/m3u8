@@ -1,6 +1,6 @@
 use crate::{
     config::ParsingOptions,
-    error::{SyntaxError, ValidationError},
+    error::{ParseLineBytesError, ParseLineStrError, SyntaxError, ValidationError},
     tag::{
         self, hls,
         known::{self, IsKnownName, NoCustomTag, ParsedTag, TagInformation},
@@ -8,9 +8,9 @@ use crate::{
     },
     utils::{split_on_new_line, str_from},
 };
-use std::{cmp::PartialEq, fmt::Debug};
+use std::{borrow::Cow, cmp::PartialEq, fmt::Debug};
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 #[allow(clippy::large_enum_variant)] // See comment on crate::tag::known::Tag.
 pub enum HlsLine<'a, CustomTag = NoCustomTag>
 where
@@ -18,12 +18,13 @@ where
         + IsKnownName
         + TagInformation
         + Debug
+        + Clone
         + PartialEq,
 {
     KnownTag(known::Tag<'a, CustomTag>),
     UnknownTag(unknown::Tag<'a>),
-    Comment(&'a str),
-    Uri(&'a str),
+    Comment(Cow<'a, str>),
+    Uri(Cow<'a, str>),
     Blank,
 }
 
@@ -33,6 +34,7 @@ where
         + IsKnownName
         + TagInformation
         + Debug
+        + Clone
         + PartialEq,
 {
     fn from(tag: hls::Tag<'a>) -> Self {
@@ -46,6 +48,7 @@ where
         + IsKnownName
         + TagInformation
         + Debug
+        + Clone
         + PartialEq,
 {
     fn from(tag: CustomTag) -> Self {
@@ -59,6 +62,7 @@ where
         + IsKnownName
         + TagInformation
         + Debug
+        + Clone
         + PartialEq,
 {
     fn from(tag: unknown::Tag<'a>) -> Self {
@@ -67,15 +71,15 @@ where
 }
 
 impl<'a> HlsLine<'a> {
-    pub fn new_comment(comment: &'a str) -> Self {
-        Self::Comment(comment)
+    pub fn comment(comment: impl Into<Cow<'a, str>>) -> Self {
+        Self::Comment(comment.into())
     }
 
-    pub fn new_uri(uri: &'a str) -> Self {
-        Self::Uri(uri)
+    pub fn uri(uri: impl Into<Cow<'a, str>>) -> Self {
+        Self::Uri(uri.into())
     }
 
-    pub fn new_blank() -> Self {
+    pub fn blank() -> Self {
         Self::Blank
     }
 }
@@ -88,6 +92,7 @@ macro_rules! impl_line_from_tag {
                 + IsKnownName
                 + TagInformation
                 + Debug
+                + Clone
                 + PartialEq,
         {
             fn from(tag: $tag_mod_path) -> Self {
@@ -141,7 +146,7 @@ impl_line_from_tag!(hls::session_data::SessionData<'a>, SessionData);
 impl_line_from_tag!(hls::session_key::SessionKey<'a>, SessionKey);
 impl_line_from_tag!(hls::content_steering::ContentSteering<'a>, ContentSteering);
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct ParsedLineSlice<'a, T>
 where
     T: Debug + PartialEq,
@@ -149,8 +154,7 @@ where
     pub parsed: T,
     pub remaining: Option<&'a str>,
 }
-#[derive(PartialEq)]
-#[cfg_attr(not(test), derive(Debug))]
+#[derive(Debug, PartialEq, Clone)]
 pub struct ParsedByteSlice<'a, T>
 where
     T: Debug + PartialEq,
@@ -158,79 +162,59 @@ where
     pub parsed: T,
     pub remaining: Option<&'a [u8]>,
 }
-// Just for tests - this helps byte slices that are actually string slices be more readable when
-// assertions are failing.
-#[cfg(test)]
-use std::any::Any;
-#[cfg(test)]
-impl<T: Debug + PartialEq + Any> Debug for ParsedByteSlice<'_, T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut result = f.debug_struct("ParsedByteSlice");
-        let any_parsed = &self.parsed as &dyn Any;
-        let parsed: Box<dyn Debug> = if let Some(bytes) = any_parsed.downcast_ref::<&[u8]>() {
-            if let Ok(parsed) = std::str::from_utf8(bytes) {
-                Box::new(parsed)
-            } else {
-                Box::new(&self.parsed)
-            }
-        } else {
-            Box::new(&self.parsed)
-        };
-        let remaining: Box<dyn Debug> = if let Some(parsed) = self
-            .remaining
-            .map_or(Some("None"), |r| std::str::from_utf8(r).ok())
-        {
-            Box::new(parsed)
-        } else {
-            Box::new(self.remaining)
-        };
-        result
-            .field("parsed", &*parsed)
-            .field("remaining", &*remaining)
-            .finish()
-    }
-}
 
 pub fn parse<'a>(
     input: &'a str,
     options: &ParsingOptions,
-) -> Result<ParsedLineSlice<'a, HlsLine<'a>>, SyntaxError> {
+) -> Result<ParsedLineSlice<'a, HlsLine<'a>>, ParseLineStrError<'a>> {
     parse_with_custom::<NoCustomTag>(input, options)
 }
 
 pub fn parse_with_custom<'a, 'b, CustomTag>(
     input: &'a str,
     options: &'b ParsingOptions,
-) -> Result<ParsedLineSlice<'a, HlsLine<'a, CustomTag>>, SyntaxError>
+) -> Result<ParsedLineSlice<'a, HlsLine<'a, CustomTag>>, ParseLineStrError<'a>>
 where
     CustomTag: TryFrom<ParsedTag<'a>, Error = ValidationError>
         + IsKnownName
         + TagInformation
         + Debug
+        + Clone
         + PartialEq,
 {
-    parse_bytes_with_custom(input.as_bytes(), options).map(|r| ParsedLineSlice {
-        parsed: r.parsed,
-        remaining: r.remaining.map(str_from),
-    })
+    parse_bytes_with_custom(input.as_bytes(), options)
+        // These conversions from ParsedByteSlice to ParsedLineSlice are only safe here because we
+        // know that these must represent valid UTF-8.
+        .map(|r| ParsedLineSlice {
+            parsed: r.parsed,
+            remaining: r.remaining.map(str_from),
+        })
+        .map_err(|error| ParseLineStrError {
+            errored_line_slice: ParsedLineSlice {
+                parsed: str_from(error.errored_line_slice.parsed),
+                remaining: error.errored_line_slice.remaining.map(str_from),
+            },
+            error: error.error,
+        })
 }
 
 pub fn parse_bytes<'a>(
     input: &'a [u8],
     options: &ParsingOptions,
-) -> Result<ParsedByteSlice<'a, HlsLine<'a>>, SyntaxError> {
+) -> Result<ParsedByteSlice<'a, HlsLine<'a>>, ParseLineBytesError<'a>> {
     parse_bytes_with_custom::<NoCustomTag>(input, options)
 }
 
 pub fn parse_bytes_with_custom<'a, 'b, CustomTag>(
     input: &'a [u8],
     options: &'b ParsingOptions,
-) -> Result<ParsedByteSlice<'a, HlsLine<'a, CustomTag>>, SyntaxError>
+) -> Result<ParsedByteSlice<'a, HlsLine<'a, CustomTag>>, ParseLineBytesError<'a>>
 where
     CustomTag: TryFrom<ParsedTag<'a>, Error = ValidationError>
         + IsKnownName
         + TagInformation
         + Debug
+        + Clone
         + PartialEq,
 {
     if input.is_empty() {
@@ -241,14 +225,16 @@ where
     } else if input[0] == b'#' {
         if input.get(3) == Some(&b'T') && &input[..3] == b"#EX" {
             let tag_rest = &input[4..];
-            let mut tag = tag::unknown::parse_assuming_ext_taken(tag_rest, input)?;
+            let mut tag = tag::unknown::parse_assuming_ext_taken(tag_rest, input)
+                .map_err(|error| map_err_bytes(error, input))?;
             if options.is_known_name(tag.parsed.name) || CustomTag::is_known_name(tag.parsed.name) {
                 let value_slice = match tag.parsed.value {
                     None => ParsedByteSlice {
                         parsed: tag::value::SemiParsedTagValue::Empty,
                         remaining: None,
                     },
-                    Some(remaining) => tag::value::new_parse(remaining)?,
+                    Some(remaining) => tag::value::new_parse(remaining)
+                        .map_err(|error| map_err_bytes(error, input))?,
                 };
                 let parsed_tag = ParsedTag {
                     name: tag.parsed.name,
@@ -276,19 +262,28 @@ where
             }
         } else {
             let ParsedByteSlice { parsed, remaining } = split_on_new_line(&input[1..]);
-            let comment = std::str::from_utf8(parsed)?;
+            let comment =
+                std::str::from_utf8(parsed).map_err(|error| map_err_bytes(error, input))?;
             Ok(ParsedByteSlice {
-                parsed: HlsLine::Comment(comment),
+                parsed: HlsLine::Comment(Cow::Borrowed(comment)),
                 remaining,
             })
         }
     } else {
         let ParsedByteSlice { parsed, remaining } = split_on_new_line(input);
-        let uri = std::str::from_utf8(parsed)?;
+        let uri = std::str::from_utf8(parsed).map_err(|error| map_err_bytes(error, input))?;
         Ok(ParsedByteSlice {
-            parsed: HlsLine::Uri(uri),
+            parsed: HlsLine::Uri(Cow::Borrowed(uri)),
             remaining,
         })
+    }
+}
+
+fn map_err_bytes<E: Into<SyntaxError>>(error: E, input: &[u8]) -> ParseLineBytesError {
+    let errored_line_slice = split_on_new_line(input);
+    ParseLineBytesError {
+        errored_line_slice,
+        error: error.into(),
     }
 }
 
@@ -310,7 +305,7 @@ mod tests {
     #[test]
     fn uri_line() {
         assert_eq!(
-            Ok(HlsLine::Uri("hello/world.m3u8")),
+            Ok(HlsLine::Uri("hello/world.m3u8".into())),
             parse("hello/world.m3u8", &ParsingOptions::default()).map(|p| p.parsed)
         )
     }
@@ -326,7 +321,7 @@ mod tests {
     #[test]
     fn comment() {
         assert_eq!(
-            Ok(HlsLine::Comment("Comment")),
+            Ok(HlsLine::Comment("Comment".into())),
             parse("#Comment", &ParsingOptions::default()).map(|p| p.parsed)
         );
     }
@@ -342,7 +337,7 @@ mod tests {
     #[test]
     fn custom_tag() {
         // Set up custom tag
-        #[derive(Debug, PartialEq)]
+        #[derive(Debug, PartialEq, Clone)]
         struct TestTag<'a> {
             greeting_type: &'a str,
             message: &'a str,

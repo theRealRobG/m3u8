@@ -1,7 +1,10 @@
 use crate::{
     error::{ValidationError, ValidationErrorValueKind},
     tag::{
-        hls::TagInner,
+        hls::{
+            EnumeratedString, TagInner,
+            stream_inf::{HdcpLevel, VideoLayout, VideoRange},
+        },
         known::ParsedTag,
         value::{DecimalResolution, ParsedAttributeValue, SemiParsedTagValue},
     },
@@ -350,12 +353,12 @@ impl<'a> IFrameStreamInf<'a> {
         }
     }
 
-    pub fn hdcp_level(&self) -> Option<&str> {
+    pub fn hdcp_level(&self) -> Option<EnumeratedString<HdcpLevel>> {
         if let Some(hdcp_level) = &self.hdcp_level {
-            Some(hdcp_level)
+            Some(EnumeratedString::from(hdcp_level.as_ref()))
         } else {
             match self.attribute_list.get(HDCP_LEVEL) {
-                Some(ParsedAttributeValue::UnquotedString(s)) => Some(s),
+                Some(ParsedAttributeValue::UnquotedString(s)) => Some(EnumeratedString::from(*s)),
                 _ => None,
             }
         }
@@ -372,23 +375,23 @@ impl<'a> IFrameStreamInf<'a> {
         }
     }
 
-    pub fn video_range(&self) -> Option<&str> {
+    pub fn video_range(&self) -> Option<EnumeratedString<VideoRange>> {
         if let Some(video_range) = &self.video_range {
-            Some(video_range)
+            Some(EnumeratedString::from(video_range.as_ref()))
         } else {
             match self.attribute_list.get(VIDEO_RANGE) {
-                Some(ParsedAttributeValue::UnquotedString(s)) => Some(s),
+                Some(ParsedAttributeValue::UnquotedString(s)) => Some(EnumeratedString::from(*s)),
                 _ => None,
             }
         }
     }
 
-    pub fn req_video_layout(&self) -> Option<&str> {
+    pub fn req_video_layout(&self) -> Option<VideoLayout> {
         if let Some(req_video_layout) = &self.req_video_layout {
-            Some(req_video_layout)
+            Some(VideoLayout::from(req_video_layout.as_ref()))
         } else {
             match self.attribute_list.get(REQ_VIDEO_LAYOUT) {
-                Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
+                Some(ParsedAttributeValue::QuotedString(s)) => Some(VideoLayout::from(*s)),
                 _ => None,
             }
         }
@@ -763,10 +766,14 @@ mod tests {
             },
             @Attr="RESOLUTION=100x100"
         ),
-        (hdcp_level, @Option "NONE", @Attr="HDCP-LEVEL=NONE"),
+        (hdcp_level, @Option EnumeratedString::Known(HdcpLevel::None), @Attr="HDCP-LEVEL=NONE"),
         (allowed_cpc, @Option "EXAMPLE", @Attr="ALLOWED-CPC=\"EXAMPLE\""),
-        (video_range, @Option "HLG", @Attr="VIDEO-RANGE=HLG"),
-        (req_video_layout, @Option "CH-MONO", @Attr="REQ-VIDEO-LAYOUT=\"CH-MONO\""),
+        (video_range, @Option EnumeratedString::Known(VideoRange::Hlg), @Attr="VIDEO-RANGE=HLG"),
+        (
+            req_video_layout,
+            @Option VideoLayout::new(["CH-MONO"], ""),
+            @Attr="REQ-VIDEO-LAYOUT=\"CH-MONO\""
+        ),
         (stable_variant_id, @Option "ABCD", @Attr="STABLE-VARIANT-ID=\"ABCD\""),
         (video, @Option "video", @Attr="VIDEO=\"video\""),
         (pathway_id, @Option "ABCD", @Attr="PATHWAY-ID=\"ABCD\"")

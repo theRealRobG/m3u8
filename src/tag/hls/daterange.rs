@@ -1,16 +1,69 @@
 use crate::{
     date::{self, DateTime},
-    error::{ValidationError, ValidationErrorValueKind},
+    error::{UnrecognizedEnumerationError, ValidationError, ValidationErrorValueKind},
     tag::{
-        hls::{TagInner, TagName},
+        hls::{EnumeratedString, EnumeratedStringList, TagInner, TagName},
         known::ParsedTag,
         value::{ParsedAttributeValue, SemiParsedTagValue},
     },
+    utils::AsStaticCow,
 };
 use std::{
     borrow::Cow,
     collections::{HashMap, HashSet},
+    fmt::Display,
 };
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Cue {
+    /// Indicates that an action is to be triggered before playback of the primary asset begins,
+    /// regardless of where playback begins in the primary asset.
+    Pre,
+    /// Indicates that an action is to be triggered after the primary asset has been played to its
+    /// end without error.
+    Post,
+    /// Indicates that an action is to be triggered once. It SHOULD NOT be triggered again, even if
+    /// the user replays the portion of the primary asset that includes the trigger point.
+    Once,
+}
+impl<'a> TryFrom<&'a str> for Cue {
+    type Error = UnrecognizedEnumerationError<'a>;
+    fn try_from(value: &'a str) -> Result<Self, Self::Error> {
+        match value {
+            PRE => Ok(Self::Pre),
+            POST => Ok(Self::Post),
+            ONCE => Ok(Self::Once),
+            _ => Err(UnrecognizedEnumerationError::new(value)),
+        }
+    }
+}
+impl Display for Cue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_cow())
+    }
+}
+impl AsStaticCow for Cue {
+    fn as_cow(&self) -> Cow<'static, str> {
+        match self {
+            Cue::Pre => Cow::Borrowed(PRE),
+            Cue::Post => Cow::Borrowed(POST),
+            Cue::Once => Cow::Borrowed(ONCE),
+        }
+    }
+}
+impl From<Cue> for Cow<'_, str> {
+    fn from(value: Cue) -> Self {
+        value.as_cow()
+    }
+}
+impl From<Cue> for EnumeratedString<'_, Cue> {
+    fn from(value: Cue) -> Self {
+        Self::Known(value)
+    }
+}
+const PRE: &str = "PRE";
+const POST: &str = "POST";
+const ONCE: &str = "ONCE";
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct DaterangeAttributeList<'a> {
@@ -287,12 +340,14 @@ impl<'a> Daterange<'a> {
         self.start_date
     }
 
-    pub fn cue(&self) -> Option<&str> {
+    pub fn cue(&self) -> Option<EnumeratedStringList<Cue>> {
         if let Some(cue) = &self.cue {
-            Some(cue)
+            Some(EnumeratedStringList::from(cue.as_ref()))
         } else {
             match self.attribute_list.get(CUE) {
-                Some(ParsedAttributeValue::QuotedString(cue)) => Some(cue),
+                Some(ParsedAttributeValue::QuotedString(cue)) => {
+                    Some(EnumeratedStringList::from(*cue))
+                }
                 _ => None,
             }
         }
@@ -753,7 +808,7 @@ mod tests {
     fn new_with_optionals_should_be_valid() {
         let tag = Daterange::builder("some-id", date_time!(2025-06-14 T 23:41:42.000 -05:00))
             .with_class("com.example.class")
-            .with_cue("ONCE")
+            .with_cue(EnumeratedStringList::from([Cue::Once]))
             .with_end_date(date_time!(2025-06-14 T 23:43:42.000 -05:00))
             .with_duration(120.0)
             .with_planned_duration(180.0)
@@ -835,7 +890,7 @@ mod tests {
     #[test]
     fn mutation_should_work() {
         let mut daterange = Daterange::builder("some-id", DateTime::default())
-            .with_cue("ONCE")
+            .with_cue(EnumeratedStringList::from([Cue::Once]))
             .with_extension_attribute(
                 "X-TO-REMOVE",
                 ExtensionAttributeValue::QuotedString("remove me".into()),
@@ -867,10 +922,24 @@ mod tests {
         );
     }
 
+    #[test]
+    fn mutating_cue_works_as_expected() {
+        let mut daterange = Daterange::builder("some-id", DateTime::default())
+            .with_cue(EnumeratedStringList::from([Cue::Once]))
+            .finish();
+        let mut cue = daterange.cue().unwrap();
+        cue.insert(Cue::Pre);
+        daterange.set_cue(cue.to_owned());
+        assert_eq!(
+            EnumeratedStringList::from([Cue::Once, Cue::Pre]),
+            daterange.cue().unwrap()
+        );
+    }
+
     mutation_tests!(
         Daterange::builder("some-id", date_time!(2025-06-14 T 23:41:42.000 -05:00))
             .with_class("com.example.class")
-            .with_cue("ONCE")
+            .with_cue(EnumeratedStringList::from([Cue::Once]))
             .with_end_date(date_time!(2025-06-14 T 23:43:42.000 -05:00))
             .with_duration(120.0)
             .with_planned_duration(180.0)
@@ -881,7 +950,7 @@ mod tests {
         (id, "another-id", @Attr="ID=\"another-id\""),
         (start_date, DateTime::default(), @Attr="START-DATE=\"1970-01-01T00:00:00.000Z\""),
         (class, @Option "com.test.class", @Attr="CLASS=\"com.test.class\""),
-        (cue, @Option "ONCE,PRE", @Attr="CUE=\"ONCE,PRE\""),
+        (cue, @Option EnumeratedStringList::from([Cue::Once, Cue::Pre]), @Attr="CUE=\"ONCE,PRE\""),
         (end_date, @Option DateTime::default(), @Attr="END-DATE=\"1970-01-01T00:00:00.000Z\""),
         (duration, @Option 60.0, @Attr="DURATION=60"),
         (planned_duration, @Option 80.0, @Attr="PLANNED-DURATION=80"),

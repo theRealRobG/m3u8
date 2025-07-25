@@ -18,7 +18,8 @@ use crate::{
     },
     utils::split_on_new_line,
 };
-use std::borrow::Cow;
+pub use enumerated_string::*;
+use std::{borrow::Cow, fmt::Debug};
 
 pub mod bitrate;
 pub mod byterange;
@@ -28,6 +29,7 @@ pub mod define;
 pub mod discontinuity;
 pub mod discontinuity_sequence;
 pub mod endlist;
+mod enumerated_string;
 pub mod gap;
 pub mod i_frame_stream_inf;
 pub mod i_frames_only;
@@ -55,7 +57,7 @@ pub mod targetduration;
 mod test_macro;
 pub mod version;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Tag<'a> {
     /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.1.1
     M3u(M3u),
@@ -764,7 +766,7 @@ mod tests {
     #[test]
     fn key() {
         assert_eq!(
-            Ok(Tag::Key(Key::builder("SAMPLE-AES")
+            Ok(Tag::Key(Key::builder(key::Method::SampleAes)
                 .with_uri("skd://some-key-id")
                 .with_iv("0xABCD")
                 .with_keyformat("com.apple.streamingkeydelivery")
@@ -790,7 +792,7 @@ mod tests {
             })
         );
         assert_eq!(
-            Ok(Tag::Key(Key::builder("NONE").finish())),
+            Ok(Tag::Key(Key::builder(key::Method::None).finish())),
             Tag::try_from(ParsedTag {
                 name: "-X-KEY",
                 value: SemiParsedTagValue::AttributeList(HashMap::from([(
@@ -944,7 +946,7 @@ mod tests {
             Ok(Tag::Daterange(
                 Daterange::builder("test", date_time!(2025-06-05 T 20:38:42.149 -05:00))
                     .with_class("com.m3u8.test")
-                    .with_cue("ONCE")
+                    .with_cue(EnumeratedStringList::from([daterange::Cue::Once]))
                     .with_end_date(date_time!(2025-06-05 T 20:40:42.149 -05:00))
                     .with_duration(120.0)
                     .with_planned_duration(180.0)
@@ -1064,7 +1066,7 @@ mod tests {
     fn preload_hint() {
         assert_eq!(
             Ok(Tag::PreloadHint(
-                PreloadHint::builder("PART", "part.2.mp4")
+                PreloadHint::builder(preload_hint::Type::Part, "part.2.mp4")
                     .with_byterange_start(512)
                     .with_byterange_length(1024)
                     .finish()
@@ -1085,7 +1087,7 @@ mod tests {
         );
         assert_eq!(
             Ok(Tag::PreloadHint(
-                PreloadHint::builder("PART", "part.2.mp4").finish()
+                PreloadHint::builder(preload_hint::Type::Part, "part.2.mp4").finish()
             )),
             Tag::try_from(ParsedTag {
                 name: "-X-PRELOAD-HINT",
@@ -1136,7 +1138,7 @@ mod tests {
     fn media() {
         assert_eq!(
             Ok(Tag::Media(
-                Media::builder("AUDIO", "English", "stereo")
+                Media::builder(media::Type::Audio, "English", "stereo")
                     .with_uri("audio/en/stereo.m3u8")
                     .with_language("en")
                     .with_assoc_language("en")
@@ -1199,7 +1201,7 @@ mod tests {
         );
         assert_eq!(
             Ok(Tag::Media(
-                Media::builder("CLOSED-CAPTIONS", "English", "cc")
+                Media::builder(media::Type::ClosedCaptions, "English", "cc")
                     .with_instream_id("CC1")
                     .finish()
             )),

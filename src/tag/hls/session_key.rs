@@ -1,7 +1,7 @@
 use crate::{
     error::{ValidationError, ValidationErrorValueKind},
     tag::{
-        hls::TagInner,
+        hls::{EnumeratedString, TagInner, key::Method},
         known::ParsedTag,
         value::{ParsedAttributeValue, SemiParsedTagValue},
     },
@@ -149,8 +149,8 @@ impl<'a> SessionKey<'a> {
         }
     }
 
-    pub fn method(&self) -> &str {
-        &self.method
+    pub fn method(&self) -> EnumeratedString<Method> {
+        EnumeratedString::from(self.method.as_ref())
     }
 
     pub fn uri(&self) -> &str {
@@ -326,7 +326,7 @@ mod tests {
             .with_keyformat("com.apple.streamingkeydelivery")
             .with_keyformatversions("1")
             .finish(),
-        (method, "example", @Attr="METHOD=example"),
+        (method, EnumeratedString::<Method>::Unknown("example"), @Attr="METHOD=example"),
         (uri, "example", @Attr="URI=\"example\""),
         (iv, @Option "0x1234", @Attr="IV=0x1234"),
         (keyformat, "example"; @Default="identity", @Attr="KEYFORMAT=\"example\""),

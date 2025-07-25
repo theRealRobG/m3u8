@@ -17,3 +17,7 @@ m3u8-rs = "6.0.0"
 [[bench]]
 name = "line_parse_bench"
 harness = false
+
+[[bench]]
+name = "delta_update_bench"
+harness = false
