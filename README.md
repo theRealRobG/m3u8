@@ -616,8 +616,8 @@ ParsingOptionsBuilder::new()
 It may be quite desirable to avoid parsing of tags that are not needed as this can add quite
 considerable performance overhead. Unknown tags make no attempt to parse or validate the value
 portion of the tag (the part after `:`) and just return the name of the tag along with the `&str`
-for the rest of the line. Running locally as of commit `6fcc38a67bf0eee0769b7e85f82599d1da6eb56d`
-the following benchmark shows that when parsing a large playlist, including all tags in the parse is
+for the rest of the line. Running locally as of commit 6fcc38a67bf0eee0769b7e85f82599d1da6eb56d the
+following benchmark shows that when parsing a large playlist, including all tags in the parse is
 about 2x slower than including no tags in the parse (`2.3842 ms` vs `1.1364 ms`).
 ```sh
 Large playlist, all tags, using Reader::from_str, no writing
@@ -716,6 +716,22 @@ Internally, all the known HLS tags (within `m3u8::tag::hls`) implement mutabilit
 that if no mutation occurs then there are no string allocations when reading `from_str` and none
 directly by `m3u8` during writing (no guarantees on what the implementation of `Write` used as input
 to the `Writer::new` does). This is with the aim of optimizing reading and writing performance.
+
+## More complex example - HLS Playlist Delta Update
+
+A more complex example of using this library can be found within the 
+[benches/delta_update_bench.rs](./benches/delta_update_bench.rs) benchmark. Here we have a fairly
+thorough implementation of HLS Playlist Delta Updates intended to work with any given playlist. One
+could imagine using this implementation in a proxy layer (e.g. a CDN edge function) in front of any
+origin server, so as to add delta update functionality even where not supported at the origin, in an
+efficient way (especially assuming that appropriate caching layers are present). At time of writing
+this benchmark (commit 3f555a7b53dda72da254b13f76a4eca1602e47b9) the time taken to run this delta
+update on a massive playlist (27,985 lines, resulting in 9,204 skipped segments) is measured as
+`2.3138 ms` (running locally, Chip: Apple M1 Max, Memory: 64 GB).
+```sh
+Playlist delta update implementation using this library
+                        time:   [2.3119 ms 2.3138 ms 2.3167 ms]
+```
 
 # HLS Specification
 
