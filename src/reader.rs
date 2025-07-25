@@ -123,17 +123,17 @@ mod tests {
                     3 => assert_eq!($expectation, line),
                     4 => assert_eq!(Some(HlsLine::from(Inf::new(9.009, String::new()))), line),
                     5 => assert_eq!(
-                        Some(HlsLine::Uri("http://media.example.com/first.ts")),
+                        Some(HlsLine::Uri("http://media.example.com/first.ts".into())),
                         line
                     ),
                     6 => assert_eq!(Some(HlsLine::from(Inf::new(9.009, String::new()))), line),
                     7 => assert_eq!(
-                        Some(HlsLine::Uri("http://media.example.com/second.ts")),
+                        Some(HlsLine::Uri("http://media.example.com/second.ts".into())),
                         line
                     ),
                     8 => assert_eq!(Some(HlsLine::from(Inf::new(3.003, String::new()))), line),
                     9 => assert_eq!(
-                        Some(HlsLine::Uri("http://media.example.com/third.ts")),
+                        Some(HlsLine::Uri("http://media.example.com/third.ts".into())),
                         line
                     ),
                     10 => assert_eq!(Some(HlsLine::from(Endlist)), line),
@@ -235,7 +235,10 @@ mod tests {
             }),
             reader.read_line()
         );
-        assert_eq!(Ok(Some(HlsLine::Comment("Comment"))), reader.read_line());
+        assert_eq!(
+            Ok(Some(HlsLine::Comment("Comment".into()))),
+            reader.read_line()
+        );
     }
 
     // Example custom tag implementation for the tests above.

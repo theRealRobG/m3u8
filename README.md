@@ -36,11 +36,11 @@ assert_eq!(reader.read_line(), Ok(Some(HlsLine::from(M3u))));
 assert_eq!(reader.read_line(), Ok(Some(HlsLine::from(Targetduration::new(10)))));
 assert_eq!(reader.read_line(), Ok(Some(HlsLine::from(Version::new(3)))));
 assert_eq!(reader.read_line(), Ok(Some(HlsLine::from(Inf::new(9.009, String::new())))));
-assert_eq!(reader.read_line(), Ok(Some(HlsLine::Uri("first.ts"))));
+assert_eq!(reader.read_line(), Ok(Some(HlsLine::uri("first.ts"))));
 assert_eq!(reader.read_line(), Ok(Some(HlsLine::from(Inf::new(9.009, String::new())))));
-assert_eq!(reader.read_line(), Ok(Some(HlsLine::Uri("second.ts"))));
+assert_eq!(reader.read_line(), Ok(Some(HlsLine::uri("second.ts"))));
 assert_eq!(reader.read_line(), Ok(Some(HlsLine::from(Inf::new(3.003, String::new())))));
-assert_eq!(reader.read_line(), Ok(Some(HlsLine::Uri("third.ts"))));
+assert_eq!(reader.read_line(), Ok(Some(HlsLine::uri("third.ts"))));
 assert_eq!(reader.read_line(), Ok(Some(HlsLine::from(Endlist))));
 assert_eq!(reader.read_line(), Ok(None));
 ```
@@ -59,7 +59,7 @@ use m3u8::{
         unknown,
     },
 };
-use std::fmt::Debug;
+use std::{borrow::Cow, fmt::Debug};
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum HlsLine<'a, CustomTag = NoCustomTag>
@@ -73,8 +73,8 @@ where
 {
     KnownTag(known::Tag<'a, CustomTag>),
     UnknownTag(unknown::Tag<'a>),
-    Comment(&'a str),
-    Uri(&'a str),
+    Comment(Cow<'a, str>),
+    Uri(Cow<'a, str>),
     Blank,
 }
 ```
@@ -301,7 +301,7 @@ assert_eq!(
         )
     ))))
 );
-assert_eq!(reader.read_line(), Ok(Some(HlsLine::Uri("image.1.jpeg"))));
+assert_eq!(reader.read_line(), Ok(Some(HlsLine::Uri("image.1.jpeg".into()))));
 ```
 
 ### Enumerated strings

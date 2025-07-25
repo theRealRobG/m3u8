@@ -8,7 +8,7 @@ use crate::{
     },
     utils::{split_on_new_line, str_from},
 };
-use std::{cmp::PartialEq, fmt::Debug};
+use std::{borrow::Cow, cmp::PartialEq, fmt::Debug};
 
 #[derive(Debug, PartialEq, Clone)]
 #[allow(clippy::large_enum_variant)] // See comment on crate::tag::known::Tag.
@@ -23,8 +23,8 @@ where
 {
     KnownTag(known::Tag<'a, CustomTag>),
     UnknownTag(unknown::Tag<'a>),
-    Comment(&'a str),
-    Uri(&'a str),
+    Comment(Cow<'a, str>),
+    Uri(Cow<'a, str>),
     Blank,
 }
 
@@ -71,15 +71,15 @@ where
 }
 
 impl<'a> HlsLine<'a> {
-    pub fn new_comment(comment: &'a str) -> Self {
-        Self::Comment(comment)
+    pub fn comment(comment: impl Into<Cow<'a, str>>) -> Self {
+        Self::Comment(comment.into())
     }
 
-    pub fn new_uri(uri: &'a str) -> Self {
-        Self::Uri(uri)
+    pub fn uri(uri: impl Into<Cow<'a, str>>) -> Self {
+        Self::Uri(uri.into())
     }
 
-    pub fn new_blank() -> Self {
+    pub fn blank() -> Self {
         Self::Blank
     }
 }
@@ -265,7 +265,7 @@ where
             let comment =
                 std::str::from_utf8(parsed).map_err(|error| map_err_bytes(error, input))?;
             Ok(ParsedByteSlice {
-                parsed: HlsLine::Comment(comment),
+                parsed: HlsLine::Comment(Cow::Borrowed(comment)),
                 remaining,
             })
         }
@@ -273,7 +273,7 @@ where
         let ParsedByteSlice { parsed, remaining } = split_on_new_line(input);
         let uri = std::str::from_utf8(parsed).map_err(|error| map_err_bytes(error, input))?;
         Ok(ParsedByteSlice {
-            parsed: HlsLine::Uri(uri),
+            parsed: HlsLine::Uri(Cow::Borrowed(uri)),
             remaining,
         })
     }
@@ -305,7 +305,7 @@ mod tests {
     #[test]
     fn uri_line() {
         assert_eq!(
-            Ok(HlsLine::Uri("hello/world.m3u8")),
+            Ok(HlsLine::Uri("hello/world.m3u8".into())),
             parse("hello/world.m3u8", &ParsingOptions::default()).map(|p| p.parsed)
         )
     }
@@ -321,7 +321,7 @@ mod tests {
     #[test]
     fn comment() {
         assert_eq!(
-            Ok(HlsLine::Comment("Comment")),
+            Ok(HlsLine::Comment("Comment".into())),
             parse("#Comment", &ParsingOptions::default()).map(|p| p.parsed)
         );
     }

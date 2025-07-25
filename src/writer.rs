@@ -7,6 +7,7 @@ use crate::{
     },
 };
 use std::{
+    borrow::Cow,
     fmt::Debug,
     io::{self, Write},
 };
@@ -75,8 +76,8 @@ where
     /// writer.write_comment(" This is a comment.").unwrap();
     /// assert_eq!("# This is a comment.\n".as_bytes(), writer.into_inner());
     /// ```
-    pub fn write_comment(&mut self, comment: &str) -> io::Result<usize> {
-        self.write_line(HlsLine::Comment(comment))
+    pub fn write_comment<'a>(&mut self, comment: impl Into<Cow<'a, str>>) -> io::Result<usize> {
+        self.write_line(HlsLine::Comment(comment.into()))
     }
 
     /// Example:
@@ -86,8 +87,8 @@ where
     /// writer.write_uri("example.m3u8").unwrap();
     /// assert_eq!("example.m3u8\n".as_bytes(), writer.into_inner());
     /// ```
-    pub fn write_uri(&mut self, uri: &str) -> io::Result<usize> {
-        self.write_line(HlsLine::Uri(uri))
+    pub fn write_uri<'a>(&mut self, uri: impl Into<Cow<'a, str>>) -> io::Result<usize> {
+        self.write_line(HlsLine::Uri(uri.into()))
     }
 
     /// Example:
@@ -441,19 +442,25 @@ mod tests {
             .write_line(HlsLine::from(Inf::new(7.975, "".to_string())))
             .unwrap();
         writer
-            .write_line(HlsLine::Uri("https://priv.example.com/fileSequence2680.ts"))
+            .write_line(HlsLine::Uri(
+                "https://priv.example.com/fileSequence2680.ts".into(),
+            ))
             .unwrap();
         writer
             .write_line(HlsLine::from(Inf::new(7.941, "".to_string())))
             .unwrap();
         writer
-            .write_line(HlsLine::Uri("https://priv.example.com/fileSequence2681.ts"))
+            .write_line(HlsLine::Uri(
+                "https://priv.example.com/fileSequence2681.ts".into(),
+            ))
             .unwrap();
         writer
             .write_line(HlsLine::from(Inf::new(7.975, "".to_string())))
             .unwrap();
         writer
-            .write_line(HlsLine::Uri("https://priv.example.com/fileSequence2682.ts"))
+            .write_line(HlsLine::Uri(
+                "https://priv.example.com/fileSequence2682.ts".into(),
+            ))
             .unwrap();
         assert_eq!(
             EXPECTED_WRITE_OUTPUT,
@@ -466,11 +473,15 @@ mod tests {
         let mut writer = Writer::new(Vec::new());
         assert_eq!(
             12, // 1 (#) + 10 (str) + 1 (\n) == 12
-            writer.write_line(HlsLine::Comment(" A comment")).unwrap()
+            writer
+                .write_line(HlsLine::Comment(" A comment".into()))
+                .unwrap()
         );
         assert_eq!(
             13, // 12 (str) + 1 (\n) == 13
-            writer.write_line(HlsLine::Uri("example.m3u8")).unwrap()
+            writer
+                .write_line(HlsLine::Uri("example.m3u8".into()))
+                .unwrap()
         );
         assert_eq!(
             22, // 21 (#EXTINF:6.006,PTS:0.0) + 1 (\n) == 22
