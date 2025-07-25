@@ -233,7 +233,9 @@ fn make_delta_update<W: Write>(input: &[u8], output: &mut W) -> Result<(), Box<d
                     // (or at least, the tag is marked as REQUIRED, and I believe the implication is
                     // that it is required before any Media Segment Tags).
                     let Some(skip_until) = state.skip_until else {
-                        return Err(format!("skip until must be defined by media segments").into());
+                        return Err(
+                            format!("skip until must be defined before media segments").into()
+                        );
                     };
                     // The minimum version if we are introducing EXT-X-SKIP is 9.
                     if !state.did_write_version {
