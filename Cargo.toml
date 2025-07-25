@@ -15,3 +15,7 @@ paste = "1.0"
 [[bench]]
 name = "line_parse_bench"
 harness = false
+
+[[bench]]
+name = "delta_update_bench"
+harness = false
