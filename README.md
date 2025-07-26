@@ -35,11 +35,11 @@ let mut reader = Reader::from_str(
 assert_eq!(reader.read_line(), Ok(Some(HlsLine::from(M3u))));
 assert_eq!(reader.read_line(), Ok(Some(HlsLine::from(Targetduration::new(10)))));
 assert_eq!(reader.read_line(), Ok(Some(HlsLine::from(Version::new(3)))));
-assert_eq!(reader.read_line(), Ok(Some(HlsLine::from(Inf::new(9.009, String::new())))));
+assert_eq!(reader.read_line(), Ok(Some(HlsLine::from(Inf::new(9.009, "")))));
 assert_eq!(reader.read_line(), Ok(Some(HlsLine::uri("first.ts"))));
-assert_eq!(reader.read_line(), Ok(Some(HlsLine::from(Inf::new(9.009, String::new())))));
+assert_eq!(reader.read_line(), Ok(Some(HlsLine::from(Inf::new(9.009, "")))));
 assert_eq!(reader.read_line(), Ok(Some(HlsLine::uri("second.ts"))));
-assert_eq!(reader.read_line(), Ok(Some(HlsLine::from(Inf::new(3.003, String::new())))));
+assert_eq!(reader.read_line(), Ok(Some(HlsLine::from(Inf::new(3.003, "")))));
 assert_eq!(reader.read_line(), Ok(Some(HlsLine::uri("third.ts"))));
 assert_eq!(reader.read_line(), Ok(Some(HlsLine::from(Endlist))));
 assert_eq!(reader.read_line(), Ok(None));
