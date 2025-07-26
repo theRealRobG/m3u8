@@ -733,6 +733,36 @@ Playlist delta update implementation using this library
                         time:   [2.3119 ms 2.3138 ms 2.3167 ms]
 ```
 
+### Comparison with alternative libraries
+
+#### m3u8-rs
+
+[m3u8-rs](https://crates.io/crates/m3u8-rs) is the most popular m3u8 parser I've found on crates.io,
+with 669,004 all time downloads at time of writing. Below the implementation of delta update using
+our library in the benchmark file is an implementation using `m3u8-rs`. I've noted in comments that
+there was significant difficulty implementing a delta update using this library, and ultimately, I
+have not been able to do it correctly. There are several issues:
+* Necessary tags EXT-X-SKIP and EXT-X-SERVER-CONTROL are not supported.
+* The body of the playlist is only described in terms of segments, so media metadata tags must
+  be associated to a segment, but this means that we cannot write daterange without having an
+  associated segment.
+* EXT-X-DATERANGE belongs to a segment, but the segment only has an Option of a daterange, and
+  not a Vec. This means that we lose many daterange tags during parsing as it is quite normal
+  to have more than one daterange together (e.g. chapter end followed by chapter start).
+
+I've tried to work around the first two points; however, the last one makes it very difficult to
+work with the library.
+
+Nevertheless, I do have some implementation made, and so can compare some results from running the
+bench locally:
+```sh
+Playlist delta update implementation using m3u8-rs library
+                        time:   [6.7487 ms 6.8345 ms 6.9149 ms]
+```
+
+These results show that the implementation we've made using this library is almost 3x faster than
+the implementation we've made using `m3u8-rs`.
+
 # HLS Specification
 
 The parsing rules have been derived from the HLS specification listed here:
