@@ -727,7 +727,7 @@ origin server, so as to add delta update functionality even where not supported 
 efficient way (especially assuming that appropriate caching layers are present). At time of writing
 this benchmark (commit 8665329a44aa45a2a59b158f10a6ce2b01aa31d4) the time taken to run this delta
 update on a massive playlist (27,985 lines, resulting in 9,204 skipped segments) is measured as
-`2.3138 ms` (running locally, Chip: Apple M1 Max, Memory: 64 GB).
+`2.3001 ms` (running locally, Chip: Apple M1 Max, Memory: 64 GB).
 ```sh
 Playlist delta update implementation using this library
                         time:   [2.2995 ms 2.3001 ms 2.3007 ms]
