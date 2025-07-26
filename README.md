@@ -725,12 +725,12 @@ thorough implementation of HLS Playlist Delta Updates intended to work with any 
 could imagine using this implementation in a proxy layer (e.g. a CDN edge function) in front of any
 origin server, so as to add delta update functionality even where not supported at the origin, in an
 efficient way (especially assuming that appropriate caching layers are present). At time of writing
-this benchmark (commit 3f555a7b53dda72da254b13f76a4eca1602e47b9) the time taken to run this delta
+this benchmark (commit 8665329a44aa45a2a59b158f10a6ce2b01aa31d4) the time taken to run this delta
 update on a massive playlist (27,985 lines, resulting in 9,204 skipped segments) is measured as
 `2.3138 ms` (running locally, Chip: Apple M1 Max, Memory: 64 GB).
 ```sh
 Playlist delta update implementation using this library
-                        time:   [2.3119 ms 2.3138 ms 2.3167 ms]
+                        time:   [2.2995 ms 2.3001 ms 2.3007 ms]
 ```
 
 ### Comparison with alternative libraries
@@ -757,11 +757,42 @@ Nevertheless, I do have some implementation made, and so can compare some result
 bench locally:
 ```sh
 Playlist delta update implementation using m3u8-rs library
-                        time:   [6.7487 ms 6.8345 ms 6.9149 ms]
+                        time:   [6.5710 ms 6.5784 ms 6.5900 ms]
 ```
 
 These results show that the implementation we've made using this library is almost 3x faster than
 the implementation we've made using `m3u8-rs`.
+
+#### hls_m3u8
+
+[hls_m3u8](https://crates.io/crates/hls_m3u8) seems to be the second most popular m3u8 parser that I
+can see on crates.io, with 72,351 all time downloads at time of writing. Below the m3u8-rs
+implementation is the hls_m3u8 implementation. It is very similar to the m3u8-rs implementation and
+interestingly shares much of the same limitations and some more. In addition to all of the same
+problems listed above, hls_m3u8 also has the following issues:
+* There is no control over the EXT-X-VERSION tag. The library determines this itself based on what
+  it knows from the tags that have been included; however, the library is out of date with respect
+  to the HLS specification, and so it outputs an incorrect version tag.
+* The library decides that it must have EXT-X-KEY tag on every segment, regardless of the source
+  manifest, and will put EXT-X-KEY tags everywhere. Interestingly, since we removed the key tag with
+  the delta update, the library interprets this to mean that there is no DRM, and puts key tags with
+  METHOD=NONE everywhere. This is quite broken.
+* The library does output unknown tags for the playlist, but dumps them at the bottom of the
+  playlist, which is espcially problematic for any valid HLS tags that the library does not yet
+  recognize.
+
+Again, similar to m3u8-rs, it isn't really possible to implement a delta update using this library.
+Perhaps my test is unfair? I really thought that delta updates seemed like a good use-case to test
+as (for me at least) it had a realistic application, was relatively simple, but yet complex enough
+to test the library implementation details. Anyway, from what I could produce, here are the results:
+
+```sh
+Playlist delta update implementation using hls_m3u8 library
+                        time:   [5.0737 ms 5.0783 ms 5.0834 ms]
+```
+
+These results show that the implementation we've made using this library is about 2.2x faster than
+the implementation we've made using `hls_m3u8`.
 
 # HLS Specification
 
