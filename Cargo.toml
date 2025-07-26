@@ -11,6 +11,9 @@ memchr = "2.7"
 criterion = "0.6"
 pretty_assertions = "1.4.1"
 paste = "1.0"
+# These two dependencies are used to compare performance of this library with that of the
+# two most popular m3u8 parsing libraries on crates.io at the time. This comparison is
+# done in the delta_update_bench.
 hls_m3u8 = "0.5.1"
 m3u8-rs = "6.0.0"
 
