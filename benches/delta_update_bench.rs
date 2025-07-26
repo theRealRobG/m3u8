@@ -10,8 +10,9 @@ use m3u8::{
         known,
     },
 };
+use m3u8_rs::{ExtTag, parse_media_playlist_res};
 use pretty_assertions::assert_eq;
-use std::{error::Error, io::Write};
+use std::{error::Error, hint::black_box, io::Write};
 
 const LONG_MEDIA_PLAYLIST: &str = include_str!("long_media_playlist.m3u8");
 const EXPECTED_OUTPUT_PLAYLIST: &str = r#"#EXTM3U
@@ -83,15 +84,44 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         EXPECTED_OUTPUT_PLAYLIST,
         std::str::from_utf8(&output_playlist.clone()).expect("output should be valid string")
     );
-
     // Then run the bench
     c.bench_function(
         "Playlist delta update implementation using this library",
         |b| {
             b.iter(|| {
                 output_playlist = vec![];
-                make_delta_update(LONG_MEDIA_PLAYLIST.as_bytes(), &mut output_playlist)
-                    .expect("should not fail");
+                black_box(
+                    make_delta_update(LONG_MEDIA_PLAYLIST.as_bytes(), &mut output_playlist)
+                        .expect("should not fail"),
+                );
+            });
+        },
+    );
+
+    // Run once to validate output as expected for m3u8-rs
+    //
+    // As noted below, this example does not provide an accurate delta update, but we still want to
+    // check the speed of the implementation.
+    output_playlist = vec![];
+    make_delta_update_using_m3u8_rs(LONG_MEDIA_PLAYLIST.as_bytes(), &mut output_playlist)
+        .expect("should not fail");
+    assert_eq!(
+        KIND_OF_EXPECTED_M3U8_RS_OUTPUT,
+        std::str::from_utf8(&output_playlist.clone()).expect("output should be valid string")
+    );
+    // Then run the bench
+    c.bench_function(
+        "Playlist delta update implementation using m3u8-rs library",
+        |b| {
+            b.iter(|| {
+                output_playlist = vec![];
+                black_box(
+                    make_delta_update_using_m3u8_rs(
+                        LONG_MEDIA_PLAYLIST.as_bytes(),
+                        &mut output_playlist,
+                    )
+                    .expect("should not fail"),
+                );
             });
         },
     );
@@ -100,7 +130,16 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 criterion_group!(benches, criterion_benchmark);
 criterion_main!(benches);
 
+// =================================================================================================
+//
 // Delta update implementation using this library
+//
+// In this file we are going to implement delta update using this library, but also, with some other
+// open source available m3u8 parsers. The goal is to see how this library compares against others
+// when it comes to a realistic task such as implementing a playlist delta update. Below is an
+// implementation using this library.
+//
+// =================================================================================================
 
 // We set some state variables to help with the delta update.
 #[derive(Default)]
@@ -340,3 +379,217 @@ fn is_media_segment_tag(line: &HlsLine) -> bool {
         true
     }
 }
+
+// =================================================================================================
+//
+// Delta update implementation using m3u8-rs
+//
+// It must be noted that I found implementing the delta update using m3u8-rs impossible (within
+// reason). There are several issues:
+//   * Necessary tags EXT-X-SKIP and EXT-X-SERVER-CONTROL are not supported.
+//   * The body of the playlist is only described in terms of segments, so media metadata tags must
+//     be associated to a segment, but this means that we cannot write daterange without having an
+//     associated segment.
+//   * EXT-X-DATERANGE belongs to a segment, but the segment only has an Option of a daterange, and
+//     not a Vec. This means that we lose many daterange tags during parsing as it is quite normal
+//     to have more than one daterange together (e.g. chapter end followed by chapter start).
+//
+// I've tried to work around the first two points; however, the last one makes it very difficult to
+// work with the library.
+//
+// =================================================================================================
+
+fn make_delta_update_using_m3u8_rs<W: Write>(
+    input: &[u8],
+    output: &mut W,
+) -> Result<(), Box<dyn Error>> {
+    let mut media_playlist = parse_media_playlist_res(input).map_err(|e| e.to_string())?;
+    let skip_until = 6.0 * (media_playlist.target_duration as f32);
+    if media_playlist.version.unwrap_or_default() < 9 {
+        media_playlist.version = Some(9);
+    }
+    let mut existing_server_control: Option<ExtTag> = None;
+    // m3u8-rs does not support the EXT-X-SERVER-CONTROL tag. This means I have to work with the
+    // ExtTag struct provided via the `unknown_tags` vec. Also, perhaps a bug, but unknown_tags are
+    // not written at the media playlist level (they are for "MasterPlaylist", and they are for
+    // "MediaSegment"; however, not for "MediaPlaylist", even though the documentation indicates
+    // that at the playlist level they indicate unknown tags before the first media segment).
+    for tag in &media_playlist.unknown_tags {
+        if tag.tag.as_str() == "X-SERVER-CONTROL" {
+            if let Some(rest) = &tag.rest {
+                if rest.contains("CAN-SKIP-UNTIL") {
+                    // This will get complicated here. In this scenario I would need to custom parse
+                    // the server control tag, extract the CAN-SKIP-UNTIL value, and then update the
+                    // skip until we are working with here. Since I know this isn't the case for the
+                    // bench, I'll avoid going through this complexity, but the implementation is
+                    // therefore incomplete.
+                    todo!()
+                } else {
+                    existing_server_control = Some(ExtTag {
+                        tag: "X-SERVER-CONTROL".to_string(),
+                        rest: Some(format!("{rest},CAN-SKIP-UNTIL={skip_until}")),
+                    });
+                }
+            } else {
+                existing_server_control = Some(ExtTag {
+                    tag: "X-SERVER-CONTROL".to_string(),
+                    rest: Some(format!("CAN-SKIP-UNTIL={skip_until}")),
+                });
+            }
+            break;
+        }
+    }
+    // m3u8-rs doesn't support the concept of EXT-X-SKIP. Furthermore, any tag that can appear
+    // within the segments section (e.g. EXT-X-DATERANGE) is tied to a segment, which means I can't
+    // include them without having segments. This is problematic because I need to leave the skipped
+    // over EXT-X-DATERANGE in the playlist, so I have to write these to intermediate data, and then
+    // stitch it together after writing. I'll start with the server control tag and then later add
+    // the daterange tags.
+    let mut intermediate_lines = if let Some(server_control) = existing_server_control {
+        format!("{server_control}\n").as_bytes().to_vec()
+    } else {
+        format!("#EXT-X-SERVER-CONTROL:CAN-SKIP-UNTIL={skip_until:?}\n")
+            .as_bytes()
+            .to_vec()
+    };
+    // This logic for deciding how many segments to skip is similar to the above logic using our
+    // library.
+    let total_segment_count = media_playlist.segments.len();
+    let mut drain_end = 0;
+    let mut backwards_segment_duration = 0.0;
+    let mut segment_count = 0usize;
+    for (index, segment) in media_playlist.segments.iter().enumerate().rev() {
+        if backwards_segment_duration >= skip_until {
+            drain_end = index + 1;
+            break;
+        } else {
+            segment_count += 1;
+            backwards_segment_duration += segment.duration;
+        }
+    }
+    for segment in media_playlist.segments.drain(..drain_end) {
+        // Strangely, m3u8-rs only considers the possibility of having one EXT-X-DATERANGE tag per
+        // segment. This means that in our example here, we lose a bunch of daterange tags, because
+        // there are plenty of occurrences of multiple daterange before a segment tag (most times
+        // an ad break ends a new chapter or program start marker will also be inserted at the same
+        // time). This means that actually, it seems quite impossible to implement this delta update
+        // properly (and in general, to use this library to parse a playlist like we have), so this
+        // example is purely a test of speed and not accuracy.
+        if let Some(daterange) = segment.daterange {
+            let mut tag = b"#EXT-X-DATERANGE:".to_vec();
+            daterange.write_attributes_to(&mut tag)?;
+            tag.write_all(b"\n")?;
+            intermediate_lines.write_all(&tag)?;
+        }
+    }
+    intermediate_lines.write_all(
+        format!(
+            "#EXT-X-SKIP:SKIPPED-SEGMENTS={}\n",
+            total_segment_count - segment_count
+        )
+        .as_bytes(),
+    )?;
+    let mut temporary_output = Vec::new();
+    media_playlist.write_to(&mut temporary_output)?;
+    // Here I take a fairly dumb approach to finding the first media segment tag by looping through
+    // the bytes until I find the name of a media segment tag.
+    let mut last_tag_token_index = 0;
+    let mut insertion_index = None;
+    for (index, byte) in temporary_output.iter().enumerate() {
+        match byte {
+            b':' | b'\n' if temporary_output[last_tag_token_index..index].starts_with(b"#EXT-") => {
+                if byte == &b'\n' && temporary_output[last_tag_token_index..index].contains(&b':') {
+                    continue; // We already checked this tag
+                }
+                let end_index = if temporary_output[index - 1] == b'\r' {
+                    index - 1
+                } else {
+                    index
+                };
+                // To avoid re-writing a bunch of matching code, I'm just using our library code for
+                // determining tag name and tag type. We would have to write it otherwise and it
+                // would probably just be the same (nothing fancy there).
+                if let Some(tag_name) =
+                    std::str::from_utf8(&temporary_output[(last_tag_token_index + 4)..end_index])
+                        .ok()
+                        .and_then(|s| TagName::try_from(s).ok())
+                {
+                    match tag_name.tag_type() {
+                        TagType::MediaSegment => {
+                            insertion_index = Some(last_tag_token_index);
+                            break;
+                        }
+                        _ => (),
+                    }
+                }
+            }
+            b'#' => last_tag_token_index = index,
+            _ => (),
+        }
+    }
+    if let Some(index) = insertion_index {
+        let rest_of_lines = temporary_output.split_off(index);
+        output.write_all(&temporary_output)?;
+        output.write_all(&intermediate_lines)?;
+        output.write_all(&rest_of_lines)?;
+    } else {
+        output.write_all(&temporary_output)?;
+    }
+    Ok(())
+}
+
+// m3u8-rs re-orders many tags, because when writing, it allocates new strings for each tag and has
+// a pre-defined order of output. As mentioned in the code above, it also has a bug where it only
+// considers that a segment tag can have at most one EXT-X-DATERANGE before it. So, I write
+// "expected" output, but this is just to memorialize what I think the output should be given what
+// we can do, so that if we try and change implementation later on we have a base of what to expect.
+const KIND_OF_EXPECTED_M3U8_RS_OUTPUT: &str = r#"#EXTM3U
+#EXT-X-VERSION:9
+#EXT-X-TARGETDURATION:4
+#EXT-X-MEDIA-SEQUENCE:541647
+#EXT-X-SERVER-CONTROL:CAN-SKIP-UNTIL=24.0
+#EXT-X-DATERANGE:ID="0x10-2-1654866008",START-DATE="2022-06-10T13:00:09+00:00",PLANNED-DURATION=299.484,SCTE35-OUT="0xFC303100000000000000FFF00506FE00A84094001B021943554549000000027FFF00019B47470E053131313131100100FC61B6AE"
+#EXT-X-DATERANGE:ID="0x30-5-1654866308",START-DATE="2022-06-10T13:05:09+00:00",PLANNED-DURATION=180.067,SCTE35-OUT="0xFC303100000000000000FFF00506FE02443D39001B021943554549000000057FFF0000F748B60E05313131313130011663D5F99E"
+#EXT-X-DATERANGE:ID="0x30-5-1654866308",START-DATE="2022-06-10T13:05:09+00:00",END-DATE="2022-06-10T13:08:09+00:00",SCTE35-IN="0xFC303100000000000000FFF00506FE033B964B001B021943554549000000057FFF0000F748B60E05313131313131011629C34189"
+#EXT-X-DATERANGE:ID="0x30-5-1654866788",START-DATE="2022-06-10T13:13:09+00:00",PLANNED-DURATION=180.067,SCTE35-OUT="0xFC303100000000000000FFF00506FE04D792F0001B021943554549000000057FFF0000F748B60E053131313131300215F66424AB"
+#EXT-X-DATERANGE:ID="0x30-5-1654866788",START-DATE="2022-06-10T13:13:09+00:00",END-DATE="2022-06-10T13:16:09+00:00",SCTE35-IN="0xFC303100000000000000FFF00506FE05CEEC02001B021943554549000000057FFF0000F748B60E0531313131313102154673565E"
+#EXT-X-DATERANGE:ID="0x30-5-1654867269",START-DATE="2022-06-10T13:21:09+00:00",PLANNED-DURATION=180.067,SCTE35-OUT="0xFC303100000000000000FFF00506FE076AE8A7001B021943554549000000057FFF0000F748B60E05313131313130031472973E3C"
+#EXT-X-DATERANGE:ID="0x30-5-1654867269",START-DATE="2022-06-10T13:21:09+00:00",END-DATE="2022-06-10T13:24:09+00:00",SCTE35-IN="0xFC303100000000000000FFF00506FE086241B9001B021943554549000000057FFF0000F748B60E05313131313131031406A15535"
+#EXT-X-DATERANGE:ID="0x30-5-1654867749",START-DATE="2022-06-10T13:29:09+00:00",PLANNED-DURATION=180.067,SCTE35-OUT="0xFC303100000000000000FFF00506FE09FE3E5E001B021943554549000000057FFF0000F748B60E0531313131313004135B147454"
+#EXT-X-SKIP:SKIPPED-SEGMENTS=9204
+#EXT-X-PROGRAM-DATE-TIME:2022-06-10T13:30:26.820Z
+#EXT-X-SCTE35:TYPE=0x22,ELAPSED=77.611,UPID="0x0E:0x3131313131",ID="1",DURATION=180.067,BLACKOUT=NO,CUE="/DAxAAAAAAAAAP/wBQb+Cf4+XgAbAhlDVUVJAAAAAX//AAD3SLYOBTExMTExIgQTSTKHkA=="
+#EXT-X-SCTE35:TYPE=0x30,ELAPSED=77.611,UPID="0x0E:0x3131313131",ID="5",DURATION=180.067,BLACKOUT=NO,CUE-OUT=CONT,CUE="/DAxAAAAAAAAAP/wBQb+Cf4+XgAbAhlDVUVJAAAABX//AAD3SLYOBTExMTExMAQTWxR0VA=="
+#EXTINF:3.904,
+1652717346750item-01item_Segment-550851.mp4
+#EXT-X-PROGRAM-DATE-TIME:2022-06-10T13:30:30.724Z
+#EXT-X-SCTE35:TYPE=0x22,ELAPSED=81.515,UPID="0x0E:0x3131313131",ID="1",DURATION=180.067,BLACKOUT=NO,CUE="/DAxAAAAAAAAAP/wBQb+Cf4+XgAbAhlDVUVJAAAAAX//AAD3SLYOBTExMTExIgQTSTKHkA=="
+#EXT-X-SCTE35:TYPE=0x30,ELAPSED=81.515,UPID="0x0E:0x3131313131",ID="5",DURATION=180.067,BLACKOUT=NO,CUE-OUT=CONT,CUE="/DAxAAAAAAAAAP/wBQb+Cf4+XgAbAhlDVUVJAAAABX//AAD3SLYOBTExMTExMAQTWxR0VA=="
+#EXTINF:3.904,
+1652717346750item-01item_Segment-550852.mp4
+#EXT-X-PROGRAM-DATE-TIME:2022-06-10T13:30:34.628Z
+#EXT-X-SCTE35:TYPE=0x22,ELAPSED=85.419,UPID="0x0E:0x3131313131",ID="1",DURATION=180.067,BLACKOUT=NO,CUE="/DAxAAAAAAAAAP/wBQb+Cf4+XgAbAhlDVUVJAAAAAX//AAD3SLYOBTExMTExIgQTSTKHkA=="
+#EXT-X-SCTE35:TYPE=0x30,ELAPSED=85.419,UPID="0x0E:0x3131313131",ID="5",DURATION=180.067,BLACKOUT=NO,CUE-OUT=CONT,CUE="/DAxAAAAAAAAAP/wBQb+Cf4+XgAbAhlDVUVJAAAABX//AAD3SLYOBTExMTExMAQTWxR0VA=="
+#EXTINF:3.903,
+1652717346750item-01item_Segment-550853.mp4
+#EXT-X-PROGRAM-DATE-TIME:2022-06-10T13:30:38.531Z
+#EXT-X-SCTE35:TYPE=0x22,ELAPSED=89.322,UPID="0x0E:0x3131313131",ID="1",DURATION=180.067,BLACKOUT=NO,CUE="/DAxAAAAAAAAAP/wBQb+Cf4+XgAbAhlDVUVJAAAAAX//AAD3SLYOBTExMTExIgQTSTKHkA=="
+#EXT-X-SCTE35:TYPE=0x30,ELAPSED=89.322,UPID="0x0E:0x3131313131",ID="5",DURATION=180.067,BLACKOUT=NO,CUE-OUT=CONT,CUE="/DAxAAAAAAAAAP/wBQb+Cf4+XgAbAhlDVUVJAAAABX//AAD3SLYOBTExMTExMAQTWxR0VA=="
+#EXTINF:3.904,
+1652717346750item-01item_Segment-550854.mp4
+#EXT-X-PROGRAM-DATE-TIME:2022-06-10T13:30:42.435Z
+#EXT-X-SCTE35:TYPE=0x22,ELAPSED=93.226,UPID="0x0E:0x3131313131",ID="1",DURATION=180.067,BLACKOUT=NO,CUE="/DAxAAAAAAAAAP/wBQb+Cf4+XgAbAhlDVUVJAAAAAX//AAD3SLYOBTExMTExIgQTSTKHkA=="
+#EXT-X-SCTE35:TYPE=0x30,ELAPSED=93.226,UPID="0x0E:0x3131313131",ID="5",DURATION=180.067,BLACKOUT=NO,CUE-OUT=CONT,CUE="/DAxAAAAAAAAAP/wBQb+Cf4+XgAbAhlDVUVJAAAABX//AAD3SLYOBTExMTExMAQTWxR0VA=="
+#EXTINF:3.904,
+1652717346750item-01item_Segment-550855.mp4
+#EXT-X-PROGRAM-DATE-TIME:2022-06-10T13:30:46.339Z
+#EXT-X-SCTE35:TYPE=0x22,ELAPSED=97.130,UPID="0x0E:0x3131313131",ID="1",DURATION=180.067,BLACKOUT=NO,CUE="/DAxAAAAAAAAAP/wBQb+Cf4+XgAbAhlDVUVJAAAAAX//AAD3SLYOBTExMTExIgQTSTKHkA=="
+#EXT-X-SCTE35:TYPE=0x30,ELAPSED=97.130,UPID="0x0E:0x3131313131",ID="5",DURATION=180.067,BLACKOUT=NO,CUE-OUT=CONT,CUE="/DAxAAAAAAAAAP/wBQb+Cf4+XgAbAhlDVUVJAAAABX//AAD3SLYOBTExMTExMAQTWxR0VA=="
+#EXTINF:3.904,
+1652717346750item-01item_Segment-550856.mp4
+#EXT-X-PROGRAM-DATE-TIME:2022-06-10T13:30:50.243Z
+#EXT-X-SCTE35:TYPE=0x22,ELAPSED=101.034,UPID="0x0E:0x3131313131",ID="1",DURATION=180.067,BLACKOUT=NO,CUE="/DAxAAAAAAAAAP/wBQb+Cf4+XgAbAhlDVUVJAAAAAX//AAD3SLYOBTExMTExIgQTSTKHkA=="
+#EXT-X-SCTE35:TYPE=0x30,ELAPSED=101.034,UPID="0x0E:0x3131313131",ID="5",DURATION=180.067,BLACKOUT=NO,CUE-OUT=CONT,CUE="/DAxAAAAAAAAAP/wBQb+Cf4+XgAbAhlDVUVJAAAABX//AAD3SLYOBTExMTExMAQTWxR0VA=="
+#EXTINF:3.904,
+1652717346750item-01item_Segment-550857.mp4
+"#;
