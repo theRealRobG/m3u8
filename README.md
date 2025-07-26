@@ -768,7 +768,7 @@ the implementation we've made using `m3u8-rs`.
 [hls_m3u8](https://crates.io/crates/hls_m3u8) seems to be the second most popular m3u8 parser that I
 can see on crates.io, with 72,351 all time downloads at time of writing. Below the m3u8-rs
 implementation is the hls_m3u8 implementation. It is very similar to the m3u8-rs implementation and
-interestingly shares much of the same limitations and some more. In addition to all of the same
+interestingly shares many of the same limitations, and some more. In addition to all of the same
 problems listed above, hls_m3u8 also has the following issues:
 * There is no control over the EXT-X-VERSION tag. The library determines this itself based on what
   it knows from the tags that have been included; however, the library is out of date with respect
