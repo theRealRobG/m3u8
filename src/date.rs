@@ -43,22 +43,23 @@ pub struct DateTime {
 
 impl Display for DateTime {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", String::from(*self))
+        write!(
+            f,
+            "{:04}-{:02}-{:02}T{:02}:{:02}:{:06.3}{}",
+            self.date_fullyear,
+            self.date_month,
+            self.date_mday,
+            self.time_hour,
+            self.time_minute,
+            self.time_second,
+            self.timezone_offset
+        )
     }
 }
 
 impl From<DateTime> for String {
     fn from(value: DateTime) -> Self {
-        format!(
-            "{:04}-{:02}-{:02}T{:02}:{:02}:{:06.3}{}",
-            value.date_fullyear,
-            value.date_month,
-            value.date_mday,
-            value.time_hour,
-            value.time_minute,
-            value.time_second,
-            String::from(value.timezone_offset)
-        )
+        format!("{value}")
     }
 }
 
@@ -82,13 +83,19 @@ pub struct DateTimeTimezoneOffset {
     pub time_minute: u8,
 }
 
+impl Display for DateTimeTimezoneOffset {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.time_hour == 0 && self.time_minute == 0 {
+            write!(f, "Z")
+        } else {
+            write!(f, "{:+03}:{:02}", self.time_hour, self.time_minute)
+        }
+    }
+}
+
 impl From<DateTimeTimezoneOffset> for String {
     fn from(value: DateTimeTimezoneOffset) -> Self {
-        if value.time_hour == 0 && value.time_minute == 0 {
-            Self::from("Z")
-        } else {
-            format!("{:+03}:{:02}", value.time_hour, value.time_minute)
-        }
+        format!("{value}")
     }
 }
 
