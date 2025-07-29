@@ -5,6 +5,7 @@ use crate::{
 use std::{
     error::Error,
     fmt::{Display, Formatter},
+    num::ParseIntError,
     str::Utf8Error,
 };
 
@@ -448,3 +449,22 @@ impl<'a> Display for UnrecognizedEnumerationError<'a> {
     }
 }
 impl Error for UnrecognizedEnumerationError<'_> {}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum DecimalResolutionParseError {
+    MissingWidth,
+    InvalidWidth(ParseIntError),
+    MissingHeight,
+    InvalidHeight(ParseIntError),
+}
+impl Display for DecimalResolutionParseError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::MissingWidth => write!(f, "missing width"),
+            Self::InvalidWidth(e) => write!(f, "invalid width: {e}"),
+            Self::MissingHeight => write!(f, "missing height"),
+            Self::InvalidHeight(e) => write!(f, "invalid height: {e}"),
+        }
+    }
+}
+impl Error for DecimalResolutionParseError {}

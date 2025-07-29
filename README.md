@@ -245,14 +245,8 @@ fn try_resolution_from<'a, 'b>(
     let Some(ParsedAttributeValue::UnquotedString(s)) = attribute_list.get(attr_name) else {
         return Err(ValidationError::MissingRequiredAttribute(attr_name));
     };
-    let mut split = s.splitn(2, 'x');
-    let Some(Ok(width)) = split.next().map(str::parse::<u64>) else {
-        return Err(ValidationError::MissingRequiredAttribute(attr_name));
-    };
-    let Some(Ok(height)) = split.next().map(str::parse::<u64>) else {
-        return Err(ValidationError::MissingRequiredAttribute(attr_name));
-    };
-    Ok(DecimalResolution { width, height })
+    DecimalResolution::try_from(*s)
+        .map_err(|_| ValidationError::MissingRequiredAttribute(attr_name))
 }
 
 // Below we can demonstrate that the correct parsing occurs.

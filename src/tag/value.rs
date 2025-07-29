@@ -3,8 +3,8 @@ use memchr::{memchr, memchr2, memchr3};
 use crate::{
     date::{self, DateTime},
     error::{
-        DateTimeSyntaxError, ParseDecimalIntegerRangeError, ParseFloatError, ParseNumberError,
-        ParsePlaylistTypeError, TagValueSyntaxError,
+        DateTimeSyntaxError, DecimalResolutionParseError, ParseDecimalIntegerRangeError,
+        ParseFloatError, ParseNumberError, ParsePlaylistTypeError, TagValueSyntaxError,
     },
     line::ParsedByteSlice,
     utils::{f64_to_u64, parse_u64, split_on_new_line},
@@ -337,10 +337,29 @@ pub struct DecimalResolution {
     pub width: u64,
     pub height: u64,
 }
-
 impl Display for DecimalResolution {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}x{}", self.width, self.height)
+    }
+}
+impl TryFrom<&str> for DecimalResolution {
+    type Error = DecimalResolutionParseError;
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        let mut split = s.splitn(2, 'x');
+        let Some(width_str) = split.next() else {
+            return Err(DecimalResolutionParseError::MissingWidth);
+        };
+        let width = width_str
+            .parse()
+            .map_err(DecimalResolutionParseError::InvalidWidth)?;
+        let Some(height_str) = split.next() else {
+            return Err(DecimalResolutionParseError::MissingHeight);
+        };
+        let height = height_str
+            .parse()
+            .map_err(DecimalResolutionParseError::InvalidHeight)?;
+        Ok(DecimalResolution { width, height })
     }
 }
 
