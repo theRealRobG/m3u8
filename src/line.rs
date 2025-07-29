@@ -1,9 +1,9 @@
 use crate::{
     config::ParsingOptions,
-    error::{ParseLineBytesError, ParseLineStrError, SyntaxError, ValidationError},
+    error::{ParseLineBytesError, ParseLineStrError, SyntaxError},
     tag::{
         self, hls,
-        known::{self, IsKnownName, NoCustomTag, ParsedTag, TagInformation},
+        known::{self, CustomTag, CustomTagAccess, NoCustomTag, ParsedTag},
         unknown,
     },
     utils::{split_on_new_line, str_from},
@@ -12,54 +12,38 @@ use std::{borrow::Cow, cmp::PartialEq, fmt::Debug};
 
 #[derive(Debug, PartialEq, Clone)]
 #[allow(clippy::large_enum_variant)] // See comment on crate::tag::known::Tag.
-pub enum HlsLine<'a, CustomTag = NoCustomTag>
+pub enum HlsLine<'a, Custom = NoCustomTag>
 where
-    CustomTag: TryFrom<ParsedTag<'a>, Error = ValidationError>
-        + IsKnownName
-        + TagInformation
-        + Debug
-        + PartialEq,
+    Custom: CustomTag<'a>,
 {
-    KnownTag(known::Tag<'a, CustomTag>),
+    KnownTag(known::Tag<'a, Custom>),
     UnknownTag(unknown::Tag<'a>),
     Comment(Cow<'a, str>),
     Uri(Cow<'a, str>),
     Blank,
 }
 
-impl<'a, CustomTag> From<hls::Tag<'a>> for HlsLine<'a, CustomTag>
+impl<'a, Custom> From<hls::Tag<'a>> for HlsLine<'a, Custom>
 where
-    CustomTag: TryFrom<ParsedTag<'a>, Error = ValidationError>
-        + IsKnownName
-        + TagInformation
-        + Debug
-        + PartialEq,
+    Custom: CustomTag<'a>,
 {
     fn from(tag: hls::Tag<'a>) -> Self {
         Self::KnownTag(known::Tag::Hls(tag))
     }
 }
 
-impl<'a, CustomTag> From<CustomTag> for HlsLine<'a, CustomTag>
+impl<'a, Custom> From<CustomTagAccess<'a, Custom>> for HlsLine<'a, Custom>
 where
-    CustomTag: TryFrom<ParsedTag<'a>, Error = ValidationError>
-        + IsKnownName
-        + TagInformation
-        + Debug
-        + PartialEq,
+    Custom: CustomTag<'a>,
 {
-    fn from(tag: CustomTag) -> Self {
+    fn from(tag: CustomTagAccess<'a, Custom>) -> Self {
         Self::KnownTag(known::Tag::Custom(tag))
     }
 }
 
-impl<'a, CustomTag> From<unknown::Tag<'a>> for HlsLine<'a, CustomTag>
+impl<'a, Custom> From<unknown::Tag<'a>> for HlsLine<'a, Custom>
 where
-    CustomTag: TryFrom<ParsedTag<'a>, Error = ValidationError>
-        + IsKnownName
-        + TagInformation
-        + Debug
-        + PartialEq,
+    Custom: CustomTag<'a>,
 {
     fn from(tag: unknown::Tag<'a>) -> Self {
         Self::UnknownTag(tag)
@@ -82,13 +66,9 @@ impl<'a> HlsLine<'a> {
 
 macro_rules! impl_line_from_tag {
     ($tag_mod_path:path, $tag_name:ident) => {
-        impl<'a, CustomTag> From<$tag_mod_path> for HlsLine<'a, CustomTag>
+        impl<'a, Custom> From<$tag_mod_path> for HlsLine<'a, Custom>
         where
-            CustomTag: TryFrom<ParsedTag<'a>, Error = ValidationError>
-                + IsKnownName
-                + TagInformation
-                + Debug
-                + PartialEq,
+            Custom: CustomTag<'a>,
         {
             fn from(tag: $tag_mod_path) -> Self {
                 Self::KnownTag($crate::tag::known::Tag::Hls(
@@ -165,16 +145,12 @@ pub fn parse<'a>(
     parse_with_custom::<NoCustomTag>(input, options)
 }
 
-pub fn parse_with_custom<'a, 'b, CustomTag>(
+pub fn parse_with_custom<'a, 'b, Custom>(
     input: &'a str,
     options: &'b ParsingOptions,
-) -> Result<ParsedLineSlice<'a, HlsLine<'a, CustomTag>>, ParseLineStrError<'a>>
+) -> Result<ParsedLineSlice<'a, HlsLine<'a, Custom>>, ParseLineStrError<'a>>
 where
-    CustomTag: TryFrom<ParsedTag<'a>, Error = ValidationError>
-        + IsKnownName
-        + TagInformation
-        + Debug
-        + PartialEq,
+    Custom: CustomTag<'a>,
 {
     parse_bytes_with_custom(input.as_bytes(), options)
         // These conversions from ParsedByteSlice to ParsedLineSlice are only safe here because we
@@ -199,16 +175,12 @@ pub fn parse_bytes<'a>(
     parse_bytes_with_custom::<NoCustomTag>(input, options)
 }
 
-pub fn parse_bytes_with_custom<'a, 'b, CustomTag>(
+pub fn parse_bytes_with_custom<'a, 'b, Custom>(
     input: &'a [u8],
     options: &'b ParsingOptions,
-) -> Result<ParsedByteSlice<'a, HlsLine<'a, CustomTag>>, ParseLineBytesError<'a>>
+) -> Result<ParsedByteSlice<'a, HlsLine<'a, Custom>>, ParseLineBytesError<'a>>
 where
-    CustomTag: TryFrom<ParsedTag<'a>, Error = ValidationError>
-        + IsKnownName
-        + TagInformation
-        + Debug
-        + PartialEq,
+    Custom: CustomTag<'a>,
 {
     if input.is_empty() {
         Ok(ParsedByteSlice {
@@ -220,7 +192,7 @@ where
             let tag_rest = &input[4..];
             let mut tag = tag::unknown::parse_assuming_ext_taken(tag_rest, input)
                 .map_err(|error| map_err_bytes(error, input))?;
-            if options.is_known_name(tag.parsed.name) || CustomTag::is_known_name(tag.parsed.name) {
+            if options.is_known_name(tag.parsed.name) || Custom::is_known_name(tag.parsed.name) {
                 let value_slice = match tag.parsed.value {
                     None => ParsedByteSlice {
                         parsed: tag::value::SemiParsedTagValue::Empty,
@@ -282,16 +254,11 @@ fn map_err_bytes<E: Into<SyntaxError>>(error: E, input: &[u8]) -> ParseLineBytes
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
-
     use super::*;
     use crate::{
         config::ParsingOptionsBuilder,
-        error::ValidationErrorValueKind,
-        tag::{
-            hls::{self, m3u::M3u, start::Start},
-            value::{ParsedAttributeValue, SemiParsedTagValue},
-        },
+        error::{ValidationError, ValidationErrorValueKind},
+        tag::hls::{self, m3u::M3u, start::Start},
     };
     use pretty_assertions::assert_eq;
 
@@ -375,40 +342,22 @@ mod tests {
                 }
             }
         }
-        impl IsKnownName for TestTag<'_> {
+        impl CustomTag<'static> for TestTag<'static> {
             fn is_known_name(name: &str) -> bool {
                 name == "-X-TEST-TAG"
             }
         }
-        impl<'a> TagInformation for TestTag<'a> {
-            fn name(&self) -> &str {
-                "-X-TEST-TAG"
-            }
-
-            fn value(&self) -> tag::value::SemiParsedTagValue {
-                let mut attribute_list = HashMap::new();
-                attribute_list.insert(
-                    "TYPE",
-                    ParsedAttributeValue::UnquotedString(self.greeting_type),
-                );
-                attribute_list.insert("MESSAGE", ParsedAttributeValue::QuotedString(self.message));
-                attribute_list.insert("TIMES", ParsedAttributeValue::DecimalInteger(self.times));
-                if let Some(score) = self.score {
-                    attribute_list.insert(
-                        "SCORE",
-                        ParsedAttributeValue::SignedDecimalFloatingPoint(score),
-                    );
-                }
-                SemiParsedTagValue::AttributeList(attribute_list)
-            }
-        }
         // Test
         assert_eq!(
-            Ok(HlsLine::from(TestTag {
-                greeting_type: "GREETING",
-                message: "Hello, World!",
-                times: 42,
-                score: None,
+            Ok(HlsLine::from(CustomTagAccess {
+                custom_tag: TestTag {
+                    greeting_type: "GREETING".into(),
+                    message: "Hello, World!".into(),
+                    times: 42,
+                    score: None,
+                },
+                is_dirty: false,
+                original_input: b"#EXT-X-TEST-TAG:TYPE=GREETING,MESSAGE=\"Hello, World!\",TIMES=42"
             })),
             parse_with_custom::<TestTag>(
                 "#EXT-X-TEST-TAG:TYPE=GREETING,MESSAGE=\"Hello, World!\",TIMES=42",

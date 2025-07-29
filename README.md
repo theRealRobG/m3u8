@@ -52,25 +52,18 @@ The above example demonstrates that a `HlsLine` is an with several potential cas
 
 The `HlsLine` in `m3u8` is defined as such:
 ```rust
-use m3u8::{
-    error::ValidationError,
-    tag::{
-        known::{self, IsKnownName, NoCustomTag, ParsedTag, TagInformation},
-        unknown,
-    },
+use m3u8::tag::{
+    known::{self, CustomTag, NoCustomTag, ParsedTag},
+    unknown,
 };
 use std::{borrow::Cow, fmt::Debug};
 
 #[derive(Debug, PartialEq, Clone)]
-pub enum HlsLine<'a, CustomTag = NoCustomTag>
+pub enum HlsLine<'a, Custom = NoCustomTag>
 where
-    CustomTag: TryFrom<ParsedTag<'a>, Error = ValidationError>
-        + IsKnownName
-        + TagInformation
-        + Debug
-        + PartialEq,
+    Custom: CustomTag<'a>,
 {
-    KnownTag(known::Tag<'a, CustomTag>),
+    KnownTag(known::Tag<'a, Custom>),
     UnknownTag(unknown::Tag<'a>),
     Comment(Cow<'a, str>),
     Uri(Cow<'a, str>),
@@ -106,54 +99,64 @@ needed, and this is explained below.
 
 Known tags are broken out into two sub-cases:
 * `Hls(hls::Tag<'a>)`
-* `Custom(CustomTag)`
+* `Custom(CustomTagAccess)`
 
 The `Hls` case defines all 32 known tags as per the HLS specification. These are strongly typed
 structs providing access to all defined values.
 
 The `Custom` case allows for the library user to define their own custom known tag. Custom tag is
-generic but must implement `TryFrom<ParsedTag<'a>, Error = ValidationError>` (to convert from parsed
-information to the concrete known tag), `IsKnownName` (so that the parser knows if it should
-consider calling `try_from` for the parsed tag), `TagInformation` (which is used with the `Writer`),
-and `Debug` and `PartialEq` since `known::Tag` implements these.
+generic but must implement the `CustomTag` trait. This trait requires `Debug`, `PartialEq`, and also
+`TryFrom<ParsedTag<'a>, Error = ValidationError>` which is what is used to construct the tag from
+parsed data. The trait includes `is_known_name(name: &str) -> bool` which has no `self` requirement,
+as it is used as a test in the parser for whether `try_from` should be attempted for a given tag
+name.
+
+The custom tag implementation is wrapped in a `CustomTagAccess` struct which provides `AsRef` and
+`AsMut` implementations to access the inner data. This struct allows the library to track if there
+has ever been a mutable borrow of the inner custom tag. This is then used to decide on whether the
+output line (for writing) needs to be recalculated based on the state of the tag at time of writing,
+or if it is safe to use the original parsed data (and avoid any unnecessary allocation).
+
+To enable writing, the custom tag must also implement `WritableCustomTag`. This introduces the
+`into_writable_tag(self) -> WritableTag` requirement which consumes the tag in preparation for
+writing. But as mentioned, this method is only called if there has been a mutable borrow of the
+underlying custom tag, via `CustomTagAccess::as_mut(&mut self) -> &mut Custom`. If there is no
+intention to write the parsed data then this trait implementation can be avoided.
 
 We can demonstrate the usage of `CustomTag` by implementing it for the custom image media playlist
 definition found on the Roku developer website here:
 https://developer.roku.com/docs/developer-program/media-playback/trick-mode/hls-and-dash.md
 ```rust
 use m3u8::{
+    Reader,
     config::ParsingOptions,
     error::{ValidationError, ValidationErrorValueKind},
     line::HlsLine,
     tag::{
         hls::inf::Inf,
-        known::{IsKnownName, ParsedTag, TagInformation},
-        value::{ParsedAttributeValue, SemiParsedTagValue},
+        known::{self, CustomTag, ParsedTag, WritableCustomTag, WritableTag},
+        value::{
+            DecimalResolution, MutableParsedAttributeValue, MutableSemiParsedTagValue,
+            ParsedAttributeValue, SemiParsedTagValue,
+        },
     },
-    Reader,
 };
 use std::{collections::HashMap, marker::PhantomData};
 
-#[derive(Debug, PartialEq, Clone, Copy)]
-pub struct Resolution {
-    pub width: u64,
-    pub height: u64,
-}
-
 // To support multiple custom tags the preferred strategy is to encapsulate each within a single
 // enum. For this example I am only demonstrating an implementation for the media playlist tags
-// defined in the Roku developer docs.
+// defined in the Roku developer docs (just to shorten the example).
 #[derive(Debug, PartialEq, Clone)]
-pub enum CustomImageTag<'a> {
+pub enum CustomImageTag {
     ImagesOnly,
-    Tiles(Tiles<'a>),
+    Tiles(Tiles),
 }
 // Here we specialize into our own strongly typed structure what m3u8 was able to parse from the
 // input data.
-impl<'a> TryFrom<ParsedTag<'a>> for CustomImageTag<'a> {
+impl TryFrom<ParsedTag<'_>> for CustomImageTag {
     type Error = ValidationError;
 
-    fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
+    fn try_from(tag: ParsedTag) -> Result<Self, Self::Error> {
         match tag.name {
             "-X-IMAGES-ONLY" => Ok(CustomImageTag::ImagesOnly),
             "-X-TILES" => Ok(CustomImageTag::Tiles(Tiles::try_from(tag)?)),
@@ -161,8 +164,8 @@ impl<'a> TryFrom<ParsedTag<'a>> for CustomImageTag<'a> {
         }
     }
 }
-// This is used to know when m3u8 parsing should consider parsing the information as a known tag.
-impl IsKnownName for CustomImageTag<'_> {
+// This is used to know when m3u8 should consider parsing the information as a known tag.
+impl CustomTag<'_> for CustomImageTag {
     fn is_known_name(name: &str) -> bool {
         match name {
             "-X-IMAGES-ONLY" | "-X-TILES" => true,
@@ -171,56 +174,52 @@ impl IsKnownName for CustomImageTag<'_> {
     }
 }
 // This is used by the m3u8::Writer to handle writing of custom tag implementations.
-impl<'a> TagInformation for CustomImageTag<'a> {
-    fn name(&self) -> &str {
-        match self {
-            Self::ImagesOnly => "-X-IMAGES-ONLY",
-            Self::Tiles(_) => "-X-TILES",
-        }
-    }
-
-    fn value(&self) -> SemiParsedTagValue {
-        match self {
-            Self::ImagesOnly => SemiParsedTagValue::Empty,
-            Self::Tiles(tiles) => SemiParsedTagValue::AttributeList(HashMap::from([
+impl<'a> WritableCustomTag<'a> for CustomImageTag {
+    fn into_writable_tag(self) -> known::WritableTag<'a> {
+        let name = match self {
+            CustomImageTag::ImagesOnly => "-X-IMAGES-ONLY",
+            CustomImageTag::Tiles(_) => "-X-TILES",
+        };
+        let value = match self {
+            Self::ImagesOnly => MutableSemiParsedTagValue::Empty,
+            Self::Tiles(tiles) => MutableSemiParsedTagValue::from([
                 (
                     "RESOLUTION",
-                    ParsedAttributeValue::UnquotedString(tiles.original_resolution_str),
+                    MutableParsedAttributeValue::UnquotedString(
+                        format!("{}", tiles.resolution).into(),
+                    ),
                 ),
                 (
                     "LAYOUT",
-                    ParsedAttributeValue::UnquotedString(tiles.original_layout_str),
+                    MutableParsedAttributeValue::UnquotedString(format!("{}", tiles.layout).into()),
                 ),
                 (
                     "DURATION",
-                    ParsedAttributeValue::SignedDecimalFloatingPoint(tiles.duration),
+                    MutableParsedAttributeValue::SignedDecimalFloatingPoint(tiles.duration),
                 ),
-            ])),
-        }
+            ]),
+        };
+        WritableTag::new(name, value)
     }
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct Tiles<'a> {
-    pub resolution: Resolution,
-    pub layout: Resolution,
+pub struct Tiles {
+    pub resolution: DecimalResolution,
+    pub layout: DecimalResolution,
     pub duration: f64,
-    // The original slices are needed for when we convert back to ParsedTagValue in the
-    // TagInformation impl.
-    original_resolution_str: &'a str,
-    original_layout_str: &'a str,
 }
-impl<'a> TryFrom<ParsedTag<'a>> for Tiles<'a> {
+impl TryFrom<ParsedTag<'_>> for Tiles {
     type Error = ValidationError;
 
-    fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
+    fn try_from(tag: ParsedTag) -> Result<Self, Self::Error> {
         let SemiParsedTagValue::AttributeList(attribute_list) = tag.value else {
             return Err(ValidationError::UnexpectedValueType(
                 ValidationErrorValueKind::from(&tag.value),
             ));
         };
-        let (resolution, r_str) = try_resolution_from("RESOLUTION", &attribute_list)?;
-        let (layout, l_str) = try_resolution_from("LAYOUT", &attribute_list)?;
+        let resolution = try_resolution_from("RESOLUTION", &attribute_list)?;
+        let layout = try_resolution_from("LAYOUT", &attribute_list)?;
         // Note, `m3u8` is not able to distinguish what *should* be an "integer" vs what *should* be
         // a float without decimal precision, and so a number without decimals will be parsed as the
         // DecimalInteger case. To help extract float values a helper method is provided on
@@ -236,15 +235,13 @@ impl<'a> TryFrom<ParsedTag<'a>> for Tiles<'a> {
             resolution,
             layout,
             duration,
-            original_resolution_str: r_str,
-            original_layout_str: l_str,
         })
     }
 }
 fn try_resolution_from<'a, 'b>(
     attr_name: &'static str,
     attribute_list: &'a HashMap<&'b str, ParsedAttributeValue<'b>>,
-) -> Result<(Resolution, &'b str), ValidationError> {
+) -> Result<DecimalResolution, ValidationError> {
     let Some(ParsedAttributeValue::UnquotedString(s)) = attribute_list.get(attr_name) else {
         return Err(ValidationError::MissingRequiredAttribute(attr_name));
     };
@@ -255,7 +252,7 @@ fn try_resolution_from<'a, 'b>(
     let Some(Ok(height)) = split.next().map(str::parse::<u64>) else {
         return Err(ValidationError::MissingRequiredAttribute(attr_name));
     };
-    Ok((Resolution { width, height }, s))
+    Ok(DecimalResolution { width, height })
 }
 
 // Below we can demonstrate that the correct parsing occurs.
@@ -271,26 +268,31 @@ let mut reader = Reader::with_custom_from_str(
     ParsingOptions::default(),
     PhantomData::<CustomImageTag>,
 );
-assert_eq!(
-    reader.read_line(),
-    Ok(Some(HlsLine::from(CustomImageTag::ImagesOnly)))
-);
-assert_eq!(
-    reader.read_line(),
-    Ok(Some(HlsLine::from(CustomImageTag::Tiles(Tiles {
-        resolution: Resolution {
-            width: 320,
-            height: 180
-        },
-        layout: Resolution {
-            width: 5,
-            height: 4
-        },
-        duration: 3.003,
-        original_resolution_str: "320x180",
-        original_layout_str: "5x4"
-    }))))
-);
+match reader.read_line() {
+    Ok(Some(HlsLine::KnownTag(known::Tag::Custom(tag)))) => {
+        assert_eq!(tag.as_ref(), &CustomImageTag::ImagesOnly)
+    }
+    l => panic!("unexpected line {l:?}"),
+}
+match reader.read_line() {
+    Ok(Some(HlsLine::KnownTag(known::Tag::Custom(tag)))) => {
+        assert_eq!(
+            tag.as_ref(),
+            &CustomImageTag::Tiles(Tiles {
+                resolution: DecimalResolution {
+                    width: 320,
+                    height: 180
+                },
+                layout: DecimalResolution {
+                    width: 5,
+                    height: 4
+                },
+                duration: 3.003
+            })
+        )
+    }
+    l => panic!("unexpected line {l:?}"),
+}
 assert_eq!(
     reader.read_line(),
     Ok(Some(HlsLine::from(Inf::new(
@@ -300,7 +302,10 @@ assert_eq!(
         )
     ))))
 );
-assert_eq!(reader.read_line(), Ok(Some(HlsLine::Uri("image.1.jpeg".into()))));
+assert_eq!(
+    reader.read_line(),
+    Ok(Some(HlsLine::Uri("image.1.jpeg".into())))
+);
 ```
 
 ### Enumerated strings
@@ -679,21 +684,15 @@ let mut writer = Writer::new(Vec::new());
 let mut added_hello = false;
 while let Ok(Some(line)) = reader.read_line() {
     match line {
-        HlsLine::KnownTag(tag) => match tag {
-            known::Tag::Hls(tag) => match tag {
-                hls::Tag::Inf(mut inf) => {
-                    if added_hello {
-                        inf.set_title(String::from("World!"));
-                    } else {
-                        inf.set_title(String::from("Hello,"));
-                        added_hello = true;
-                    }
-                    writer.write_hls_tag(hls::Tag::Inf(inf)).unwrap()
-                }
-                tag => writer.write_hls_tag(tag).unwrap(),
-            },
-            known::Tag::Custom(tag) => writer.write_custom_tag(tag).unwrap(),
-        },
+        HlsLine::KnownTag(known::Tag::Hls(hls::Tag::Inf(mut inf))) => {
+            if added_hello {
+                inf.set_title(String::from("World!"));
+            } else {
+                inf.set_title(String::from("Hello,"));
+                added_hello = true;
+            }
+            writer.write_hls_tag(hls::Tag::Inf(inf)).unwrap()
+        }
         line => writer.write_line(line).unwrap(),
     };
 }

@@ -1,15 +1,15 @@
 use crate::{
     config::ParsingOptions,
-    error::{ReaderBytesError, ReaderStrError, ValidationError},
+    error::{ReaderBytesError, ReaderStrError},
     line::{HlsLine, parse_bytes_with_custom, parse_with_custom},
-    tag::known::{IsKnownName, NoCustomTag, ParsedTag, TagInformation},
+    tag::known::{CustomTag, NoCustomTag},
 };
-use std::{fmt::Debug, marker::PhantomData};
+use std::marker::PhantomData;
 
-pub struct Reader<R, CustomTag> {
+pub struct Reader<R, Custom> {
     inner: R,
     options: ParsingOptions,
-    _marker: PhantomData<CustomTag>,
+    _marker: PhantomData<Custom>,
 }
 
 macro_rules! impl_reader {
@@ -24,20 +24,16 @@ macro_rules! impl_reader {
                 }
             }
         }
-        impl<'a, CustomTag> Reader<&'a $type, CustomTag>
+        impl<'a, Custom> Reader<&'a $type, Custom>
         where
-            CustomTag: TryFrom<ParsedTag<'a>, Error = ValidationError>
-                + IsKnownName
-                + TagInformation
-                + Debug
-                + PartialEq,
+            Custom: CustomTag<'a>,
         {
             /// Creates a reader that supports custom tag parsing for the type specified by the
             /// `PhatomData`.
             pub fn $from_custom_fn_ident(
                 str: &'a $type,
                 options: ParsingOptions,
-                custom: PhantomData<CustomTag>,
+                custom: PhantomData<Custom>,
             ) -> Self {
                 Self {
                     inner: str,
@@ -52,7 +48,7 @@ macro_rules! impl_reader {
             }
 
             /// Reads a single HLS line from the reference data.
-            pub fn read_line(&mut self) -> Result<Option<HlsLine<'a, CustomTag>>, $error_type<'a>> {
+            pub fn read_line(&mut self) -> Result<Option<HlsLine<'a, Custom>>, $error_type<'a>> {
                 if self.inner.is_empty() {
                     return Ok(None);
                 };
@@ -94,21 +90,20 @@ impl_reader!(
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::{
         config::ParsingOptionsBuilder,
-        error::{SyntaxError, UnknownTagSyntaxError, ValidationErrorValueKind},
+        error::{SyntaxError, UnknownTagSyntaxError, ValidationError, ValidationErrorValueKind},
         tag::{
             hls::{
                 endlist::Endlist, inf::Inf, m3u::M3u, targetduration::Targetduration,
                 version::Version,
             },
+            known::{CustomTagAccess, ParsedTag},
             unknown,
             value::{ParsedAttributeValue, SemiParsedTagValue},
         },
     };
-    use std::collections::HashMap;
-
-    use super::*;
     use pretty_assertions::assert_eq;
 
     macro_rules! reader_test {
@@ -196,7 +191,11 @@ mod tests {
         reader_test!(
             reader,
             read_line,
-            Some(HlsLine::from(ExampleTag::new(42, "UNKNOWN")))
+            Some(HlsLine::from(CustomTagAccess {
+                custom_tag: ExampleTag::new(42, "UNKNOWN"),
+                is_dirty: false,
+                original_input: EXAMPLE_MANIFEST[50..].as_bytes(),
+            }))
         );
     }
 
@@ -213,7 +212,11 @@ mod tests {
         reader_test!(
             reader,
             read_line,
-            Some(HlsLine::from(ExampleTag::new(42, "UNKNOWN")))
+            Some(HlsLine::from(CustomTagAccess {
+                custom_tag: ExampleTag::new(42, "UNKNOWN"),
+                is_dirty: false,
+                original_input: EXAMPLE_MANIFEST[50..].as_bytes(),
+            }))
         );
     }
 
@@ -254,47 +257,27 @@ mod tests {
     impl<'a> TryFrom<ParsedTag<'a>> for ExampleTag<'a> {
         type Error = ValidationError;
         fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
-            let SemiParsedTagValue::AttributeList(ref attribute_list) = tag.value else {
+            let SemiParsedTagValue::AttributeList(mut attribute_list) = tag.value else {
                 return Err(ValidationError::UnexpectedValueType(
                     ValidationErrorValueKind::AttributeList,
                 ));
             };
             let Some(ParsedAttributeValue::DecimalInteger(answer)) =
-                attribute_list.get("MEANING-OF-LIFE")
+                attribute_list.remove("MEANING-OF-LIFE")
             else {
                 return Err(ValidationError::MissingRequiredAttribute("MEANING-OF-LIFE"));
             };
-            let Some(ParsedAttributeValue::QuotedString(question)) = attribute_list.get("QUESTION")
+            let Some(ParsedAttributeValue::QuotedString(question)) =
+                attribute_list.remove("QUESTION")
             else {
                 return Err(ValidationError::MissingRequiredAttribute("QUESTION"));
             };
-            Ok(Self {
-                answer: *answer,
-                question,
-            })
+            Ok(Self { answer, question })
         }
     }
-    impl<'a> IsKnownName for ExampleTag<'a> {
+    impl<'a> CustomTag<'a> for ExampleTag<'a> {
         fn is_known_name(name: &str) -> bool {
             name == "-X-EXAMPLE-TAG"
-        }
-    }
-    impl<'a> TagInformation for ExampleTag<'a> {
-        fn name(&self) -> &str {
-            "-X-EXAMPLE-TAG"
-        }
-
-        fn value(&self) -> SemiParsedTagValue {
-            SemiParsedTagValue::AttributeList(HashMap::from([
-                (
-                    "MEANING-OF-LIFE",
-                    ParsedAttributeValue::DecimalInteger(self.answer),
-                ),
-                (
-                    "QUESTION",
-                    ParsedAttributeValue::QuotedString(self.question),
-                ),
-            ]))
         }
     }
 }

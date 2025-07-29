@@ -1,14 +1,9 @@
 use crate::{
-    error::ValidationError,
     line::HlsLine,
-    tag::{
-        known::{IntoInnerTag, IsKnownName, ParsedTag, TagInformation},
-        value::{ParsedAttributeValue, SemiParsedTagValue},
-    },
+    tag::known::{IntoInnerTag, WritableCustomTag},
 };
 use std::{
     borrow::Cow,
-    fmt::Debug,
     io::{self, Write},
 };
 
@@ -107,20 +102,27 @@ where
         self.write_line(HlsLine::from(tag))
     }
 
+    /// Write a custom tag implementation to the inner writer.
+    ///
+    /// Note that if the custom tag is derived from parsed data (i.e. not user constructed), then
+    /// this method should be avoided, as it will allocate data perhaps unnecessarily. In that case
+    /// use [`Self::write_custom_line`] with [`crate::tag::known::CustomTagAccess`], as this will
+    /// use the original parsed data if no mutation has occurred.
+    ///
     /// Example:
     /// ```
     /// # use m3u8::Writer;
-    /// # use m3u8::tag::known::{ParsedTag, IsKnownName, TagInformation};
+    /// # use m3u8::tag::known::{CustomTag, ParsedTag, WritableCustomTag, WritableTag};
     /// # use m3u8::tag::value::{SemiParsedTagValue, UnparsedTagValue};
     /// # use m3u8::error::{ValidationError, ValidationErrorValueKind};
+    /// # use std::borrow::Cow;
     /// #[derive(Debug, PartialEq, Clone)]
-    /// struct ExampleCustomTag<'a> {
+    /// struct ExampleCustomTag {
     ///     answer: u64,
-    ///     original_value: &'a [u8],
     /// }
-    /// impl<'a> TryFrom<ParsedTag<'a>> for ExampleCustomTag<'a> {
+    /// impl TryFrom<ParsedTag<'_>> for ExampleCustomTag {
     ///     type Error = ValidationError;
-    ///     fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
+    ///     fn try_from(tag: ParsedTag) -> Result<Self, Self::Error> {
     ///         if tag.name != "-X-MEANING-OF-LIFE" {
     ///             return Err(ValidationError::UnexpectedTagName)
     ///         }
@@ -128,7 +130,6 @@ where
     ///             SemiParsedTagValue::Unparsed(value) => {
     ///                 Ok(Self {
     ///                     answer: value.try_as_decimal_integer()?,
-    ///                     original_value: value.0,
     ///                 })
     ///             }
     ///             _ => Err(ValidationError::UnexpectedValueType(
@@ -137,52 +138,42 @@ where
     ///         }
     ///     }
     /// }
-    /// impl IsKnownName for ExampleCustomTag<'_> {
+    /// impl CustomTag<'_> for ExampleCustomTag {
     ///     fn is_known_name(name: &str) -> bool {
     ///         name == "-X-MEANING-OF-LIFE"
     ///     }
     /// }
-    /// impl TagInformation for ExampleCustomTag<'_> {
-    ///     fn name(&self) -> &str {
-    ///         "-X-MEANING-OF-LIFE"
-    ///     }
-    ///
-    ///     fn value(&self) -> SemiParsedTagValue {
-    ///         SemiParsedTagValue::Unparsed(UnparsedTagValue(self.original_value))
+    /// impl WritableCustomTag<'_> for ExampleCustomTag {
+    ///     fn into_writable_tag(self) -> WritableTag<'static> {
+    ///         WritableTag::new(
+    ///             "-X-MEANING-OF-LIFE",
+    ///             Cow::Owned(format!("{}", self.answer).into_bytes()),
+    ///         )
     ///     }
     /// }
     ///
     /// let mut writer = Writer::new(Vec::new());
-    /// let custom_tag = ExampleCustomTag { answer: 42, original_value: b"42" };
+    /// let custom_tag = ExampleCustomTag { answer: 42 };
     /// writer.write_custom_tag(custom_tag).unwrap();
     /// assert_eq!(
     ///     "#EXT-X-MEANING-OF-LIFE:42\n".as_bytes(),
     ///     writer.into_inner()
     /// );
     /// ```
-    pub fn write_custom_tag<'a, CustomTag>(&mut self, tag: CustomTag) -> io::Result<usize>
+    pub fn write_custom_tag<'a, Custom>(&mut self, tag: Custom) -> io::Result<usize>
     where
-        CustomTag: TryFrom<ParsedTag<'a>, Error = ValidationError>
-            + IsKnownName
-            + TagInformation
-            + Debug
-            + PartialEq,
+        Custom: WritableCustomTag<'a>,
     {
-        self.write_custom_line(HlsLine::from(tag))
+        let mut count = self.write(tag.into_inner().value())?;
+        count += self.write(b"\n")?;
+        Ok(count)
     }
 
     /// Write the `HlsLine` to the underlying writer. Returns the number of bytes consumed during
     /// writing or an `io::Error` from the underlying writer.
-    pub fn write_custom_line<'a, CustomTag>(
-        &mut self,
-        line: HlsLine<'a, CustomTag>,
-    ) -> io::Result<usize>
+    pub fn write_custom_line<'a, Custom>(&mut self, line: HlsLine<'a, Custom>) -> io::Result<usize>
     where
-        CustomTag: TryFrom<ParsedTag<'a>, Error = ValidationError>
-            + IsKnownName
-            + TagInformation
-            + Debug
-            + PartialEq,
+        Custom: WritableCustomTag<'a>,
     {
         let mut count = 0usize;
         match line {
@@ -193,14 +184,7 @@ where
             }
             HlsLine::Uri(u) => count += self.write(u.as_bytes())?,
             HlsLine::UnknownTag(t) => count += self.write(t.as_bytes())?,
-            HlsLine::KnownTag(t) => match t {
-                crate::tag::known::Tag::Hls(tag) => {
-                    count += self.write(tag.into_inner().value())?;
-                }
-                crate::tag::known::Tag::Custom(tag) => {
-                    count += self.write(string_from(tag).as_bytes())?;
-                }
-            },
+            HlsLine::KnownTag(t) => count += self.write(t.into_inner().value())?,
         };
         count += self.write(b"\n")?;
         Ok(count)
@@ -228,57 +212,24 @@ where
     }
 }
 
-fn string_from<T>(custom_tag: T) -> String
-where
-    T: TagInformation,
-{
-    match custom_tag.value() {
-        SemiParsedTagValue::Empty => format!("#EXT{}", custom_tag.name()),
-        SemiParsedTagValue::DecimalFloatingPointWithOptionalTitle(n, t) => {
-            if t.is_empty() {
-                format!("#EXT{}:{}", custom_tag.name(), n)
-            } else {
-                format!("#EXT{}:{},{}", custom_tag.name(), n, t)
-            }
-        }
-        SemiParsedTagValue::AttributeList(list) => {
-            let attrs = list
-                .iter()
-                .map(|(k, v)| match v {
-                    ParsedAttributeValue::DecimalInteger(n) => format!("{k}={n}"),
-                    ParsedAttributeValue::SignedDecimalFloatingPoint(n) => format!("{k}={n:?}"),
-                    ParsedAttributeValue::QuotedString(s) => format!("{k}=\"{s}\""),
-                    ParsedAttributeValue::UnquotedString(s) => format!("{k}={s}"),
-                })
-                .collect::<Vec<String>>();
-            let value = attrs.join(",");
-            format!("#EXT{}:{}", custom_tag.name(), value)
-        }
-        SemiParsedTagValue::Unparsed(bytes) => format!(
-            "#EXT{}:{}",
-            custom_tag.name(),
-            String::from_utf8_lossy(bytes.0)
-        ),
-    }
-}
-
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::{
         config::ParsingOptionsBuilder,
+        error::ValidationError,
         tag::{
             hls::{
                 self, inf::Inf, m3u::M3u, media_sequence::MediaSequence,
                 targetduration::Targetduration, version::Version,
             },
-            value::UnparsedTagValue,
+            known::{CustomTag, ParsedTag, WritableTag},
+            value::{MutableParsedAttributeValue, MutableSemiParsedTagValue},
         },
     };
-    use std::collections::HashMap;
-
-    use super::*;
     use pretty_assertions::assert_eq;
 
+    #[derive(Debug, PartialEq, Clone)]
     enum TestTag {
         Empty,
         Type,
@@ -289,39 +240,50 @@ mod tests {
         List,
     }
 
-    impl TagInformation for TestTag {
-        fn name(&self) -> &str {
-            "-X-TEST-TAG"
-        }
+    impl TryFrom<ParsedTag<'_>> for TestTag {
+        type Error = ValidationError;
 
-        fn value(&self) -> SemiParsedTagValue {
-            match self {
-                TestTag::Empty => SemiParsedTagValue::Empty,
-                TestTag::Type => SemiParsedTagValue::Unparsed(UnparsedTagValue(b"VOD")),
-                TestTag::Int => SemiParsedTagValue::Unparsed(UnparsedTagValue(b"42")),
-                TestTag::Range => SemiParsedTagValue::Unparsed(UnparsedTagValue(b"1024@512")),
-                TestTag::Float { title } => {
-                    SemiParsedTagValue::DecimalFloatingPointWithOptionalTitle(42.42, title)
+        fn try_from(_: ParsedTag<'_>) -> Result<Self, Self::Error> {
+            Err(ValidationError::NotImplemented)
+        }
+    }
+
+    impl CustomTag<'_> for TestTag {
+        fn is_known_name(_: &str) -> bool {
+            true
+        }
+    }
+
+    impl WritableCustomTag<'_> for TestTag {
+        fn into_writable_tag(self) -> WritableTag<'static> {
+            let value = match self {
+                TestTag::Empty => MutableSemiParsedTagValue::Empty,
+                TestTag::Type => MutableSemiParsedTagValue::from(Cow::Borrowed(b"VOD" as &[u8])),
+                TestTag::Int => MutableSemiParsedTagValue::from(Cow::Borrowed(b"42" as &[u8])),
+                TestTag::Range => {
+                    MutableSemiParsedTagValue::from(Cow::Borrowed(b"1024@512" as &[u8]))
                 }
-                TestTag::Date => {
-                    SemiParsedTagValue::Unparsed(UnparsedTagValue(b"2025-06-17T01:37:15.129-05:00"))
-                }
-                TestTag::List => SemiParsedTagValue::AttributeList(HashMap::from([
-                    ("TEST-INT", ParsedAttributeValue::DecimalInteger(42)),
+                TestTag::Float { title } => MutableSemiParsedTagValue::from((42.42, title)),
+                TestTag::Date => MutableSemiParsedTagValue::from(Cow::Borrowed(
+                    b"2025-06-17T01:37:15.129-05:00" as &[u8],
+                )),
+                TestTag::List => MutableSemiParsedTagValue::from([
+                    ("TEST-INT", MutableParsedAttributeValue::DecimalInteger(42)),
                     (
                         "TEST-FLOAT",
-                        ParsedAttributeValue::SignedDecimalFloatingPoint(-42.42),
+                        MutableParsedAttributeValue::SignedDecimalFloatingPoint(-42.42),
                     ),
                     (
                         "TEST-QUOTED-STRING",
-                        ParsedAttributeValue::QuotedString("test"),
+                        MutableParsedAttributeValue::QuotedString("test".into()),
                     ),
                     (
                         "TEST-ENUMERATED-STRING",
-                        ParsedAttributeValue::UnquotedString("test"),
+                        MutableParsedAttributeValue::UnquotedString("test".into()),
                     ),
-                ])),
-            }
+                ]),
+            };
+            WritableTag::new("-X-TEST-TAG", value)
         }
     }
 
@@ -422,6 +384,16 @@ mod tests {
         assert!(found_float);
         assert!(found_quote);
         assert!(found_enum);
+    }
+
+    fn string_from(test_tag: TestTag) -> String {
+        let mut writer = Writer::new(Vec::new());
+        writer
+            .write_custom_tag(test_tag)
+            .expect("should not fail to write tag");
+        String::from_utf8_lossy(&writer.into_inner())
+            .trim_end()
+            .to_string()
     }
 
     #[test]

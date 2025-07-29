@@ -9,7 +9,7 @@ use crate::{
     line::ParsedByteSlice,
     utils::{f64_to_u64, parse_u64, split_on_new_line},
 };
-use std::{collections::HashMap, fmt::Display};
+use std::{borrow::Cow, collections::HashMap, fmt::Display};
 
 // Not exactly the same as `tag-value`, because some of the types must be contextualized by the
 // `tag-name`, but this list covers the possible raw values.
@@ -28,6 +28,45 @@ pub enum SemiParsedTagValue<'a> {
     DecimalFloatingPointWithOptionalTitle(f64, &'a str),
     AttributeList(HashMap<&'a str, ParsedAttributeValue<'a>>),
     Unparsed(UnparsedTagValue<'a>),
+}
+impl<'a, T> From<(f64, T)> for SemiParsedTagValue<'a>
+where
+    T: Into<&'a str>,
+{
+    fn from(value: (f64, T)) -> Self {
+        Self::DecimalFloatingPointWithOptionalTitle(value.0, value.1.into())
+    }
+}
+impl<'a, K, V> From<HashMap<K, V>> for SemiParsedTagValue<'a>
+where
+    K: Into<&'a str>,
+    V: Into<ParsedAttributeValue<'a>>,
+{
+    fn from(mut value: HashMap<K, V>) -> Self {
+        let mut map = HashMap::new();
+        for (key, value) in value.drain() {
+            map.insert(key.into(), value.into());
+        }
+        Self::AttributeList(map)
+    }
+}
+impl<'a, K, V, const N: usize> From<[(K, V); N]> for SemiParsedTagValue<'a>
+where
+    K: Into<&'a str>,
+    V: Into<ParsedAttributeValue<'a>>,
+{
+    fn from(value: [(K, V); N]) -> Self {
+        let mut map = HashMap::new();
+        for (key, value) in value {
+            map.insert(key.into(), value.into());
+        }
+        Self::AttributeList(map)
+    }
+}
+impl<'a> From<&'a [u8]> for SemiParsedTagValue<'a> {
+    fn from(value: &'a [u8]) -> Self {
+        Self::Unparsed(UnparsedTagValue(value))
+    }
 }
 #[derive(Debug, PartialEq)]
 pub struct UnparsedTagValue<'a>(pub &'a [u8]);
@@ -86,6 +125,16 @@ pub enum ParsedAttributeValue<'a> {
     SignedDecimalFloatingPoint(f64),
     QuotedString(&'a str),
     UnquotedString(&'a str),
+}
+impl From<u64> for ParsedAttributeValue<'_> {
+    fn from(value: u64) -> Self {
+        Self::DecimalInteger(value)
+    }
+}
+impl From<f64> for ParsedAttributeValue<'_> {
+    fn from(value: f64) -> Self {
+        Self::SignedDecimalFloatingPoint(value)
+    }
 }
 
 impl<'a> ParsedAttributeValue<'a> {
@@ -177,6 +226,109 @@ impl<'a> ParsedAttributeValue<'a> {
         } else {
             None
         }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum MutableSemiParsedTagValue<'a> {
+    Empty,
+    DecimalFloatingPointWithOptionalTitle(f64, Cow<'a, str>),
+    AttributeList(HashMap<Cow<'a, str>, MutableParsedAttributeValue<'a>>),
+    Unparsed(MutableUnparsedTagValue<'a>),
+}
+impl<'a> From<SemiParsedTagValue<'a>> for MutableSemiParsedTagValue<'a> {
+    fn from(value: SemiParsedTagValue<'a>) -> Self {
+        match value {
+            SemiParsedTagValue::Empty => Self::Empty,
+            SemiParsedTagValue::DecimalFloatingPointWithOptionalTitle(f, t) => {
+                Self::DecimalFloatingPointWithOptionalTitle(f, t.into())
+            }
+            SemiParsedTagValue::Unparsed(u) => Self::Unparsed(u.into()),
+            SemiParsedTagValue::AttributeList(mut m) => {
+                let mut map = HashMap::new();
+                for (key, value) in m.drain() {
+                    map.insert(key.into(), value.into());
+                }
+                Self::AttributeList(map)
+            }
+        }
+    }
+}
+impl<'a, T> From<(f64, T)> for MutableSemiParsedTagValue<'a>
+where
+    T: Into<Cow<'a, str>>,
+{
+    fn from(value: (f64, T)) -> Self {
+        Self::DecimalFloatingPointWithOptionalTitle(value.0, value.1.into())
+    }
+}
+impl<'a, K, V> From<HashMap<K, V>> for MutableSemiParsedTagValue<'a>
+where
+    K: Into<Cow<'a, str>>,
+    V: Into<MutableParsedAttributeValue<'a>>,
+{
+    fn from(mut value: HashMap<K, V>) -> Self {
+        let mut map = HashMap::new();
+        for (key, value) in value.drain() {
+            map.insert(key.into(), value.into());
+        }
+        Self::AttributeList(map)
+    }
+}
+impl<'a, K, V, const N: usize> From<[(K, V); N]> for MutableSemiParsedTagValue<'a>
+where
+    K: Into<Cow<'a, str>>,
+    V: Into<MutableParsedAttributeValue<'a>>,
+{
+    fn from(value: [(K, V); N]) -> Self {
+        let mut map = HashMap::new();
+        for (key, value) in value {
+            map.insert(key.into(), value.into());
+        }
+        Self::AttributeList(map)
+    }
+}
+impl<'a> From<Cow<'a, [u8]>> for MutableSemiParsedTagValue<'a> {
+    fn from(value: Cow<'a, [u8]>) -> Self {
+        Self::Unparsed(MutableUnparsedTagValue(value))
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct MutableUnparsedTagValue<'a>(pub Cow<'a, [u8]>);
+impl<'a> From<UnparsedTagValue<'a>> for MutableUnparsedTagValue<'a> {
+    fn from(value: UnparsedTagValue<'a>) -> Self {
+        Self(value.0.into())
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum MutableParsedAttributeValue<'a> {
+    DecimalInteger(u64),
+    SignedDecimalFloatingPoint(f64),
+    QuotedString(Cow<'a, str>),
+    UnquotedString(Cow<'a, str>),
+}
+impl<'a> From<ParsedAttributeValue<'a>> for MutableParsedAttributeValue<'a> {
+    fn from(value: ParsedAttributeValue<'a>) -> Self {
+        match value {
+            ParsedAttributeValue::DecimalInteger(d) => Self::DecimalInteger(d),
+            ParsedAttributeValue::SignedDecimalFloatingPoint(d) => {
+                Self::SignedDecimalFloatingPoint(d)
+            }
+            ParsedAttributeValue::QuotedString(s) => Self::QuotedString(s.into()),
+            ParsedAttributeValue::UnquotedString(s) => Self::UnquotedString(s.into()),
+        }
+    }
+}
+impl From<u64> for MutableParsedAttributeValue<'_> {
+    fn from(value: u64) -> Self {
+        Self::DecimalInteger(value)
+    }
+}
+impl From<f64> for MutableParsedAttributeValue<'_> {
+    fn from(value: f64) -> Self {
+        Self::SignedDecimalFloatingPoint(value)
     }
 }
 

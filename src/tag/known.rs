@@ -1,19 +1,18 @@
 use crate::{
     error::ValidationError,
-    tag::{hls, value::SemiParsedTagValue},
+    tag::{
+        hls,
+        value::{MutableParsedAttributeValue, MutableSemiParsedTagValue, SemiParsedTagValue},
+    },
     utils::split_on_new_line,
 };
 use std::{borrow::Cow, cmp::PartialEq, fmt::Debug};
 
 #[derive(Debug, PartialEq, Clone)]
 #[allow(clippy::large_enum_variant)]
-pub enum Tag<'a, CustomTag = NoCustomTag>
+pub enum Tag<'a, Custom = NoCustomTag>
 where
-    CustomTag: TryFrom<ParsedTag<'a>, Error = ValidationError>
-        + IsKnownName
-        + TagInformation
-        + Debug
-        + PartialEq,
+    Custom: CustomTag<'a>,
 {
     // Clippy suggests that the `Tag` within the `Hls` case should be put in a Box, based on
     // https://rust-lang.github.io/rust-clippy/master/index.html#large_enum_variant
@@ -36,7 +35,7 @@ where
     // instances of the `Hls` variant, and therefore, I am not putting the `Tag` in a `Box` and so
     // ignoring the Clippy warning.
     Hls(hls::Tag<'a>),
-    Custom(CustomTag),
+    Custom(CustomTagAccess<'a, Custom>),
 }
 
 pub struct TagInner<'a> {
@@ -52,13 +51,131 @@ pub trait IntoInnerTag<'a> {
     fn into_inner(self) -> TagInner<'a>;
 }
 
-pub trait IsKnownName {
+/// Trait to define a custom tag implementation.
+pub trait CustomTag<'a>:
+    TryFrom<ParsedTag<'a>, Error = ValidationError> + Debug + PartialEq
+{
+    /// Check if the provided name is known for this custom tag implementation.
+    ///
+    /// This method is called before any attempt to parse the data into a CustomTag (it is the test
+    /// for whether an attempt will be made to parse to CustomTag).
     fn is_known_name(name: &str) -> bool;
 }
+/// A custom tag implementation that allows for writing using [`crate::Writer`].
+pub trait WritableCustomTag<'a>: CustomTag<'a> {
+    /// Takes ownership of the custom tag and provides a value that is used for writing.
+    ///
+    /// This method is only called if there was a mutable borrow of the custom tag at some stage. If
+    /// the tag was never mutably borrowed, then when writing, the library will use the original
+    /// input data (thus avoiding unnecessary allocations).
+    fn into_writable_tag(self) -> WritableTag<'a>;
+}
 
-pub trait TagInformation {
-    fn name(&self) -> &str;
-    fn value(&self) -> SemiParsedTagValue;
+#[derive(Debug, PartialEq, Clone)]
+pub struct CustomTagAccess<'a, Custom>
+where
+    Custom: CustomTag<'a>,
+{
+    pub(crate) custom_tag: Custom,
+    pub(crate) is_dirty: bool,
+    pub(crate) original_input: &'a [u8],
+}
+
+impl<'a, Custom> TryFrom<ParsedTag<'a>> for CustomTagAccess<'a, Custom>
+where
+    Custom: CustomTag<'a>,
+{
+    type Error = ValidationError;
+
+    fn try_from(value: ParsedTag<'a>) -> Result<Self, Self::Error> {
+        let original_input = value.original_input;
+        let custom_tag = Custom::try_from(value)?;
+        Ok(Self {
+            custom_tag,
+            is_dirty: false,
+            original_input,
+        })
+    }
+}
+impl<'a, Custom> AsRef<Custom> for CustomTagAccess<'a, Custom>
+where
+    Custom: CustomTag<'a>,
+{
+    fn as_ref(&self) -> &Custom {
+        &self.custom_tag
+    }
+}
+impl<'a, Custom> AsMut<Custom> for CustomTagAccess<'a, Custom>
+where
+    Custom: CustomTag<'a>,
+{
+    fn as_mut(&mut self) -> &mut Custom {
+        self.is_dirty = true;
+        &mut self.custom_tag
+    }
+}
+
+impl<'a, Custom> IntoInnerTag<'a> for CustomTagAccess<'a, Custom>
+where
+    Custom: WritableCustomTag<'a>,
+{
+    fn into_inner(self) -> TagInner<'a> {
+        if self.is_dirty {
+            self.custom_tag.into_inner()
+        } else {
+            TagInner {
+                output_line: Cow::Borrowed(self.original_input),
+            }
+        }
+    }
+}
+
+impl<'a, Custom> IntoInnerTag<'a> for Custom
+where
+    Custom: WritableCustomTag<'a>,
+{
+    fn into_inner(self) -> TagInner<'a> {
+        let output = calculate_output(self);
+        TagInner {
+            output_line: Cow::Owned(output.into_bytes()),
+        }
+    }
+}
+
+pub(crate) fn calculate_output<'a, Custom: WritableCustomTag<'a>>(custom_tag: Custom) -> String {
+    let tag = custom_tag.into_writable_tag();
+    match tag.value {
+        MutableSemiParsedTagValue::Empty => format!("#EXT{}", tag.name),
+        MutableSemiParsedTagValue::DecimalFloatingPointWithOptionalTitle(n, t) => {
+            if t.is_empty() {
+                format!("#EXT{}:{}", tag.name, n)
+            } else {
+                format!("#EXT{}:{},{}", tag.name, n, t)
+            }
+        }
+        MutableSemiParsedTagValue::AttributeList(list) => {
+            let attrs = list
+                .iter()
+                .map(|(k, v)| match v {
+                    MutableParsedAttributeValue::DecimalInteger(n) => format!("{k}={n}"),
+                    MutableParsedAttributeValue::SignedDecimalFloatingPoint(n) => {
+                        format!("{k}={n:?}")
+                    }
+                    MutableParsedAttributeValue::QuotedString(s) => format!("{k}=\"{s}\""),
+                    MutableParsedAttributeValue::UnquotedString(s) => format!("{k}={s}"),
+                })
+                .collect::<Vec<String>>();
+            let value = attrs.join(",");
+            format!("#EXT{}:{}", tag.name, value)
+        }
+        MutableSemiParsedTagValue::Unparsed(bytes) => {
+            format!(
+                "#EXT{}:{}",
+                tag.name,
+                String::from_utf8_lossy(bytes.0.as_ref())
+            )
+        }
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -66,6 +183,23 @@ pub struct ParsedTag<'a> {
     pub name: &'a str,
     pub value: SemiParsedTagValue<'a>,
     pub original_input: &'a [u8],
+}
+
+#[derive(Debug, PartialEq)]
+pub struct WritableTag<'a> {
+    pub name: Cow<'a, str>,
+    pub value: MutableSemiParsedTagValue<'a>,
+}
+impl<'a> WritableTag<'a> {
+    pub fn new(
+        name: impl Into<Cow<'a, str>>,
+        value: impl Into<MutableSemiParsedTagValue<'a>>,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            value: value.into(),
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -77,36 +211,46 @@ impl TryFrom<ParsedTag<'_>> for NoCustomTag {
         Err(ValidationError::NotImplemented)
     }
 }
-impl IsKnownName for NoCustomTag {
+impl CustomTag<'_> for NoCustomTag {
     fn is_known_name(_: &str) -> bool {
         false
     }
 }
-impl TagInformation for NoCustomTag {
-    fn name(&self) -> &str {
-        "-NO-TAG"
-    }
-
-    fn value(&self) -> SemiParsedTagValue {
-        SemiParsedTagValue::Empty
+impl WritableCustomTag<'_> for NoCustomTag {
+    fn into_writable_tag(self) -> WritableTag<'static> {
+        WritableTag::new("-NO-TAG", SemiParsedTagValue::Empty)
     }
 }
 
-impl<'a, CustomTag> TryFrom<ParsedTag<'a>> for Tag<'a, CustomTag>
+impl<'a, Custom> TryFrom<ParsedTag<'a>> for Tag<'a, Custom>
 where
-    CustomTag: TryFrom<ParsedTag<'a>, Error = ValidationError>
-        + IsKnownName
-        + TagInformation
-        + Debug
-        + PartialEq,
+    Custom: CustomTag<'a>,
 {
     type Error = ValidationError;
 
     fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
-        if CustomTag::is_known_name(tag.name) {
-            Ok(Self::Custom(CustomTag::try_from(tag)?))
+        if Custom::is_known_name(tag.name) {
+            let original_input = tag.original_input;
+            let custom_tag = Custom::try_from(tag)?;
+            Ok(Self::Custom(CustomTagAccess {
+                custom_tag,
+                is_dirty: false,
+                original_input,
+            }))
         } else {
             Ok(Self::Hls(hls::Tag::try_from(tag)?))
+        }
+    }
+}
+
+impl<'a, Custom> IntoInnerTag<'a> for Tag<'a, Custom>
+where
+    Custom: WritableCustomTag<'a>,
+{
+    fn into_inner(self) -> TagInner<'a> {
+        match self {
+            Tag::Hls(tag) => tag.into_inner(),
+            Tag::Custom(tag) => tag.into_inner(),
         }
     }
 }
