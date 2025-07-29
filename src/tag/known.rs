@@ -254,3 +254,149 @@ where
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        Reader, Writer, config::ParsingOptions, error::ValidationErrorValueKind, line::HlsLine,
+        tag::value::ParsedAttributeValue,
+    };
+    use pretty_assertions::assert_eq;
+    use std::marker::PhantomData;
+
+    #[derive(Debug, PartialEq)]
+    struct TestTag {
+        mutated: bool,
+    }
+    impl TryFrom<ParsedTag<'_>> for TestTag {
+        type Error = ValidationError;
+        fn try_from(tag: ParsedTag<'_>) -> Result<Self, Self::Error> {
+            let SemiParsedTagValue::AttributeList(list) = tag.value else {
+                return Err(ValidationError::UnexpectedValueType(
+                    ValidationErrorValueKind::from(&tag.value),
+                ));
+            };
+            let Some(ParsedAttributeValue::UnquotedString(mutated_str)) = list.get("MUTATED")
+            else {
+                return Err(ValidationError::MissingRequiredAttribute("MUTATED"));
+            };
+            match *mutated_str {
+                "NO" => Ok(Self { mutated: false }),
+                "YES" => Ok(Self { mutated: true }),
+                _ => Err(ValidationError::InvalidEnumeratedString),
+            }
+        }
+    }
+    impl CustomTag<'_> for TestTag {
+        fn is_known_name(name: &str) -> bool {
+            name == "-X-TEST-TAG"
+        }
+    }
+    impl WritableCustomTag<'_> for TestTag {
+        fn into_writable_tag(self) -> WritableTag<'static> {
+            let value = if self.mutated { "YES" } else { "NO" };
+            WritableTag::new(
+                "-X-TEST-TAG",
+                [(
+                    "MUTATED",
+                    MutableParsedAttributeValue::UnquotedString(value.into()),
+                )],
+            )
+        }
+    }
+
+    #[test]
+    fn custom_tag_should_be_mutable() {
+        let data = "#EXT-X-TEST-TAG:MUTATED=NO";
+        let mut reader =
+            Reader::with_custom_from_str(data, ParsingOptions::default(), PhantomData::<TestTag>);
+        let mut writer = Writer::new(Vec::new());
+        match reader.read_line() {
+            Ok(Some(HlsLine::KnownTag(Tag::Custom(mut tag)))) => {
+                assert_eq!(false, tag.as_ref().mutated);
+                tag.as_mut().mutated = true;
+                assert_eq!(true, tag.as_ref().mutated);
+                writer
+                    .write_custom_line(HlsLine::from(tag))
+                    .expect("should not fail write");
+            }
+            l => panic!("unexpected line {l:?}"),
+        }
+        assert_eq!(
+            "#EXT-X-TEST-TAG:MUTATED=YES\n",
+            std::str::from_utf8(&writer.into_inner()).expect("should be valid str")
+        );
+    }
+
+    // This implementation we'll set the writable tag output to a value not related to the tag to
+    // demonstrate that it is only accessed for the output when mutated.
+    #[derive(Debug, PartialEq)]
+    struct WeirdTag {
+        number: f64,
+    }
+    impl TryFrom<ParsedTag<'_>> for WeirdTag {
+        type Error = ValidationError;
+        fn try_from(tag: ParsedTag<'_>) -> Result<Self, Self::Error> {
+            let SemiParsedTagValue::Unparsed(v) = tag.value else {
+                return Err(ValidationError::UnexpectedValueType(
+                    ValidationErrorValueKind::from(&tag.value),
+                ));
+            };
+            let Ok(number) = v.try_as_float() else {
+                return Err(ValidationError::MissingRequiredAttribute("self"));
+            };
+            Ok(Self { number })
+        }
+    }
+    impl CustomTag<'_> for WeirdTag {
+        fn is_known_name(name: &str) -> bool {
+            name == "-X-WEIRD-TAG"
+        }
+    }
+    impl WritableCustomTag<'_> for WeirdTag {
+        fn into_writable_tag(self) -> WritableTag<'static> {
+            WritableTag::new("-X-WEIRD-TAG", [("SO-WEIRD", 999)])
+        }
+    }
+
+    #[test]
+    fn custom_tag_should_only_use_into_writable_tag_when_mutated() {
+        let data = "#EXT-X-WEIRD-TAG:42";
+        let mut reader =
+            Reader::with_custom_from_str(data, ParsingOptions::default(), PhantomData::<WeirdTag>);
+        let mut writer = Writer::new(Vec::new());
+        match reader.read_line() {
+            Ok(Some(HlsLine::KnownTag(Tag::Custom(tag)))) => {
+                assert_eq!(42.0, tag.as_ref().number);
+                writer
+                    .write_custom_line(HlsLine::from(tag))
+                    .expect("should not fail write");
+            }
+            l => panic!("unexpected line {l:?}"),
+        }
+        assert_eq!(
+            "#EXT-X-WEIRD-TAG:42\n",
+            std::str::from_utf8(&writer.into_inner()).expect("should be valid str")
+        );
+
+        // Now re-run the test with mutation
+        let mut reader =
+            Reader::with_custom_from_str(data, ParsingOptions::default(), PhantomData::<WeirdTag>);
+        let mut writer = Writer::new(Vec::new());
+        match reader.read_line() {
+            Ok(Some(HlsLine::KnownTag(Tag::Custom(mut tag)))) => {
+                assert_eq!(42.0, tag.as_ref().number);
+                tag.as_mut().number = 69.0;
+                writer
+                    .write_custom_line(HlsLine::from(tag))
+                    .expect("should not fail write");
+            }
+            l => panic!("unexpected line {l:?}"),
+        }
+        assert_eq!(
+            "#EXT-X-WEIRD-TAG:SO-WEIRD=999\n",
+            std::str::from_utf8(&writer.into_inner()).expect("should be valid str")
+        );
+    }
+}

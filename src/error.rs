@@ -329,6 +329,7 @@ pub enum ValidationError {
     InvalidDecimalIntegerRange(ParseDecimalIntegerRangeError),
     InvalidDateTime(DateTimeSyntaxError),
     InvalidFloat(ParseFloatError),
+    InvalidEnumeratedString,
 }
 impl From<ParsePlaylistTypeError> for ValidationError {
     fn from(error: ParsePlaylistTypeError) -> Self {
