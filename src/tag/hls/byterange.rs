@@ -1,7 +1,7 @@
 use crate::{
     error::{ValidationError, ValidationErrorValueKind},
     tag::{
-        hls::{TagInner, TagName},
+        hls::{TagName, into_inner_tag},
         known::ParsedTag,
         value::SemiParsedTagValue,
     },
@@ -77,20 +77,13 @@ impl<'a> Byterange<'a> {
         self.output_line_is_dirty = true;
     }
 
-    pub fn into_inner(mut self) -> TagInner<'a> {
-        if self.output_line_is_dirty {
-            self.recalculate_output_line();
-        }
-        TagInner {
-            output_line: self.output_line,
-        }
-    }
-
     fn recalculate_output_line(&mut self) {
         self.output_line = Cow::Owned(calculate_line(self.length(), self.offset()));
         self.output_line_is_dirty = false;
     }
 }
+
+into_inner_tag!(Byterange);
 
 fn calculate_line(length: u64, offset: Option<u64>) -> Vec<u8> {
     let mut line = format!("#EXT{}:{}", TagName::Byterange.as_str(), length);
@@ -103,7 +96,7 @@ fn calculate_line(length: u64, offset: Option<u64>) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tag::hls::test_macro::mutation_tests;
+    use crate::tag::{hls::test_macro::mutation_tests, known::IntoInnerTag};
     use pretty_assertions::assert_eq;
 
     #[test]

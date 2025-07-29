@@ -1,8 +1,8 @@
 use crate::{
     error::{ValidationError, ValidationErrorValueKind},
     tag::{
-        hls::TagInner,
-        known::ParsedTag,
+        hls::{TagInner, into_inner_tag},
+        known::{IntoInnerTag, ParsedTag},
         value::{ParsedAttributeValue, SemiParsedTagValue},
     },
 };
@@ -35,15 +35,6 @@ impl<'a> Name<'a> {
         }
     }
 
-    pub fn into_inner(mut self) -> TagInner<'a> {
-        if self.output_line_is_dirty {
-            self.recalculate_output_line();
-        }
-        TagInner {
-            output_line: self.output_line,
-        }
-    }
-
     pub fn name(&self) -> &str {
         &self.name
     }
@@ -72,6 +63,8 @@ impl<'a> Name<'a> {
     }
 }
 
+into_inner_tag!(Name);
+
 #[derive(Debug, Clone)]
 pub struct Import<'a> {
     import: Cow<'a, str>,
@@ -96,15 +89,6 @@ impl<'a> Import<'a> {
         }
     }
 
-    pub fn into_inner(mut self) -> TagInner<'a> {
-        if self.output_line_is_dirty {
-            self.recalculate_output_line();
-        }
-        TagInner {
-            output_line: self.output_line,
-        }
-    }
-
     pub fn import(&self) -> &str {
         &self.import
     }
@@ -123,6 +107,8 @@ impl<'a> Import<'a> {
         format!("#EXT-X-DEFINE:{IMPORT}=\"{import}\"").into_bytes()
     }
 }
+
+into_inner_tag!(Import);
 
 #[derive(Debug, Clone)]
 pub struct Queryparam<'a> {
@@ -148,15 +134,6 @@ impl<'a> Queryparam<'a> {
         }
     }
 
-    pub fn into_inner(mut self) -> TagInner<'a> {
-        if self.output_line_is_dirty {
-            self.recalculate_output_line();
-        }
-        TagInner {
-            output_line: self.output_line,
-        }
-    }
-
     pub fn queryparam(&self) -> &str {
         &self.queryparam
     }
@@ -175,6 +152,8 @@ impl<'a> Queryparam<'a> {
         format!("#EXT-X-DEFINE:{QUERYPARAM}=\"{queryparam}\"").into_bytes()
     }
 }
+
+into_inner_tag!(Queryparam);
 
 /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.2.3
 #[derive(Debug, PartialEq, Clone)]
@@ -281,8 +260,10 @@ impl<'a> Define<'a> {
     pub fn set_queryparam(&mut self, queryparam: impl Into<Cow<'a, str>>) {
         *self = Self::new_queryparam(queryparam);
     }
+}
 
-    pub fn into_inner(self) -> TagInner<'a> {
+impl<'a> IntoInnerTag<'a> for Define<'a> {
+    fn into_inner(self) -> TagInner<'a> {
         match self {
             Define::Name(name) => name.into_inner(),
             Define::Import(import) => import.into_inner(),

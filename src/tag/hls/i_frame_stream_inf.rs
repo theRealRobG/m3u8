@@ -2,7 +2,7 @@ use crate::{
     error::{ValidationError, ValidationErrorValueKind},
     tag::{
         hls::{
-            EnumeratedString, TagInner,
+            EnumeratedString, into_inner_tag,
             stream_inf::{HdcpLevel, VideoLayout, VideoRange},
         },
         known::ParsedTag,
@@ -268,15 +268,6 @@ impl<'a> IFrameStreamInf<'a> {
 
     pub fn builder(uri: impl Into<Cow<'a, str>>, bandwidth: u64) -> IFrameStreamInfBuilder<'a> {
         IFrameStreamInfBuilder::new(uri, bandwidth)
-    }
-
-    pub fn into_inner(mut self) -> TagInner<'a> {
-        if self.output_line_is_dirty {
-            self.recalculate_output_line();
-        }
-        TagInner {
-            output_line: self.output_line,
-        }
     }
 
     // === GETTERS ===
@@ -609,6 +600,8 @@ impl<'a> IFrameStreamInf<'a> {
     }
 }
 
+into_inner_tag!(IFrameStreamInf);
+
 const URI: &str = "URI";
 const BANDWIDTH: &str = "BANDWIDTH";
 const AVERAGE_BANDWIDTH: &str = "AVERAGE-BANDWIDTH";
@@ -684,7 +677,7 @@ fn calculate_line(attribute_list: &IFrameStreamInfAttributeList) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tag::hls::test_macro::mutation_tests;
+    use crate::tag::{hls::test_macro::mutation_tests, known::IntoInnerTag};
     use pretty_assertions::assert_eq;
 
     #[test]

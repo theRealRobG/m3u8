@@ -1,7 +1,7 @@
 use crate::{
     error::{ValidationError, ValidationErrorValueKind},
     tag::{
-        hls::{EnumeratedString, TagInner, key::Method},
+        hls::{EnumeratedString, into_inner_tag, key::Method},
         known::ParsedTag,
         value::{ParsedAttributeValue, SemiParsedTagValue},
     },
@@ -140,15 +140,6 @@ impl<'a> SessionKey<'a> {
         SessionKeyBuilder::new(method, uri)
     }
 
-    pub fn into_inner(mut self) -> TagInner<'a> {
-        if self.output_line_is_dirty {
-            self.recalculate_output_line();
-        }
-        TagInner {
-            output_line: self.output_line,
-        }
-    }
-
     pub fn method(&self) -> EnumeratedString<Method> {
         EnumeratedString::from(self.method.as_ref())
     }
@@ -258,6 +249,8 @@ impl<'a> SessionKey<'a> {
     }
 }
 
+into_inner_tag!(SessionKey);
+
 const METHOD: &str = "METHOD";
 const URI: &str = "URI";
 const IV: &str = "IV";
@@ -288,7 +281,7 @@ fn calculate_line(attribute_list: &SessionKeyAttributeList) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tag::hls::test_macro::mutation_tests;
+    use crate::tag::{hls::test_macro::mutation_tests, known::IntoInnerTag};
     use pretty_assertions::assert_eq;
 
     #[test]

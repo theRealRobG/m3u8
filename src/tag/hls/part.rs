@@ -1,7 +1,7 @@
 use crate::{
     error::{ValidationError, ValidationErrorValueKind},
     tag::{
-        hls::TagInner,
+        hls::into_inner_tag,
         known::ParsedTag,
         value::{ParsedAttributeValue, SemiParsedTagValue},
     },
@@ -154,15 +154,6 @@ impl<'a> Part<'a> {
         PartBuilder::new(uri, duration)
     }
 
-    pub fn into_inner(mut self) -> TagInner<'a> {
-        if self.output_line_is_dirty {
-            self.recalculate_output_line();
-        }
-        TagInner {
-            output_line: self.output_line,
-        }
-    }
-
     pub fn uri(&self) -> &str {
         &self.uri
     }
@@ -258,6 +249,8 @@ impl<'a> Part<'a> {
     }
 }
 
+into_inner_tag!(Part);
+
 const URI: &str = "URI";
 const DURATION: &str = "DURATION";
 const INDEPENDENT: &str = "INDEPENDENT";
@@ -289,7 +282,7 @@ fn calculate_line(attribute_list: &PartAttributeList) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tag::hls::test_macro::mutation_tests;
+    use crate::tag::{hls::test_macro::mutation_tests, known::IntoInnerTag};
     use pretty_assertions::assert_eq;
 
     #[test]

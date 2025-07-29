@@ -2,7 +2,7 @@ use crate::{
     error::ValidationError,
     line::HlsLine,
     tag::{
-        known::{IsKnownName, ParsedTag, TagInformation},
+        known::{IntoInnerTag, IsKnownName, ParsedTag, TagInformation},
         value::{ParsedAttributeValue, SemiParsedTagValue},
     },
 };

@@ -1,7 +1,7 @@
 use crate::{
     error::{UnrecognizedEnumerationError, ValidationError, ValidationErrorValueKind},
     tag::{
-        hls::{EnumeratedString, TagInner},
+        hls::{EnumeratedString, into_inner_tag},
         known::ParsedTag,
         value::{ParsedAttributeValue, SemiParsedTagValue},
     },
@@ -172,15 +172,6 @@ impl<'a> PreloadHint<'a> {
         PreloadHintBuilder::new(hint_type, uri)
     }
 
-    pub fn into_inner(mut self) -> TagInner<'a> {
-        if self.output_line_is_dirty {
-            self.recalculate_output_line();
-        }
-        TagInner {
-            output_line: self.output_line,
-        }
-    }
-
     pub fn hint_type(&self) -> EnumeratedString<Type> {
         EnumeratedString::from(self.hint_type.as_ref())
     }
@@ -263,6 +254,8 @@ impl<'a> PreloadHint<'a> {
     }
 }
 
+into_inner_tag!(PreloadHint);
+
 const TYPE: &str = "TYPE";
 const URI: &str = "URI";
 const BYTERANGE_START: &str = "BYTERANGE-START";
@@ -288,7 +281,7 @@ fn calculate_line(attribute_list: &PreloadHintAttributeList) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tag::hls::test_macro::mutation_tests;
+    use crate::tag::{hls::test_macro::mutation_tests, known::IntoInnerTag};
     use pretty_assertions::assert_eq;
 
     #[test]

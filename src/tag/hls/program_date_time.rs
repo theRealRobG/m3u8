@@ -1,7 +1,7 @@
 use crate::{
     date::DateTime,
     error::{ValidationError, ValidationErrorValueKind},
-    tag::{hls::TagInner, known::ParsedTag, value::SemiParsedTagValue},
+    tag::{hls::into_inner_tag, known::ParsedTag, value::SemiParsedTagValue},
 };
 use std::borrow::Cow;
 
@@ -46,15 +46,6 @@ impl<'a> ProgramDateTime<'a> {
         }
     }
 
-    pub fn into_inner(mut self) -> TagInner<'a> {
-        if self.output_line_is_dirty {
-            self.recalculate_output_line();
-        }
-        TagInner {
-            output_line: self.output_line,
-        }
-    }
-
     pub fn program_date_time(&self) -> DateTime {
         self.program_date_time
     }
@@ -70,10 +61,15 @@ impl<'a> ProgramDateTime<'a> {
     }
 }
 
+into_inner_tag!(ProgramDateTime);
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{date_time, tag::hls::test_macro::mutation_tests};
+    use crate::{
+        date_time,
+        tag::{hls::test_macro::mutation_tests, known::IntoInnerTag},
+    };
     use pretty_assertions::assert_eq;
 
     #[test]

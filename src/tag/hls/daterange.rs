@@ -2,7 +2,7 @@ use crate::{
     date::{self, DateTime},
     error::{UnrecognizedEnumerationError, ValidationError, ValidationErrorValueKind},
     tag::{
-        hls::{EnumeratedString, EnumeratedStringList, TagInner, TagName},
+        hls::{EnumeratedString, EnumeratedStringList, TagName, into_inner_tag},
         known::ParsedTag,
         value::{ParsedAttributeValue, SemiParsedTagValue},
     },
@@ -308,15 +308,6 @@ impl<'a> Daterange<'a> {
 
     pub fn builder(id: impl Into<Cow<'a, str>>, start_date: DateTime) -> DaterangeBuilder<'a> {
         DaterangeBuilder::new(id, start_date)
-    }
-
-    pub fn into_inner(mut self) -> TagInner<'a> {
-        if self.output_line_is_dirty {
-            self.recalculate_output_line();
-        }
-        TagInner {
-            output_line: self.output_line,
-        }
     }
 
     // === GETTERS ===
@@ -639,6 +630,8 @@ impl<'a> Daterange<'a> {
     }
 }
 
+into_inner_tag!(Daterange);
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum ExtensionAttributeValue<'a> {
     QuotedString(Cow<'a, str>),
@@ -791,7 +784,10 @@ fn calculate_line(attribute_list: &DaterangeAttributeList) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{date_time, tag::hls::test_macro::mutation_tests};
+    use crate::{
+        date_time,
+        tag::{hls::test_macro::mutation_tests, known::IntoInnerTag},
+    };
     use pretty_assertions::assert_eq;
 
     #[test]

@@ -1,6 +1,6 @@
 use crate::{
     error::{ValidationError, ValidationErrorValueKind},
-    tag::{hls::TagInner, known::ParsedTag, value::SemiParsedTagValue},
+    tag::{hls::into_inner_tag, known::ParsedTag, value::SemiParsedTagValue},
 };
 use std::borrow::Cow;
 
@@ -45,15 +45,6 @@ impl<'a> Version<'a> {
         }
     }
 
-    pub fn into_inner(mut self) -> TagInner<'a> {
-        if self.output_line_is_dirty {
-            self.recalculate_output_line();
-        }
-        TagInner {
-            output_line: self.output_line,
-        }
-    }
-
     pub fn version(&self) -> u64 {
         self.version
     }
@@ -69,15 +60,16 @@ impl<'a> Version<'a> {
     }
 }
 
+into_inner_tag!(Version);
+
 fn calculate_line(version: u64) -> Vec<u8> {
     format!("#EXT-X-VERSION:{version}").into_bytes()
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::tag::hls::test_macro::mutation_tests;
-
     use super::*;
+    use crate::tag::{hls::test_macro::mutation_tests, known::IntoInnerTag};
     use pretty_assertions::assert_eq;
 
     #[test]

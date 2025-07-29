@@ -1,8 +1,9 @@
 use crate::{
     error::ValidationError,
     tag::{hls, value::SemiParsedTagValue},
+    utils::split_on_new_line,
 };
-use std::{cmp::PartialEq, fmt::Debug};
+use std::{borrow::Cow, cmp::PartialEq, fmt::Debug};
 
 #[derive(Debug, PartialEq, Clone)]
 #[allow(clippy::large_enum_variant)]
@@ -38,6 +39,19 @@ where
     Custom(CustomTag),
 }
 
+pub struct TagInner<'a> {
+    pub(crate) output_line: Cow<'a, [u8]>,
+}
+impl<'a> TagInner<'a> {
+    pub fn value(&self) -> &[u8] {
+        split_on_new_line(&self.output_line).parsed
+    }
+}
+
+pub trait IntoInnerTag<'a> {
+    fn into_inner(self) -> TagInner<'a>;
+}
+
 pub trait IsKnownName {
     fn is_known_name(name: &str) -> bool;
 }
@@ -51,7 +65,7 @@ pub trait TagInformation {
 pub struct ParsedTag<'a> {
     pub name: &'a str,
     pub value: SemiParsedTagValue<'a>,
-    pub(crate) original_input: &'a [u8],
+    pub original_input: &'a [u8],
 }
 
 #[derive(Debug, PartialEq, Clone)]

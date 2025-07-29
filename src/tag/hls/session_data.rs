@@ -1,7 +1,7 @@
 use crate::{
     error::{UnrecognizedEnumerationError, ValidationError, ValidationErrorValueKind},
     tag::{
-        hls::{EnumeratedString, TagInner},
+        hls::{EnumeratedString, into_inner_tag},
         known::ParsedTag,
         value::{ParsedAttributeValue, SemiParsedTagValue},
     },
@@ -182,15 +182,6 @@ impl<'a> SessionData<'a> {
         SessionDataBuilder::new(data_id)
     }
 
-    pub fn into_inner(mut self) -> TagInner<'a> {
-        if self.output_line_is_dirty {
-            self.recalculate_output_line();
-        }
-        TagInner {
-            output_line: self.output_line,
-        }
-    }
-
     pub fn data_id(&self) -> &str {
         &self.data_id
     }
@@ -311,6 +302,8 @@ impl<'a> SessionData<'a> {
     }
 }
 
+into_inner_tag!(SessionData);
+
 const DATA_ID: &str = "DATA-ID";
 const VALUE: &str = "VALUE";
 const URI: &str = "URI";
@@ -343,9 +336,8 @@ fn calculate_line(attribute_list: &SessionDataAttributeList) -> Vec<u8> {
 
 #[cfg(test)]
 mod tests {
-    use crate::tag::hls::test_macro::mutation_tests;
-
     use super::*;
+    use crate::tag::{hls::test_macro::mutation_tests, known::IntoInnerTag};
     use pretty_assertions::assert_eq;
 
     #[test]

@@ -14,12 +14,11 @@ use crate::{
             skip::Skip, start::Start, stream_inf::StreamInf, targetduration::Targetduration,
             version::Version,
         },
-        known::ParsedTag,
+        known::{IntoInnerTag, ParsedTag, TagInner},
     },
-    utils::split_on_new_line,
 };
 pub use enumerated_string::*;
-use std::{borrow::Cow, fmt::Debug};
+use std::fmt::Debug;
 
 pub mod bitrate;
 pub mod byterange;
@@ -171,18 +170,37 @@ impl<'a> TryFrom<ParsedTag<'a>> for Tag<'a> {
     }
 }
 
-pub struct TagInner<'a> {
-    output_line: Cow<'a, [u8]>,
+// Helper macro for implementing IntoInnerTag for each of the HLS tag implementations. It works
+// because all of the HLS tag implementations have a "recalculate_output_line" method. In the future
+// I may look to move the entire tag implementation into a macro (given that, at least the attribute
+// list tags, share a lot of the same implementation details).
+macro_rules! into_inner_tag {
+    ($name:ident) => {
+        impl<'a> $crate::tag::known::IntoInnerTag<'a> for $name<'a> {
+            fn into_inner(mut self) -> $crate::tag::known::TagInner<'a> {
+                if self.output_line_is_dirty {
+                    self.recalculate_output_line();
+                }
+                $crate::tag::known::TagInner {
+                    output_line: self.output_line,
+                }
+            }
+        }
+    };
+    ($name:ident @Static $val:literal) => {
+        impl $crate::tag::known::IntoInnerTag<'static> for $name {
+            fn into_inner(self) -> $crate::tag::known::TagInner<'static> {
+                $crate::tag::known::TagInner {
+                    output_line: std::borrow::Cow::Borrowed($val),
+                }
+            }
+        }
+    };
 }
+pub(self) use into_inner_tag;
 
-impl<'a> TagInner<'a> {
-    pub fn value(&self) -> &[u8] {
-        split_on_new_line(&self.output_line).parsed
-    }
-}
-
-impl<'a> Tag<'a> {
-    pub fn into_inner(self) -> TagInner<'a> {
+impl<'a> IntoInnerTag<'a> for Tag<'a> {
+    fn into_inner(self) -> TagInner<'a> {
         match self {
             Tag::M3u(t) => t.into_inner(),
             Tag::Version(t) => t.into_inner(),

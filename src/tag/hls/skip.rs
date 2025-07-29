@@ -1,7 +1,7 @@
 use crate::{
     error::{ValidationError, ValidationErrorValueKind},
     tag::{
-        hls::TagInner,
+        hls::into_inner_tag,
         known::ParsedTag,
         value::{ParsedAttributeValue, SemiParsedTagValue},
     },
@@ -106,15 +106,6 @@ impl<'a> Skip<'a> {
         SkipBuilder::new(skipped_segments)
     }
 
-    pub fn into_inner(mut self) -> TagInner<'a> {
-        if self.output_line_is_dirty {
-            self.recalculate_output_line();
-        }
-        TagInner {
-            output_line: self.output_line,
-        }
-    }
-
     pub fn skipped_segments(&self) -> u64 {
         self.skipped_segments
     }
@@ -160,6 +151,8 @@ impl<'a> Skip<'a> {
     }
 }
 
+into_inner_tag!(Skip);
+
 const SKIPPED_SEGMENTS: &str = "SKIPPED-SEGMENTS";
 const RECENTLY_REMOVED_DATERANGES: &str = "RECENTLY-REMOVED-DATERANGES";
 
@@ -180,7 +173,7 @@ fn calculate_line(attribute_list: &SkipAttributeList) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tag::hls::test_macro::mutation_tests;
+    use crate::tag::{hls::test_macro::mutation_tests, known::IntoInnerTag};
     use pretty_assertions::assert_eq;
 
     #[test]

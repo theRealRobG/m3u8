@@ -1,7 +1,7 @@
 use crate::{
     error::{UnrecognizedEnumerationError, ValidationError, ValidationErrorValueKind},
     tag::{
-        hls::{EnumeratedString, EnumeratedStringList, TagInner},
+        hls::{EnumeratedString, EnumeratedStringList, into_inner_tag},
         known::ParsedTag,
         value::{DecimalResolution, ParsedAttributeValue, SemiParsedTagValue},
     },
@@ -577,15 +577,6 @@ impl<'a> StreamInf<'a> {
         StreamInfBuilder::new(bandwidth)
     }
 
-    pub fn into_inner(mut self) -> TagInner<'a> {
-        if self.output_line_is_dirty {
-            self.recalculate_output_line();
-        }
-        TagInner {
-            output_line: self.output_line,
-        }
-    }
-
     pub fn bandwidth(&self) -> u64 {
         self.bandwidth
     }
@@ -997,6 +988,8 @@ impl<'a> StreamInf<'a> {
     }
 }
 
+into_inner_tag!(StreamInf);
+
 const BANDWIDTH: &str = "BANDWIDTH";
 const AVERAGE_BANDWIDTH: &str = "AVERAGE-BANDWIDTH";
 const SCORE: &str = "SCORE";
@@ -1090,7 +1083,7 @@ fn calculate_line(attribute_list: &StreamInfAttributeList) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tag::hls::test_macro::mutation_tests;
+    use crate::tag::{hls::test_macro::mutation_tests, known::IntoInnerTag};
     use pretty_assertions::assert_eq;
 
     #[test]

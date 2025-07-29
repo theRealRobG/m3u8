@@ -1,7 +1,7 @@
 use crate::{
     error::{ValidationError, ValidationErrorValueKind},
     tag::{
-        hls::TagInner,
+        hls::into_inner_tag,
         known::ParsedTag,
         value::{ParsedAttributeValue, SemiParsedTagValue},
     },
@@ -56,15 +56,6 @@ impl<'a> PartInf<'a> {
         }
     }
 
-    pub fn into_inner(mut self) -> TagInner<'a> {
-        if self.output_line_is_dirty {
-            self.recalculate_output_line();
-        }
-        TagInner {
-            output_line: self.output_line,
-        }
-    }
-
     pub fn part_target(&self) -> f64 {
         self.part_target
     }
@@ -80,6 +71,8 @@ impl<'a> PartInf<'a> {
     }
 }
 
+into_inner_tag!(PartInf);
+
 const PART_TARGET: &str = "PART-TARGET";
 
 fn calculate_line(part_target: f64) -> Vec<u8> {
@@ -89,7 +82,7 @@ fn calculate_line(part_target: f64) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tag::hls::test_macro::mutation_tests;
+    use crate::tag::{hls::test_macro::mutation_tests, known::IntoInnerTag};
     use pretty_assertions::assert_eq;
 
     #[test]

@@ -1,6 +1,6 @@
 use crate::{
     error::{ValidationError, ValidationErrorValueKind},
-    tag::{hls::TagInner, known::ParsedTag, value::SemiParsedTagValue},
+    tag::{hls::into_inner_tag, known::ParsedTag, value::SemiParsedTagValue},
 };
 use std::borrow::Cow;
 
@@ -57,15 +57,6 @@ impl<'a> Inf<'a> {
         }
     }
 
-    pub fn into_inner(mut self) -> TagInner<'a> {
-        if self.output_line_is_dirty {
-            self.recalculate_output_line();
-        }
-        TagInner {
-            output_line: self.output_line,
-        }
-    }
-
     pub fn duration(&self) -> f64 {
         self.duration
     }
@@ -90,6 +81,8 @@ impl<'a> Inf<'a> {
     }
 }
 
+into_inner_tag!(Inf);
+
 fn calculate_line(duration: f64, title: &str) -> Vec<u8> {
     if title.is_empty() {
         format!("#EXTINF:{duration}").into_bytes()
@@ -101,7 +94,7 @@ fn calculate_line(duration: f64, title: &str) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tag::hls::test_macro::mutation_tests;
+    use crate::tag::{hls::test_macro::mutation_tests, known::IntoInnerTag};
     use pretty_assertions::assert_eq;
 
     #[test]

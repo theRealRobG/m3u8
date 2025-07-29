@@ -2,7 +2,7 @@ use crate::{
     error::{ValidationError, ValidationErrorValueKind},
     tag::{
         hls::TagInner,
-        known::ParsedTag,
+        known::{IntoInnerTag, ParsedTag},
         value::{HlsPlaylistType, SemiParsedTagValue},
     },
 };
@@ -30,7 +30,17 @@ impl PlaylistType {
         Self(playlist_type)
     }
 
-    pub fn into_inner(self) -> TagInner<'static> {
+    pub fn playlist_type(&self) -> HlsPlaylistType {
+        self.0
+    }
+
+    pub fn set_playlist_type(&mut self, playlist_type: HlsPlaylistType) {
+        self.0 = playlist_type;
+    }
+}
+
+impl IntoInnerTag<'static> for PlaylistType {
+    fn into_inner(self) -> TagInner<'static> {
         match self.0 {
             HlsPlaylistType::Event => TagInner {
                 output_line: Cow::Borrowed(b"#EXT-X-PLAYLIST-TYPE:EVENT"),
@@ -39,14 +49,6 @@ impl PlaylistType {
                 output_line: Cow::Borrowed(b"#EXT-X-PLAYLIST-TYPE:VOD"),
             },
         }
-    }
-
-    pub fn playlist_type(&self) -> HlsPlaylistType {
-        self.0
-    }
-
-    pub fn set_playlist_type(&mut self, playlist_type: HlsPlaylistType) {
-        self.0 = playlist_type;
     }
 }
 

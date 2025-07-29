@@ -1,8 +1,7 @@
 use crate::{
     error::ValidationError,
-    tag::{hls::TagInner, known::ParsedTag},
+    tag::{hls::into_inner_tag, known::ParsedTag},
 };
-use std::borrow::Cow;
 
 /// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.3.4
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -16,10 +15,4 @@ impl TryFrom<ParsedTag<'_>> for Endlist {
     }
 }
 
-impl Endlist {
-    pub fn into_inner(self) -> TagInner<'static> {
-        TagInner {
-            output_line: Cow::Borrowed(b"#EXT-X-ENDLIST"),
-        }
-    }
-}
+into_inner_tag!(Endlist @Static b"#EXT-X-ENDLIST");
