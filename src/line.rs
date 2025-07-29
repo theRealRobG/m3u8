@@ -18,7 +18,6 @@ where
         + IsKnownName
         + TagInformation
         + Debug
-        + Clone
         + PartialEq,
 {
     KnownTag(known::Tag<'a, CustomTag>),
@@ -34,7 +33,6 @@ where
         + IsKnownName
         + TagInformation
         + Debug
-        + Clone
         + PartialEq,
 {
     fn from(tag: hls::Tag<'a>) -> Self {
@@ -48,7 +46,6 @@ where
         + IsKnownName
         + TagInformation
         + Debug
-        + Clone
         + PartialEq,
 {
     fn from(tag: CustomTag) -> Self {
@@ -62,7 +59,6 @@ where
         + IsKnownName
         + TagInformation
         + Debug
-        + Clone
         + PartialEq,
 {
     fn from(tag: unknown::Tag<'a>) -> Self {
@@ -92,7 +88,6 @@ macro_rules! impl_line_from_tag {
                 + IsKnownName
                 + TagInformation
                 + Debug
-                + Clone
                 + PartialEq,
         {
             fn from(tag: $tag_mod_path) -> Self {
@@ -179,7 +174,6 @@ where
         + IsKnownName
         + TagInformation
         + Debug
-        + Clone
         + PartialEq,
 {
     parse_bytes_with_custom(input.as_bytes(), options)
@@ -214,7 +208,6 @@ where
         + IsKnownName
         + TagInformation
         + Debug
-        + Clone
         + PartialEq,
 {
     if input.is_empty() {

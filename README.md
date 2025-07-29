@@ -68,7 +68,6 @@ where
         + IsKnownName
         + TagInformation
         + Debug
-        + Clone
         + PartialEq,
 {
     KnownTag(known::Tag<'a, CustomTag>),

@@ -30,7 +30,6 @@ macro_rules! impl_reader {
                 + IsKnownName
                 + TagInformation
                 + Debug
-                + Clone
                 + PartialEq,
         {
             /// Creates a reader that supports custom tag parsing for the type specified by the

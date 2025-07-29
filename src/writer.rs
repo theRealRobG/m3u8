@@ -166,7 +166,6 @@ where
             + IsKnownName
             + TagInformation
             + Debug
-            + Clone
             + PartialEq,
     {
         self.write_custom_line(HlsLine::from(tag))
@@ -183,7 +182,6 @@ where
             + IsKnownName
             + TagInformation
             + Debug
-            + Clone
             + PartialEq,
     {
         let mut count = 0usize;

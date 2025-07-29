@@ -12,7 +12,6 @@ where
         + IsKnownName
         + TagInformation
         + Debug
-        + Clone
         + PartialEq,
 {
     // Clippy suggests that the `Tag` within the `Hls` case should be put in a Box, based on
@@ -85,7 +84,6 @@ where
         + IsKnownName
         + TagInformation
         + Debug
-        + Clone
         + PartialEq,
 {
     type Error = ValidationError;
