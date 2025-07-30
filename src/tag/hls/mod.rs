@@ -197,7 +197,7 @@ macro_rules! into_inner_tag {
         }
     };
 }
-pub(self) use into_inner_tag;
+use into_inner_tag;
 
 impl<'a> IntoInnerTag<'a> for Tag<'a> {
     fn into_inner(self) -> TagInner<'a> {

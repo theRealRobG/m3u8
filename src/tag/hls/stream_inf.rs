@@ -235,8 +235,8 @@ impl<'a> VideoLayout<'a> {
 impl VideoLayout<'_> {
     /// Defines the video channels.
     pub fn channels(&self) -> EnumeratedStringList<VideoChannelSpecifier> {
-        let mut split = self.inner.split('/');
-        while let Some(entries) = split.next() {
+        let split = self.inner.split('/');
+        for entries in split {
             if entries.starts_with("CH") {
                 return EnumeratedStringList::from(entries);
             }
@@ -246,8 +246,8 @@ impl VideoLayout<'_> {
     /// Defines how a two-dimensional rectangular image must be transformed in order to display it
     /// faithfully to a viewer.
     pub fn projection(&self) -> EnumeratedStringList<VideoProjectionSpecifier> {
-        let mut split = self.inner.split('/');
-        while let Some(entries) = split.next() {
+        let split = self.inner.split('/');
+        for entries in split {
             if entries.starts_with("PROJ") {
                 return EnumeratedStringList::from(entries);
             }

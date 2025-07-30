@@ -219,13 +219,13 @@ impl<'a> TryFrom<&'a str> for ChannelSpecialUsageIdentifier {
             BINAURAL => Ok(Self::Binaural),
             IMMERSIVE => Ok(Self::Immersive),
             DOWNMIX => Ok(Self::Downmix),
-            s if s.starts_with(BED) && s.bytes().nth(3) == Some(b'-') => {
+            s if s.starts_with(BED) && s.as_bytes().get(3) == Some(&b'-') => {
                 let count = s[4..]
                     .parse::<u32>()
                     .map_err(|_| UnrecognizedEnumerationError::new(s))?;
                 Ok(Self::Bed(count))
             }
-            s if s.starts_with(DOF) && s.bytes().nth(3) == Some(b'-') => {
+            s if s.starts_with(DOF) && s.as_bytes().get(3) == Some(&b'-') => {
                 let count = s[4..]
                     .parse::<u32>()
                     .map_err(|_| UnrecognizedEnumerationError::new(s))?;
@@ -391,7 +391,7 @@ impl ValidChannels<'_> {
 impl<'a> TryFrom<&'a str> for ValidChannels<'a> {
     type Error = UnrecognizedEnumerationError<'a>;
     fn try_from(value: &'a str) -> Result<Self, Self::Error> {
-        match value.splitn(2, '/').next().map(str::parse::<u32>) {
+        match value.split('/').next().map(str::parse::<u32>) {
             Some(Ok(count)) => Ok(Self {
                 count,
                 inner: Cow::Borrowed(value),

@@ -88,7 +88,7 @@ into_inner_tag!(Byterange);
 fn calculate_line(length: u64, offset: Option<u64>) -> Vec<u8> {
     let mut line = format!("#EXT{}:{}", TagName::Byterange.as_str(), length);
     if let Some(offset) = offset {
-        line.push_str(format!("@{}", offset).as_str());
+        line.push_str(format!("@{offset}").as_str());
     }
     line.into_bytes()
 }

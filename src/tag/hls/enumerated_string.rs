@@ -4,7 +4,6 @@ use std::{
     fmt::{Debug, Display},
     marker::PhantomData,
     str::Split,
-    usize,
 };
 
 /// Provides a forward compatible wrapper for enumerated string values.
@@ -111,10 +110,7 @@ where
             EnumeratedString::Unknown(s) => s,
             EnumeratedString::Known(t) => &t.as_cow(),
         };
-        self.inner
-            .split(',')
-            .find(|item| *item == value_str)
-            .is_some()
+        self.inner.split(',').any(|item| item == value_str)
     }
 
     pub fn is_empty(&self) -> bool {
@@ -128,7 +124,7 @@ where
         }
         let mut new_inner = std::mem::take(&mut self.inner).to_string();
         if !new_inner.is_empty() {
-            new_inner.push_str(",");
+            new_inner.push(',');
         }
         new_inner.push_str(&value.as_cow());
         self.inner = Cow::Owned(new_inner);
@@ -148,29 +144,25 @@ where
             Some(v) if v == value => {
                 if let Some(next) = iter.next() {
                     new_inner.push_str(next);
-                    while let Some(item) = iter.next() {
-                        new_inner.push_str(",");
+                    for item in iter.by_ref() {
+                        new_inner.push(',');
                         new_inner.push_str(item);
                     }
                 }
             }
             Some(v) => {
                 new_inner.push_str(v);
-                while let Some(item) = iter.next() {
+                for item in iter {
                     if item != value {
-                        new_inner.push_str(",");
+                        new_inner.push(',');
                         new_inner.push_str(item);
                     }
                 }
             }
             None => (), // This isn't really possible since we check for contains above
         }
-        std::mem::swap(&mut self.inner, &mut Cow::Owned(new_inner));
+        self.inner = Cow::Owned(new_inner);
         true
-    }
-
-    pub fn to_string(&self) -> String {
-        self.inner.to_string()
     }
 
     pub fn to_owned<'b>(&self) -> EnumeratedStringList<'b, T> {
@@ -295,7 +287,7 @@ where
     type Item = EnumeratedString<'a, T>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.inner.next().map(|s| EnumeratedString::from(s))
+        self.inner.next().map(EnumeratedString::from)
     }
 }
 

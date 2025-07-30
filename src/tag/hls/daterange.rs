@@ -734,19 +734,19 @@ fn calculate_line(attribute_list: &DaterangeAttributeList) -> Vec<u8> {
         start_date,
     );
     if let Some(class) = class {
-        line.push_str(format!(",{}=\"{}\"", CLASS, class).as_str());
+        line.push_str(format!(",{CLASS}=\"{class}\"").as_str());
     }
     if let Some(cue) = cue {
-        line.push_str(format!(",{}=\"{}\"", CUE, cue).as_str());
+        line.push_str(format!(",{CUE}=\"{cue}\"").as_str());
     }
     if let Some(end_date) = end_date {
-        line.push_str(format!(",{}=\"{}\"", END_DATE, end_date).as_str());
+        line.push_str(format!(",{END_DATE}=\"{end_date}\"").as_str());
     }
     if let Some(duration) = duration {
-        line.push_str(format!(",{}={}", DURATION, duration).as_str());
+        line.push_str(format!(",{DURATION}={duration}").as_str());
     }
     if let Some(planned_duration) = planned_duration {
-        line.push_str(format!(",{}={}", PLANNED_DURATION, planned_duration).as_str());
+        line.push_str(format!(",{PLANNED_DURATION}={planned_duration}").as_str());
     }
     for (key, value) in extension_attributes {
         line.push(',');
@@ -762,18 +762,18 @@ fn calculate_line(attribute_list: &DaterangeAttributeList) -> Vec<u8> {
                 line.push('"');
             }
             ExtensionAttributeValue::SignedDecimalFloatingPoint(d) => {
-                line.push_str(format!("{}", d).as_str());
+                line.push_str(format!("{d}").as_str());
             }
         };
     }
     if let Some(scte35_cmd) = scte35_cmd {
-        line.push_str(format!(",{}={}", SCTE35_CMD, scte35_cmd).as_str());
+        line.push_str(format!(",{SCTE35_CMD}={scte35_cmd}").as_str());
     }
     if let Some(scte35_out) = scte35_out {
-        line.push_str(format!(",{}={}", SCTE35_OUT, scte35_out).as_str());
+        line.push_str(format!(",{SCTE35_OUT}={scte35_out}").as_str());
     }
     if let Some(scte35_in) = scte35_in {
-        line.push_str(format!(",{}={}", SCTE35_IN, scte35_in).as_str());
+        line.push_str(format!(",{SCTE35_IN}={scte35_in}").as_str());
     }
     if *end_on_next {
         line.push_str(",END-ON-NEXT=YES");

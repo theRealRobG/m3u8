@@ -64,7 +64,7 @@ impl<'a> DiscontinuitySequence<'a> {
 into_inner_tag!(DiscontinuitySequence);
 
 fn calculate_line(discontinuity_sequence: u64) -> Vec<u8> {
-    format!("#EXT-X-DISCONTINUITY-SEQUENCE:{}", discontinuity_sequence).into_bytes()
+    format!("#EXT-X-DISCONTINUITY-SEQUENCE:{discontinuity_sequence}").into_bytes()
 }
 
 #[cfg(test)]

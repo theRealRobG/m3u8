@@ -158,7 +158,7 @@ fn calculate_line(attribute_list: &ContentSteeringAttributeList) -> Vec<u8> {
         server_uri
     );
     if let Some(pathway_id) = pathway_id {
-        line.push_str(format!(",{}=\"{}\"", PATHWAY_ID, pathway_id).as_str());
+        line.push_str(format!(",{PATHWAY_ID}=\"{pathway_id}\"").as_str());
     }
     line.into_bytes()
 }

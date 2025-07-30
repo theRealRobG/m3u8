@@ -84,7 +84,7 @@ impl Display for GenericSyntaxError {
                 "carriage return (U+000D) without a following line feed (U+000A) is not supported"
             ),
             Self::UnexpectedEndOfLine => write!(f, "line ended unexpectedly during parsing"),
-            Self::InvalidUtf8(e) => write!(f, "invalid utf-8 due to {}", e),
+            Self::InvalidUtf8(e) => write!(f, "invalid utf-8 due to {e}"),
         }
     }
 }
@@ -166,31 +166,31 @@ fn option_u8_to_string(u: &Option<u8>) -> String {
 impl Display for DateTimeSyntaxError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::InvalidYear(e) => write!(f, "invalid integer for year in date due to {}", e),
+            Self::InvalidYear(e) => write!(f, "invalid integer for year in date due to {e}"),
             Self::UnexpectedYearToMonthSeparator(s) => write!(
                 f,
                 "expected '-' between year and month but was {}",
                 option_u8_to_string(s)
             ),
-            Self::InvalidMonth(e) => write!(f, "invalid integer for month in date due to {}", e),
+            Self::InvalidMonth(e) => write!(f, "invalid integer for month in date due to {e}"),
             Self::UnexpectedMonthToDaySeparator(s) => write!(
                 f,
                 "expected '-' between month and day but was {}",
                 option_u8_to_string(s)
             ),
-            Self::InvalidDay(e) => write!(f, "invalid integer for day in date due to {}", e),
+            Self::InvalidDay(e) => write!(f, "invalid integer for day in date due to {e}"),
             Self::UnexpectedDayHourSeparator(s) => write!(
                 f,
                 "expected 'T' or 't' between day and hour but was {}",
                 option_u8_to_string(s)
             ),
-            Self::InvalidHour(e) => write!(f, "invalid integer for hour in date due to {}", e),
+            Self::InvalidHour(e) => write!(f, "invalid integer for hour in date due to {e}"),
             Self::UnexpectedHourMinuteSeparator(s) => write!(
                 f,
                 "expected ':' between hour and minute but was {}",
                 option_u8_to_string(s)
             ),
-            Self::InvalidMinute(e) => write!(f, "invalid integer for minute in date due to {}", e),
+            Self::InvalidMinute(e) => write!(f, "invalid integer for minute in date due to {e}"),
             Self::UnexpectedMinuteSecondSeparator(s) => write!(
                 f,
                 "expected ':' between minute and second but was {}",
@@ -206,7 +206,7 @@ impl Display for DateTimeSyntaxError {
             }
             Self::InvalidTimezone => write!(f, "timezone invalid in date"),
             Self::InvalidTimezoneHour(e) => {
-                write!(f, "invalid integer for hour in timezone due to {}", e)
+                write!(f, "invalid integer for hour in timezone due to {e}")
             }
             Self::UnexpectedTimezoneHourMinuteSeparator(s) => write!(
                 f,
@@ -214,7 +214,7 @@ impl Display for DateTimeSyntaxError {
                 option_u8_to_string(s)
             ),
             Self::InvalidTimezoneMinute(e) => {
-                write!(f, "invalid integer for minute in timezone due to {}", e)
+                write!(f, "invalid integer for minute in timezone due to {e}")
             }
             Self::Generic(e) => e.fmt(f),
         }
@@ -257,9 +257,9 @@ impl Display for TagValueSyntaxError {
             Self::InvalidFloatForDecimalFloatingPointValue => {
                 write!(f, "invalid float for decimal float value")
             }
-            Self::InvalidUtf8(e) => write!(f, "invalid utf-8 due to {}", e),
+            Self::InvalidUtf8(e) => write!(f, "invalid utf-8 due to {e}"),
             Self::InvalidDecimalInteger(e) => {
-                write!(f, "invalid integer for decimal integer value due to {}", e)
+                write!(f, "invalid integer for decimal integer value due to {e}")
             }
             Self::UnexpectedEndOfLineWhileReadingAttributeName => {
                 write!(f, "unexpected end of line reading attribute name")
@@ -283,7 +283,7 @@ impl Display for TagValueSyntaxError {
                 write!(f, "unexpected whitespace in attribute value")
             }
             Self::InvalidIntegerInAttributeValue(e) => {
-                write!(f, "invalid integer for attribute value due to {}", e)
+                write!(f, "invalid integer for attribute value due to {e}")
             }
             Self::InvalidFloatInAttributeValue => {
                 write!(f, "invalid float in attribute value")
@@ -387,7 +387,7 @@ pub enum ParseNumberError {
 impl Display for ParseNumberError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::InvalidDigit(got) => write!(f, "invalid digit {}", got),
+            Self::InvalidDigit(got) => write!(f, "invalid digit {got}"),
             Self::NumberTooBig => write!(f, "number is too big"),
             Self::Empty => write!(f, "cannot parse number from empty slice"),
         }
@@ -416,8 +416,8 @@ pub enum ParseDecimalIntegerRangeError {
 impl Display for ParseDecimalIntegerRangeError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::InvalidLength(e) => write!(f, "invalid length due to {}", e),
-            Self::InvalidOffset(e) => write!(f, "invalid offset due to {}", e),
+            Self::InvalidLength(e) => write!(f, "invalid length due to {e}"),
+            Self::InvalidOffset(e) => write!(f, "invalid offset due to {e}"),
         }
     }
 }
@@ -438,9 +438,7 @@ pub struct UnrecognizedEnumerationError<'a> {
 }
 impl<'a> UnrecognizedEnumerationError<'a> {
     pub fn new(value: &'a str) -> Self {
-        Self {
-            value: value.into(),
-        }
+        Self { value }
     }
 }
 impl<'a> Display for UnrecognizedEnumerationError<'a> {
