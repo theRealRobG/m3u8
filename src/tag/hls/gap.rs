@@ -3,7 +3,7 @@ use crate::{
     tag::{hls::into_inner_tag, known::ParsedTag},
 };
 
-/// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.4.7
+/// <https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.4.7>
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct Gap;
 

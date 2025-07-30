@@ -15,7 +15,7 @@ pub enum Method {
     None,
     /// Media Segments are completely encrypted using the Advanced Encryption Standard (AES) with a
     /// 128-bit key, Cipher Block Chaining (CBC), and Public-Key Cryptography Standards #7 (PKCS7)
-    /// padding [RFC5652]. CBC is restarted on each segment boundary, using either the
+    /// padding \[RFC5652\]. CBC is restarted on each segment boundary, using either the
     /// Initialization Vector (IV) attribute value or the Media Sequence Number as the IV.
     Aes128,
     /// the Media Segments are Sample Encrypted using the Advanced Encryption Standard. How these
@@ -131,7 +131,7 @@ impl<'a> KeyBuilder<'a> {
     }
 }
 
-/// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.4.4
+/// <https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.4.4>
 #[derive(Debug, Clone)]
 pub struct Key<'a> {
     method: Cow<'a, str>,

@@ -40,7 +40,7 @@ impl StartBuilder {
     }
 }
 
-/// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.2.2
+/// <https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.2.2>
 #[derive(Debug, Clone)]
 pub struct Start<'a> {
     time_offset: f64,

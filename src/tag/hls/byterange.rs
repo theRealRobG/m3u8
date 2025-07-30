@@ -8,7 +8,7 @@ use crate::{
 };
 use std::borrow::Cow;
 
-/// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.4.2
+/// <https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.4.2>
 #[derive(Debug, Clone)]
 pub struct Byterange<'a> {
     length: u64,

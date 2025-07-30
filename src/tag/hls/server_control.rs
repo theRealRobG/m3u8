@@ -73,7 +73,7 @@ impl Default for ServerControlBuilder {
     }
 }
 
-/// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.3.8
+/// <https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.3.8>
 #[derive(Debug, Clone)]
 pub struct ServerControl<'a> {
     can_skip_until: Option<f64>,

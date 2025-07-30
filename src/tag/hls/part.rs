@@ -60,7 +60,7 @@ impl<'a> PartBuilder<'a> {
     }
 }
 
-/// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.4.9
+/// <https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.4.9>
 #[derive(Debug, Clone)]
 pub struct Part<'a> {
     uri: Cow<'a, str>,

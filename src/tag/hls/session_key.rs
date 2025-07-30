@@ -60,7 +60,7 @@ impl<'a> SessionKeyBuilder<'a> {
     }
 }
 
-/// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.6.5
+/// <https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.6.5>
 #[derive(Debug, Clone)]
 pub struct SessionKey<'a> {
     method: Cow<'a, str>,

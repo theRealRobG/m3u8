@@ -442,7 +442,7 @@ impl<'a> StreamInfBuilder<'a> {
     }
 }
 
-/// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.6.2
+/// <https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.6.2>
 #[derive(Debug, Clone)]
 pub struct StreamInf<'a> {
     bandwidth: u64,

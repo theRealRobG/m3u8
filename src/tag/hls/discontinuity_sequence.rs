@@ -4,7 +4,7 @@ use crate::{
 };
 use std::borrow::Cow;
 
-/// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.3.3
+/// <https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.3.3>
 #[derive(Debug, Clone)]
 pub struct DiscontinuitySequence<'a> {
     discontinuity_sequence: u64,
