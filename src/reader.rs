@@ -6,6 +6,338 @@ use crate::{
 };
 use std::marker::PhantomData;
 
+/// A reader that parses lines of input HLS playlist data.
+///
+/// The `Reader` is the primary intended structure provided by the library for parsing HLS playlist
+/// data. The user has the flexibility to define which of the library provided HLS tags should be
+/// parsed as well as define a custom tag type to be extracted during parsing.
+///
+/// ## Basic usage
+///
+/// A reader can take an input `&str` (or `&[u8]`) and sequentially parse information about HLS
+/// lines. For example, you could use the `Reader` to build up a media playlist:
+/// ```
+/// # use m3u8::{HlsLine, Reader};
+/// # use m3u8::config::ParsingOptions;
+/// # use m3u8::tag::{
+/// #     hls::{
+/// #         self, discontinuity_sequence::DiscontinuitySequence, media_sequence::MediaSequence,
+/// #         targetduration::Targetduration, version::Version, m3u::M3u
+/// #     },
+/// #     known,
+/// # };
+/// # let playlist = r#"#EXTM3U
+/// # #EXT-X-TARGETDURATION:4
+/// # #EXT-X-MEDIA-SEQUENCE:541647
+/// # #EXT-X-VERSION:6
+/// # "#;
+/// #[derive(Debug, PartialEq)]
+/// struct MediaPlaylist<'a> {
+///     version: u64,
+///     targetduration: u64,
+///     media_sequence: u64,
+///     discontinuity_sequence: u64,
+///     // etc.
+///     lines: Vec<HlsLine<'a>>,
+/// }
+/// let mut reader = Reader::from_str(playlist, ParsingOptions::default());
+///
+/// let mut version = None;
+/// let mut targetduration = None;
+/// let mut media_sequence = 0;
+/// let mut discontinuity_sequence = 0;
+/// // etc.
+/// let mut lines = Vec::new();
+///
+/// // Validate playlist header
+/// match reader.read_line() {
+///     Ok(Some(HlsLine::KnownTag(known::Tag::Hls(hls::Tag::M3u(tag))))) => {
+///         lines.push(HlsLine::from(tag))
+///     }
+///     _ => return Err(format!("missing playlist header").into()),
+/// }
+///
+/// loop {
+///     match reader.read_line() {
+///         Ok(Some(line)) => match line {
+///             HlsLine::KnownTag(known::Tag::Hls(hls::Tag::Version(tag))) => {
+///                 version = Some(tag.version());
+///                 lines.push(HlsLine::from(tag));
+///             }
+///             HlsLine::KnownTag(known::Tag::Hls(hls::Tag::Targetduration(tag))) => {
+///                 targetduration = Some(tag.target_duration());
+///                 lines.push(HlsLine::from(tag));
+///             }
+///             HlsLine::KnownTag(known::Tag::Hls(hls::Tag::MediaSequence(tag))) => {
+///                 media_sequence = tag.media_sequence();
+///                 lines.push(HlsLine::from(tag));
+///             }
+///             HlsLine::KnownTag(known::Tag::Hls(hls::Tag::DiscontinuitySequence(tag))) => {
+///                 discontinuity_sequence = tag.discontinuity_sequence();
+///                 lines.push(HlsLine::from(tag));
+///             }
+///             // etc.
+///             _ => lines.push(line),
+///         },
+///         Ok(None) => break, // End of playlist
+///         Err(e) => return Err(format!("problem reading line: {e}").into()),
+///     }
+/// }
+///
+/// let version = version.unwrap_or(1);
+/// let Some(targetduration) = targetduration else {
+///     return Err("missing required EXT-X-TARGETDURATION".into());
+/// };
+/// let media_playlist = MediaPlaylist {
+///     version,
+///     targetduration,
+///     media_sequence,
+///     discontinuity_sequence,
+///     lines,
+/// };
+///
+/// assert_eq!(
+///     media_playlist,
+///     MediaPlaylist {
+///         version: 6,
+///         targetduration: 4,
+///         media_sequence: 541647,
+///         discontinuity_sequence: 0,
+///         lines: vec![
+///             // --snip--
+/// #            HlsLine::from(M3u),
+/// #            HlsLine::from(Targetduration::new(4)),
+/// #            HlsLine::from(MediaSequence::new(541647)),
+/// #            HlsLine::from(Version::new(6)),
+///         ],
+///     }
+/// );
+///
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+///
+/// ## Configuring known tags
+///
+/// It is quite common that a user does not need to support parsing of all HLS tags for their use-
+/// case. To support this better the `Reader` allows for configuration of what HLS tags are
+/// considered "known" by the library. While it may sound strange to configure for less information
+/// to be parsed, doing so can have significant performance benefits, and at no loss if the
+/// information is not needed anyway. Unknown tags make no attempt to parse or validate the value
+/// portion of the tag (the part after `:`) and just provide the name of the tag along with the line
+/// up to (and not including) the new line characters. To provide some indication of the performance
+/// difference, running locally (as of commit `6fcc38a67bf0eee0769b7e85f82599d1da6eb56d`), the
+/// benchmarks show that on a very large media playlist parsing with all tags can be around 2x
+/// slower than parsing with no tags (`2.3842 ms` vs `1.1364 ms`):
+/// ```sh
+/// Large playlist, all tags, using Reader::from_str, no writing
+///                         time:   [2.3793 ms 2.3842 ms 2.3891 ms]
+/// Large playlist, no tags, using Reader::from_str, no writing
+///                         time:   [1.1357 ms 1.1364 ms 1.1372 ms]
+/// ```
+///
+/// For example, let's say that we are updating a playlist to add in HLS interstitial daterange,
+/// based on SCTE35-OUT information in an upstream playlist. The only tag we need to know about for
+/// this is EXT-X-DATERANGE, so we can configure our reader to only consider this tag during parsing
+/// which provides a benefit in terms of processing time.
+/// ```
+/// # use m3u8::{
+/// # Reader, HlsLine, Writer,
+/// # config::ParsingOptionsBuilder,
+/// # tag::known,
+/// # tag::hls::{self, daterange::{Cue, Daterange, ExtensionAttributeValue}},
+/// # };
+/// # use std::{borrow::Cow, error::Error, io::Write};
+/// # fn advert_id_from_scte35_out(_: &str) -> Option<String> { None }
+/// # fn advert_uri_from_id(_: &str) -> String { String::new() }
+/// # fn duration_from_daterange(_: &Daterange) -> f64 { 0.0 }
+/// # let output = Vec::new();
+/// # let upstream_playlist = b"";
+/// let mut reader = Reader::from_bytes(
+///     upstream_playlist,
+///     ParsingOptionsBuilder::new()
+///         .with_parsing_for_daterange()
+///         .build(),
+/// );
+/// let mut writer = Writer::new(output);
+///
+/// loop {
+///     match reader.read_line() {
+///         Ok(Some(HlsLine::KnownTag(known::Tag::Hls(hls::Tag::Daterange(tag))))) => {
+///             if let Some(advert_id) = tag.scte35_out().and_then(advert_id_from_scte35_out) {
+///                 let id = format!("ADVERT:{}", tag.id());
+///                 let builder = Daterange::builder(id, tag.start_date())
+///                     .with_class("com.apple.hls.interstitial")
+///                     .with_cue(Cue::Once)
+///                     .with_extension_attribute(
+///                         "X-ASSET-URI",
+///                         ExtensionAttributeValue::QuotedString(Cow::Owned(
+///                             advert_uri_from_id(&advert_id),
+///                         )),
+///                     )
+///                     .with_extension_attribute(
+///                         "X-RESTRICT",
+///                         ExtensionAttributeValue::QuotedString(Cow::Borrowed("SKIP,JUMP")),
+///                     );
+///                 let interstitial_daterange = if duration_from_daterange(&tag) == 0.0 {
+///                     builder
+///                         .with_extension_attribute(
+///                             "X-RESUME-OFFSET",
+///                             ExtensionAttributeValue::SignedDecimalFloatingPoint(0.0),
+///                         )
+///                         .finish()
+///                 } else {
+///                     builder.finish()
+///                 };
+///                 writer.write_line(HlsLine::from(interstitial_daterange))?;
+///             } else {
+///                 writer.write_line(HlsLine::from(tag))?;
+///             }
+///         }
+///         Ok(Some(line)) => {
+///             writer.write_line(line)?;
+///         }
+///         Ok(None) => break, // End of playlist
+///         Err(e) => {
+///             writer.get_mut().write_all(e.errored_line)?;
+///         }
+///     };
+/// }
+///
+/// writer.into_inner().flush()?;
+/// # Ok::<(), Box<dyn Error>>(())
+/// ```
+///
+/// ## Custom tag reading
+///
+/// We can also configure the `Reader` to accept parsing of custom defined tags. Using the same idea
+/// as above, we can imagine that instead of EXT-X-DATERANGE in the upstream playlist, we want to
+/// depend on the EXT-X-SCTE35 tag that is defined within the SCTE35 specification. This tag is not
+/// defined in the HLS specification; however, we can define it here, and use it when it comes to
+/// parsing and utilizing that data. Below is a modified version of the above HLS interstitials
+/// example that instead relies on a custom defined `Scte35Tag` (though I leave the details of
+/// `TryFrom<ParsedTag>` unfilled for sake of simplicity in this example). Note, when defining a
+/// that the reader should use a custom tag, utilize `std::marker::PhantomData` to specify what the
+/// type of the custom tag is.
+/// ```
+/// # use m3u8::{
+/// # Reader, HlsLine, Writer,
+/// # config::ParsingOptionsBuilder,
+/// # date::DateTime,
+/// # tag::known::{self, ParsedTag, CustomTag, WritableCustomTag},
+/// # tag::hls::{self, daterange::{Cue, Daterange, ExtensionAttributeValue}},
+/// # error::ValidationError,
+/// # };
+/// # use std::{borrow::Cow, error::Error, io::Write, marker::PhantomData};
+/// # fn advert_id_from_scte35_out(_: &str) -> Option<String> { None }
+/// # fn advert_uri_from_id(_: &str) -> String { String::new() }
+/// # fn generate_uuid() -> &'static str { "" }
+/// # fn calculate_start_date_based_on_inf_durations() -> DateTime { todo!() }
+/// # let output: Vec<u8> = Vec::new();
+/// # let upstream_playlist = b"";
+/// #[derive(Debug, PartialEq, Clone)]
+/// struct Scte35Tag<'a> {
+///     cue: &'a str,
+///     duration: Option<f64>,
+///     elapsed: Option<f64>,
+///     id: Option<&'a str>,
+///     time: Option<f64>,
+///     type_id: Option<u64>,
+///     upid: Option<&'a str>,
+///     blackout: Option<BlackoutValue>,
+///     cue_out: Option<CueOutValue>,
+///     cue_in: bool,
+///     segne: Option<(u64, u64)>,
+/// }
+/// #[derive(Debug, PartialEq, Clone)]
+/// enum BlackoutValue {
+///     Yes,
+///     No,
+///     Maybe,
+/// }
+/// #[derive(Debug, PartialEq, Clone)]
+/// enum CueOutValue {
+///     Yes,
+///     No,
+///     Cont,
+/// }
+/// impl<'a> TryFrom<ParsedTag<'a>> for Scte35Tag<'a> { // --snip--
+/// #    type Error = ValidationError;
+/// #    fn try_from(value: ParsedTag<'a>) -> Result<Self, Self::Error> {
+/// #        todo!()
+/// #    }
+/// }
+/// impl<'a> CustomTag<'a> for Scte35Tag<'a> {
+///     fn is_known_name(name: &str) -> bool {
+///         name == "-X-SCTE35"
+///     }
+/// }
+/// impl<'a> WritableCustomTag<'a> for Scte35Tag<'a> { // --snip--
+/// #    fn into_writable_tag(self) -> known::WritableTag<'a> {
+/// #        todo!()
+/// #    }
+/// }
+/// #
+/// # let output: Vec<u8> = Vec::new();
+/// # let upstream_playlist = b"";
+///
+/// let mut reader = Reader::with_custom_from_bytes(
+///     upstream_playlist,
+///     ParsingOptionsBuilder::new()
+///         .with_parsing_for_daterange()
+///         .build(),
+///     PhantomData::<Scte35Tag>,
+/// );
+/// let mut writer = Writer::new(output);
+///
+/// loop {
+///     match reader.read_line() {
+///         Ok(Some(HlsLine::KnownTag(known::Tag::Custom(tag)))) => {
+///             if let Some(advert_id) = advert_id_from_scte35_out(tag.as_ref().cue) {
+///                 let tag_ref = tag.as_ref();
+///                 let id = format!("ADVERT:{}", tag_ref.id.unwrap_or(generate_uuid()));
+///                 let start_date = calculate_start_date_based_on_inf_durations();
+///                 let builder = Daterange::builder(id, start_date)
+///                     .with_class("com.apple.hls.interstitial")
+///                     .with_cue(Cue::Once)
+///                     .with_extension_attribute(
+///                         "X-ASSET-URI",
+///                         ExtensionAttributeValue::QuotedString(Cow::Owned(
+///                             advert_uri_from_id(&advert_id),
+///                         )),
+///                     )
+///                     .with_extension_attribute(
+///                         "X-RESTRICT",
+///                         ExtensionAttributeValue::QuotedString(Cow::Borrowed("SKIP,JUMP")),
+///                     );
+///                 let interstitial_daterange = if tag_ref.duration == Some(0.0) {
+///                     builder
+///                         .with_extension_attribute(
+///                             "X-RESUME-OFFSET",
+///                             ExtensionAttributeValue::SignedDecimalFloatingPoint(0.0),
+///                         )
+///                         .finish()
+///                 } else {
+///                     builder.finish()
+///                 };
+///                 writer.write_line(HlsLine::from(interstitial_daterange))?;
+///             } else {
+///                 writer.write_custom_line(HlsLine::from(tag))?;
+///             }
+///         }
+///         Ok(Some(line)) => {
+///             writer.write_custom_line(line)?;
+///         }
+///         Ok(None) => break, // End of playlist
+///         Err(e) => {
+///             writer.get_mut().write_all(e.errored_line)?;
+///         }
+///     };
+/// }
+///
+/// writer.into_inner().flush()?;
+///
+/// # Ok::<(), Box<dyn Error>>(())
+/// ```
 pub struct Reader<R, Custom> {
     inner: R,
     options: ParsingOptions,
@@ -15,7 +347,8 @@ pub struct Reader<R, Custom> {
 macro_rules! impl_reader {
     ($type:ty, $parse_fn:ident, $from_fn_ident:ident, $from_custom_fn_ident:ident, $error_type:ident) => {
         impl<'a> Reader<&'a $type, NoCustomTag> {
-            // Creates a reader.
+            /// Creates a reader without custom tag parsing support (in this case, the generic
+            /// `Custom` type is [`crate::tag::known::NoCustomTag`]).
             pub fn $from_fn_ident(data: &'a $type, options: ParsingOptions) -> Self {
                 Self {
                     inner: data,
