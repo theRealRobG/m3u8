@@ -1,6 +1,39 @@
+//! Constructs to reason about date and time in HLS
+//!
+//! The structs offered here don't provide much functionality. The purpose is primarily
+//! informational. These types can be used with another date/time library (such as [chrono]) for
+//! more feature rich date/time comparisons and operations.
+//!
+//! [chrono]: https://crates.io/crates/chrono
+
 use crate::{error::DateTimeSyntaxError, utils::parse_date_time_bytes};
 use std::fmt::Display;
 
+/// A macro to help constructing a [`DateTime`] struct.
+///
+/// Given that there are a lot of fields to the `DateTime` struct, for convenience this macro is
+/// provided, so a date can be constructed more easily. The syntax is intended to mimic [RFC3339].
+/// For example:
+/// ```
+/// # use m3u8::{date_time, date::{DateTime, DateTimeTimezoneOffset}};
+/// assert_eq!(
+///     date_time!(2025-07-30 T 22:44:38.718 -05:00),
+///     DateTime {
+///         date_fullyear: 2025,
+///         date_month: 7,
+///         date_mday: 30,
+///         time_hour: 22,
+///         time_minute: 44,
+///         time_second: 38.718,
+///         timezone_offset: DateTimeTimezoneOffset {
+///             time_hour: -5,
+///             time_minute: 0,
+///         },
+///     }
+/// )
+/// ```
+///
+/// [RFC3339]: https://datatracker.ietf.org/doc/html/rfc3339#section-5.6
 #[macro_export]
 macro_rules! date_time {
     ($Y:literal-$M:literal-$D:literal T $h:literal:$m:literal:$s:literal) => {
@@ -30,14 +63,28 @@ macro_rules! date_time {
     };
 }
 
+/// A struct representing a date in the format of [RFC3339].
+///
+/// [RFC3339]: https://datatracker.ietf.org/doc/html/rfc3339#section-5.6
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct DateTime {
+    /// The full year (must be `4DIGIT`).
     pub date_fullyear: u32,
+    /// The month (`1-12`).
     pub date_month: u8,
+    /// The day (`1-31`).
     pub date_mday: u8,
+    /// The hour (`0-23`).
     pub time_hour: u8,
+    /// The minute (`0-59`).
     pub time_minute: u8,
+    /// The seconds, including millisconds (seconds are `0-59`, while the mantissa may be any
+    /// length, though HLS recommends milliscond accuracy via the [EXT-X-PROGRAM-DATE-TIME]
+    /// documentation).
+    ///
+    /// [EXT-X-PROGRAM-DATE-TIME]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.4.6
     pub time_second: f64,
+    /// The timezone offset.
     pub timezone_offset: DateTimeTimezoneOffset,
 }
 
@@ -77,9 +124,12 @@ impl Default for DateTime {
     }
 }
 
+/// The timezone offset.
 #[derive(Debug, PartialEq, Clone, Copy, Default)]
 pub struct DateTimeTimezoneOffset {
+    /// The hour offset (plus or minus `0-23`).
     pub time_hour: i8,
+    /// The minute offset (`0-59`).
     pub time_minute: u8,
 }
 
@@ -99,10 +149,12 @@ impl From<DateTimeTimezoneOffset> for String {
     }
 }
 
+/// Parses a string slice into a `DateTime`.
 pub fn parse(input: &str) -> Result<DateTime, DateTimeSyntaxError> {
     parse_bytes(input.as_bytes())
 }
 
+/// Parses a byte slice into a `DateTime`.
 pub fn parse_bytes(input: &[u8]) -> Result<DateTime, DateTimeSyntaxError> {
     Ok(parse_date_time_bytes(input)?.parsed)
 }
