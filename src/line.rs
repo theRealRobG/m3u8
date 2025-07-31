@@ -1,3 +1,9 @@
+//! Types and operations for working with lines of a HLS playlist.
+//!
+//! This module includes various types and functions for working with lines of a HLS playlist. The
+//! main informational type of the library, [`HlsLine`], exists in this module (and re-exported at
+//! the top level), along with parsing functions to extract `HlsLine` from input data.
+
 use crate::{
     config::ParsingOptions,
     error::{ParseLineBytesError, ParseLineStrError, SyntaxError},
@@ -10,16 +16,121 @@ use crate::{
 };
 use std::{borrow::Cow, cmp::PartialEq, fmt::Debug};
 
+/// A parsed line from a HLS playlist.
+///
+/// The HLS specification, in [Section 4.1. Definition of a Playlist], defines lines in a playlist
+/// as such:
+/// > Each line is a URI, is blank, or starts with the character '#'. Lines that start with the
+/// > character '#' are either comments or tags. Tags begin with #EXT.
+///
+/// This data structure follows that guidance but also adds [`HlsLine::UnknownTag`] and
+/// [`crate::tag::known::Tag::Custom`]. These cases are described in more detail within their own
+/// documentation, but in short, the first allows us to capture tags that are not yet known to the
+/// library (providing at least a split between name and value), while the second allows a user of
+/// the library to define their own custom tag specification that can be then parsed into a strongly
+/// typed structure within a `HlsLine::KnownTag` by the library.
+///
+/// [Section 4.1. Definition of a Playlist]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.1
 #[derive(Debug, PartialEq, Clone)]
 #[allow(clippy::large_enum_variant)] // See comment on crate::tag::known::Tag.
 pub enum HlsLine<'a, Custom = NoCustomTag>
 where
     Custom: CustomTag<'a>,
 {
+    /// A tag known to the library, either via the included definitions of HLS tags as specified in
+    /// the `draft-pantos-hls` Internet-Draft, or via a custom tag registration provided by the user
+    /// of the library.
+    ///
+    /// See [`crate::tag::known::Tag`] for more information.
     KnownTag(known::Tag<'a, Custom>),
+    /// A tag, as defined by the `#EXT` prefix, but not one that is known to the library, or that is
+    /// deliberately ignored via [`crate::config::ParsingOptions`].
+    ///
+    /// See [`crate::tag::unknown::Tag`] for more information.
     UnknownTag(unknown::Tag<'a>),
+    /// A comment line. These are lines that begin with `#` and are followed by a string of UTF-8
+    /// characters (though not BOM or UTF-8 control characters). The line is terminated by either a
+    /// line feed (`\n`) or a carriage return followed by a line feed (`\r\n`).
+    ///
+    /// The associated value is a [`std::borrow::Cow`] to allow for both a user constructed value
+    /// and also a copy-free reference to the original parsed data. It includes all characters after
+    /// the `#` (including any whitespace) and does not include the line break characters. Below
+    /// demonstrates this:
+    /// ```
+    /// # use m3u8::{config::ParsingOptions, line::{HlsLine, parse}, error::ParseLineStrError};
+    /// # use std::borrow::Cow;
+    /// # let options = ParsingOptions::default();
+    /// let original = "# Comment line. Note the leading space.\r\n";
+    /// let line = parse(original, &options)?.parsed;
+    /// assert_eq!(
+    ///     HlsLine::Comment(Cow::Borrowed(" Comment line. Note the leading space.")),
+    ///     line,
+    /// );
+    /// # Ok::<(), ParseLineStrError>(())
+    /// ```
     Comment(Cow<'a, str>),
+    /// A URI line. These are lines that do not begin with `#` and are not empty. It is important to
+    /// note that the library does not do any validation on the line being a valid URI. The only
+    /// validation that happens is that line can be represented as a UTF-8 string (internally we use
+    /// [`std::str::from_utf8`]). This means that the line may contain characters that are invalid
+    /// in a URI, or may otherwise not make sense in the context of the parsed playlist. It is up to
+    /// the user of the library to validate the URI, perhaps using a URL parsing library (such as
+    /// [url]).
+    ///
+    /// The associated value is a [`std::borrow::Cow`] to allow for both a user constructed value
+    /// and also a copy-free reference to the original parsed data. It includes all characters up
+    /// until, but not including, the line break characters. The following demonstrates this:
+    /// ```
+    /// # use m3u8::{config::ParsingOptions, line::{HlsLine, parse}, error::ParseLineStrError};
+    /// # use std::borrow::Cow;
+    /// # let options = ParsingOptions::default();
+    /// let expected = "hi.m3u8";
+    /// // Demonstrating that new line characters are not included:
+    /// assert_eq!(
+    ///     HlsLine::Uri(Cow::Borrowed(expected)),
+    ///     parse("hi.m3u8\n", &options)?.parsed,
+    /// );
+    /// assert_eq!(
+    ///     HlsLine::Uri(Cow::Borrowed(expected)),
+    ///     parse("hi.m3u8\r\n", &options)?.parsed,
+    /// );
+    /// assert_eq!(
+    ///     HlsLine::Uri(Cow::Borrowed(expected)),
+    ///     parse("hi.m3u8", &options)?.parsed,
+    /// );
+    /// # Ok::<(), ParseLineStrError>(())
+    /// ```
+    ///
+    /// [url]: https://crates.io/crates/url
     Uri(Cow<'a, str>),
+    /// A blank line. This line contained no characters other than a new line. Note that since the
+    /// library does not validate characters in a URI line, a line comprised entirely of whitespace
+    /// will still be parsed as a URI line, rather than a blank line. As mentioned, it is up to the
+    /// user of the library to properly validate URI lines.
+    /// ```
+    /// # use m3u8::{config::ParsingOptions, line::{HlsLine, parse}, error::ParseLineStrError};
+    /// # use std::borrow::Cow;
+    /// # let options = ParsingOptions::default();
+    /// // Demonstrating what is considered a blank line:
+    /// assert_eq!(
+    ///     HlsLine::Blank,
+    ///     parse("", &options)?.parsed,
+    /// );
+    /// assert_eq!(
+    ///     HlsLine::Blank,
+    ///     parse("\n", &options)?.parsed,
+    /// );
+    /// assert_eq!(
+    ///     HlsLine::Blank,
+    ///     parse("\r\n", &options)?.parsed,
+    /// );
+    /// // Demonstrating that a whitespace only line is still parsed as a URI:
+    /// assert_eq!(
+    ///     HlsLine::Uri(Cow::Borrowed("    ")),
+    ///     parse("    \n", &options)?.parsed,
+    /// );
+    /// # Ok::<(), ParseLineStrError>(())
+    /// ```
     Blank,
 }
 
@@ -51,14 +162,20 @@ where
 }
 
 impl<'a> HlsLine<'a> {
+    /// Convenience constructor for [`HlsLine::Comment`]. This will construct the line with the
+    /// generic `Custom` in [`HlsLine::KnownTag`] being [`crate::tag::known::NoCustomTag`].
     pub fn comment(comment: impl Into<Cow<'a, str>>) -> Self {
         Self::Comment(comment.into())
     }
 
+    /// Convenience constructor for [`HlsLine::Uri`]. This will construct the line with the generic
+    /// `Custom` in [`HlsLine::KnownTag`] being [`crate::tag::known::NoCustomTag`].
     pub fn uri(uri: impl Into<Cow<'a, str>>) -> Self {
         Self::Uri(uri.into())
     }
 
+    /// Convenience constructor for [`HlsLine::Blank`]. This will construct the line with the
+    /// generic `Custom` in [`HlsLine::KnownTag`] being [`crate::tag::known::NoCustomTag`].
     pub fn blank() -> Self {
         Self::Blank
     }
@@ -121,23 +238,79 @@ impl_line_from_tag!(hls::session_data::SessionData<'a>, SessionData);
 impl_line_from_tag!(hls::session_key::SessionKey<'a>, SessionKey);
 impl_line_from_tag!(hls::content_steering::ContentSteering<'a>, ContentSteering);
 
+/// A slice of parsed line data from a HLS playlist.
+///
+/// This struct allows us to parse some way into a playlist, breaking on the new line, and providing
+/// the remaining characters after the new line in the [`Self::remaining`] field. This is a building
+/// block type that is used by the [`crate::Reader`] to work through an input playlist with each
+/// call to [`crate::Reader::read_line`].
 #[derive(Debug, PartialEq, Clone)]
 pub struct ParsedLineSlice<'a, T>
 where
     T: Debug + PartialEq,
 {
+    /// The parsed data from the slice of line data from the playlist.
     pub parsed: T,
+    /// The remaining string slice (after new line characters) from the playlist after parsing. If
+    /// the parsed line was the last in the input data then the `remaining` is `None`.
     pub remaining: Option<&'a str>,
 }
+/// A slice of parsed line data from a HLS playlist.
+///
+/// This struct allows us to parse some way into a playlist, breaking on the new line, and providing
+/// the remaining characters after the new line in the [`Self::remaining`] field. This is a building
+/// block type that is used by the [`crate::Reader`] to work through an input playlist with each
+/// call to [`crate::Reader::read_line`].
 #[derive(Debug, PartialEq, Clone)]
 pub struct ParsedByteSlice<'a, T>
 where
     T: Debug + PartialEq,
 {
+    /// The parsed data from the slice of line data from the playlist.
     pub parsed: T,
+    /// The remaining byte slice (after new line characters) from the playlist after parsing. If
+    /// the parsed line was the last in the input data then the `remaining` is `None`.
     pub remaining: Option<&'a [u8]>,
 }
 
+/// Parse an input string slice with the provided options.
+///
+/// This method is a lower level method than using [`crate::Reader`] directly. The `Reader` uses
+/// this method internally. It allows the user to parse a single line of HLS data and provides the
+/// remaining data after the new line. Custom reader implementations can be built on top of this
+/// method.
+///
+/// ## Example
+/// ```
+/// # use m3u8::{
+/// # config::ParsingOptions,
+/// # line::{HlsLine, ParsedLineSlice, parse},
+/// # error::ParseLineStrError,
+/// # tag::hls::{m3u::M3u, targetduration::Targetduration, version::Version},
+/// # };
+/// const PLAYLIST: &str = r#"#EXTM3U
+/// #EXT-X-TARGETDURATION:10
+/// #EXT-X-VERSION:3
+/// "#;
+/// let options = ParsingOptions::default();
+///
+/// let ParsedLineSlice { parsed, remaining } = parse(PLAYLIST, &options)?;
+/// assert_eq!(parsed, HlsLine::from(M3u));
+///
+/// let Some(remaining) = remaining else { return Ok(()) };
+/// let ParsedLineSlice { parsed, remaining } = parse(remaining, &options)?;
+/// assert_eq!(parsed, HlsLine::from(Targetduration::new(10)));
+///
+/// let Some(remaining) = remaining else { return Ok(()) };
+/// let ParsedLineSlice { parsed, remaining } = parse(remaining, &options)?;
+/// assert_eq!(parsed, HlsLine::from(Version::new(3)));
+///
+/// let Some(remaining) = remaining else { return Ok(()) };
+/// let ParsedLineSlice { parsed, remaining } = parse(remaining, &options)?;
+/// assert_eq!(parsed, HlsLine::Blank);
+/// assert_eq!(remaining, None);
+/// # Ok::<(), ParseLineStrError>(())
+/// ```
 pub fn parse<'a>(
     input: &'a str,
     options: &ParsingOptions,
@@ -145,6 +318,76 @@ pub fn parse<'a>(
     parse_with_custom::<NoCustomTag>(input, options)
 }
 
+/// Parse an input string slice with the provided options with support for the provided custom tag.
+///
+/// This method is a lower level method than using [`crate::Reader`] directly. The `Reader` uses
+/// this method internally. It allows the user to parse a single line of HLS data and provides the
+/// remaining data after the new line. Custom reader implementations can be built on top of this
+/// method. This method differs from [`parse`] as it allows the user to provide their own custom tag
+/// implementation for parsing.
+///
+/// ## Example
+/// ```
+/// # use m3u8::{
+/// # config::ParsingOptions,
+/// # line::{HlsLine, ParsedLineSlice, parse_with_custom},
+/// # error::{ParseLineStrError, ValidationError, ValidationErrorValueKind},
+/// # tag::known::{Tag, CustomTag, ParsedTag},
+/// # tag::value::{ParsedAttributeValue, SemiParsedTagValue},
+/// # tag::hls::{m3u::M3u, targetduration::Targetduration, version::Version},
+/// # };
+/// #[derive(Debug, Clone, PartialEq)]
+/// struct UserDefinedTag<'a> {
+///     message: &'a str,
+/// }
+/// impl<'a> TryFrom<ParsedTag<'a>> for UserDefinedTag<'a> { // --snip--
+/// #    type Error = ValidationError;
+/// #    fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
+/// #        let SemiParsedTagValue::AttributeList(mut list) = tag.value else {
+/// #            return Err(ValidationError::UnexpectedValueType(
+/// #                ValidationErrorValueKind::from(&tag.value),
+/// #            ));
+/// #        };
+/// #        let Some(ParsedAttributeValue::QuotedString(message)) = list.remove("MESSAGE") else {
+/// #            return Err(ValidationError::MissingRequiredAttribute("MESSAGE"));
+/// #        };
+/// #        Ok(Self { message })
+/// #    }
+/// }
+/// impl<'a> CustomTag<'a> for UserDefinedTag<'a> { // --snip--
+/// #    fn is_known_name(name: &str) -> bool {
+/// #        name == "-X-USER-DEFINED-TAG"
+/// #    }
+/// }
+///
+/// const PLAYLIST: &str = r#"#EXTM3U
+/// #EXT-X-USER-DEFINED-TAG:MESSAGE="Hello, World!"
+/// "#;
+/// let options = ParsingOptions::default();
+///
+/// let ParsedLineSlice {
+///     parsed,
+///     remaining
+/// } = parse_with_custom::<UserDefinedTag>(PLAYLIST, &options)?;
+/// assert_eq!(parsed, HlsLine::from(M3u));
+///
+/// let Some(remaining) = remaining else { return Ok(()) };
+/// let ParsedLineSlice {
+///     parsed,
+///     remaining
+/// } = parse_with_custom::<UserDefinedTag>(remaining, &options)?;
+/// let HlsLine::KnownTag(Tag::Custom(tag)) = parsed else { return Ok(()) };
+/// assert_eq!(tag.as_ref(), &UserDefinedTag { message: "Hello, World!" });
+///
+/// let Some(remaining) = remaining else { return Ok(()) };
+/// let ParsedLineSlice {
+///     parsed,
+///     remaining
+/// } = parse_with_custom::<UserDefinedTag>(remaining, &options)?;
+/// assert_eq!(parsed, HlsLine::Blank);
+/// assert_eq!(remaining, None);
+/// # Ok::<(), ParseLineStrError>(())
+/// ```
 pub fn parse_with_custom<'a, 'b, Custom>(
     input: &'a str,
     options: &'b ParsingOptions,
@@ -168,6 +411,10 @@ where
         })
 }
 
+/// Parse an input byte slice with the provided options.
+///
+/// This method is equivalent to [`parse`] but using `&[u8]` instead of `&str`. Refer to
+/// documentation of [`parse`] for more information.
 pub fn parse_bytes<'a>(
     input: &'a [u8],
     options: &ParsingOptions,
@@ -175,6 +422,10 @@ pub fn parse_bytes<'a>(
     parse_bytes_with_custom::<NoCustomTag>(input, options)
 }
 
+/// Parse an input byte slice with the provided options with support for the provided custom tag.
+///
+/// This method is equivalent to [`parse_with_custom`] but using `&[u8]` instead of `&str`. Refer to
+/// documentation of [`parse_with_custom`] for more information.
 pub fn parse_bytes_with_custom<'a, 'b, Custom>(
     input: &'a [u8],
     options: &'b ParsingOptions,
@@ -237,10 +488,17 @@ where
     } else {
         let ParsedByteSlice { parsed, remaining } = split_on_new_line(input);
         let uri = std::str::from_utf8(parsed).map_err(|error| map_err_bytes(error, input))?;
-        Ok(ParsedByteSlice {
-            parsed: HlsLine::Uri(Cow::Borrowed(uri)),
-            remaining,
-        })
+        if uri.is_empty() {
+            Ok(ParsedByteSlice {
+                parsed: HlsLine::Blank,
+                remaining,
+            })
+        } else {
+            Ok(ParsedByteSlice {
+                parsed: HlsLine::Uri(Cow::Borrowed(uri)),
+                remaining,
+            })
+        }
     }
 }
 
@@ -390,6 +648,18 @@ mod tests {
                     .build()
             )
             .map(|p| p.parsed)
+        );
+    }
+
+    #[test]
+    fn empty_line_before_new_line_break_should_be_parsed_as_blank() {
+        let input = "\n#something else";
+        assert_eq!(
+            ParsedLineSlice {
+                parsed: HlsLine::Blank,
+                remaining: Some("#something else")
+            },
+            parse(input, &ParsingOptions::default()).unwrap()
         );
     }
 }

@@ -193,6 +193,7 @@ pub mod tag;
 mod utils;
 mod writer;
 
+pub use line::HlsLine;
 pub use reader::Reader;
 pub use writer::Writer;
 
