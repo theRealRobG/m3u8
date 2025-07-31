@@ -10,9 +10,9 @@
 //!
 //! quick-m3u8 aims to be a high performance [M3U8] reader and writer. The API is event-driven (like
 //! SAX for XML) rather than serializing into a complete object model (like DOM for XML). The syntax
-//! (and name) is inspired by [quick-xml]. The [crate::Reader] attempts to be almost zero-copy while
-//! still supporting mutation of the parsed data by utilizing [std::borrow::Cow] (Copy On Write) as
-//! much as possible.
+//! (and name) is inspired by [quick-xml]. The [`crate::Reader`] attempts to be almost zero-copy
+//! while still supporting mutation of the parsed data by utilizing [`std::borrow::Cow`] (Copy On
+//! Write) as much as possible.
 //!
 //! When parsing M3U8 data quick-m3u8 aims to be very lenient when it comes to validation. The
 //! philosophy is that the library does not want to get in the way of extracting meaningful
@@ -34,15 +34,17 @@
 //!   with `#` is considered to be a URI line).
 //! * Enumerated strings (within [attribute-lists]) are not validated to have no whitespace.
 //! * A tag with a known name that fails the `TryFrom<ParsedTag>` conversion does not fail the line
-//!   and instead is presented as [crate::tag::unknown::Tag].
+//!   and instead is presented as [`crate::tag::unknown::Tag`].
 //!
 //! With that being said, the library does validate proper UTF-8 conversion from `&[u8]` input,
-//! enumerated strings are wrapped in a convenience type ([crate::tag::hls::EnumeratedString]) that
-//! exposes strongly typed enumerations when the value is valid, and the `TryFrom<ParsedTag>`
+//! enumerated strings are wrapped in a convenience type ([`crate::tag::hls::EnumeratedString`])
+//! that exposes strongly typed enumerations when the value is valid, and the `TryFrom<ParsedTag>`
 //! implementation for all of the HLS tags supported by quick-m3u8 ensure that the required
 //! attributes are present.
 //!
 //! # Usage
+//!
+//! Usage is broken up into reading and writing.
 //!
 //! ## Reading
 //!
@@ -107,12 +109,73 @@
 //! > Each line is a URI, is blank, or starts with the character '#'. Lines that start with the
 //! > character '#' are either comments or tags. Tags begin with #EXT.
 //!
-//! Each case of the [crate::line::HlsLine] is documented thoroughly; however, it's worth mentioning
-//! that in addition to what the HLS specification defines, the library also allows for `UnknownTag`
-//! (which is a tag, based on the `#EXT` prefix, but not one that we know about), and also allows
-//! `CustomTag`. The [crate::tag::known::CustomTag] is a means for the user of the library to define
-//! support for their own custom tag specification in addition to what is provided via the HLS
-//! specification. The documentation for `CustomTag` provides more details on how that is achieved.
+//! Each case of the [`crate::line::HlsLine`] is documented thoroughly; however, it's worth
+//! mentioning that in addition to what the HLS specification defines, the library also allows for
+//! `UnknownTag` (which is a tag, based on the `#EXT` prefix, but not one that we know about), and
+//! also allows `CustomTag`. The [`crate::tag::known::CustomTag`] is a means for the user of the
+//! library to define support for their own custom tag specification in addition to what is provided
+//! via the HLS specification. The documentation for `CustomTag` provides more details on how that
+//! is achieved.
+//!
+//! The `Reader` also takes a configuration that allows the user to select what HLS tags the reader
+//! should parse. [`crate::config::ParsingOptions`] provides more details, but in short, better
+//! performance can be squeezed out by only parsing the tags that you need.
+//!
+//! ## Writing
+//!
+//! The other component to quick-m3u8 is [`crate::Writer`]. This allows the user to write to a given
+//! [`std::io::Write`] the parsed (or constructed) HLS lines. It should be noted that when writing,
+//! if no mutation of a tag has occurred, then the original reference slice of the line will be
+//! used. This allows us to avoid unnecessary allocations.
+//!
+//! A common use-case for reading and then writing is to modify a HLS playlist, perhaps in transit,
+//! in a proxy layer. Below is a toy example; however, the repo benchmark demonstrates a more
+//! complex example of how one may implement a HLS delta update (acting as a proxy layer).
+//! ```
+//! # use m3u8::{
+//! #     config::ParsingOptions,
+//! #     line::HlsLine,
+//! #     tag::{hls, known},
+//! #     Reader, Writer,
+//! # };
+//! # use std::io;
+//! let input_lines = concat!(
+//!     "#EXTINF:4.00008,\n",
+//!     "fileSequence268.mp4\n",
+//!     "#EXTINF:4.00008,\n",
+//!     "fileSequence269.mp4\n",
+//! );
+//! let mut reader = Reader::from_str(input_lines, ParsingOptions::default());
+//! let mut writer = Writer::new(Vec::new());
+//!
+//! let mut added_hello = false;
+//! while let Ok(Some(line)) = reader.read_line() {
+//!     match line {
+//!         HlsLine::KnownTag(known::Tag::Hls(hls::Tag::Inf(mut inf))) => {
+//!             if added_hello {
+//!                 inf.set_title(" World!");
+//!             } else {
+//!                 inf.set_title(" Hello,");
+//!                 added_hello = true;
+//!             }
+//!             writer.write_hls_tag(hls::Tag::Inf(inf))?
+//!         }
+//!         line => writer.write_line(line)?,
+//!     };
+//! }
+//!
+//! let expected_output_lines = concat!(
+//!     "#EXTINF:4.00008, Hello,\n",
+//!     "fileSequence268.mp4\n",
+//!     "#EXTINF:4.00008, World!\n",
+//!     "fileSequence269.mp4\n",
+//! );
+//! assert_eq!(
+//!     expected_output_lines,
+//!     String::from_utf8_lossy(&writer.into_inner())
+//! );
+//! # Ok::<(), io::Error>(())
+//! ```
 //!
 //! [M3U8]: https://datatracker.ietf.org/doc/draft-pantos-hls-rfc8216bis/
 //! [quick-xml]: https://crates.io/crates/quick-xml
