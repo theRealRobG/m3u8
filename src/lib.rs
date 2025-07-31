@@ -8,11 +8,14 @@
 
 //! # quick-m3u8
 //!
-//! quick-m3u8 aims to be a high performance [M3U8] reader and writer. The API is event-driven (like
-//! SAX for XML) rather than serializing into a complete object model (like DOM for XML). The syntax
-//! (and name) is inspired by [quick-xml]. The [`crate::Reader`] attempts to be almost zero-copy
-//! while still supporting mutation of the parsed data by utilizing [`std::borrow::Cow`] (Copy On
-//! Write) as much as possible.
+//! quick-m3u8 aims to be a flexible and highly performant [M3U8] reader and writer. The API is
+//! event-driven (like SAX for XML) rather than serializing into a complete object model (like DOM
+//! for XML). The syntax (and name) is inspired by [quick-xml]. The [`crate::Reader`] attempts to be
+//! almost zero-copy while still supporting mutation of the parsed data by utilizing
+//! [`std::borrow::Cow`] (Copy On Write) as much as possible. The library provides flexibility via
+//! support for custom tag registration ([`crate::tag::known::CustomTag`]), which gives the user the
+//! ability to support parsing of tags not part of the main HLS specification, or overwrite parsing
+//! behavior of tags provided by the library.
 //!
 //! When parsing M3U8 data quick-m3u8 aims to be very lenient when it comes to validation. The
 //! philosophy is that the library does not want to get in the way of extracting meaningful
