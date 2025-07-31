@@ -1,3 +1,7 @@
+//! All error types exposed by the library.
+//!
+//! The module offers a collection of many error types coming from various operations.
+
 use crate::{
     line::{ParsedByteSlice, ParsedLineSlice},
     tag::value::SemiParsedTagValue,
@@ -9,27 +13,46 @@ use std::{
     str::Utf8Error,
 };
 
+/// Error in reading a line from a [`crate::Reader`] constructed with [`crate::Reader::from_str`].
 #[derive(Debug, PartialEq, Clone)]
 pub struct ReaderStrError<'a> {
+    /// The original line that caused the error.
+    ///
+    /// The `Reader` exposes this to the user so that it can continue to the next line when
+    /// [`crate::Reader::read_line`] is called again.
     pub errored_line: &'a str,
+    /// The underlying error that was experienced.
     pub error: SyntaxError,
 }
 
+/// Error in reading a line from a [`crate::Reader`] constructed with [`crate::Reader::from_bytes`].
 #[derive(Debug, PartialEq, Clone)]
 pub struct ReaderBytesError<'a> {
+    /// The original line that caused the error.
+    ///
+    /// The `Reader` exposes this to the user so that it can continue to the next line when
+    /// [`crate::Reader::read_line`] is called again.
     pub errored_line: &'a [u8],
+    /// The underlying error that was experienced.
     pub error: SyntaxError,
 }
 
+/// Error in reading a line from [`crate::line::parse`] (or [`crate::line::parse_with_custom`]).
 #[derive(Debug, PartialEq, Clone)]
 pub struct ParseLineStrError<'a> {
+    /// The original line that caused the error along with the remaining slice after the line.
     pub errored_line_slice: ParsedLineSlice<'a, &'a str>,
+    /// The underlying error that was experienced.
     pub error: SyntaxError,
 }
 
+/// Error in reading a line from [`crate::line::parse_bytes`] (or
+/// [`crate::line::parse_bytes_with_custom`]).
 #[derive(Debug, PartialEq, Clone)]
 pub struct ParseLineBytesError<'a> {
+    /// The original line that caused the error along with the remaining bytes after the line.
     pub errored_line_slice: ParsedByteSlice<'a, &'a [u8]>,
+    /// The underlying error that was experienced.
     pub error: SyntaxError,
 }
 
@@ -48,12 +71,18 @@ impl_error!(ReaderBytesError);
 impl_error!(ParseLineStrError);
 impl_error!(ParseLineBytesError);
 
+/// Error experienced during parsing of a line.
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum SyntaxError {
+    /// A generic syntax error that breaks parsing of the line.
     Generic(GenericSyntaxError),
+    /// An error experienced while trying to parse [`crate::line::HlsLine::UnknownTag`].
     UnknownTag(UnknownTagSyntaxError),
+    /// An error experienced while trying to parse [`crate::date::DateTime`].
     DateTime(DateTimeSyntaxError),
+    /// An error experienced while trying to parse a tag value.
     TagValue(TagValueSyntaxError),
+    /// Invalid UTF-8 was encountered.
     InvalidUtf8(Utf8Error),
 }
 
@@ -70,10 +99,14 @@ impl Display for SyntaxError {
 }
 impl Error for SyntaxError {}
 
+/// A generic syntax error that breaks parsing of the line.
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum GenericSyntaxError {
+    /// Carriage return (`U+000D`) was encountered and not followed by line feed (`U+000A`).
     CarriageReturnWithoutLineFeed,
+    /// The line ended unexpectedly (e.g. within a quoted string in an attribute list).
     UnexpectedEndOfLine,
+    /// Some part of the line could not be decoded as UTF-8.
     InvalidUtf8(Utf8Error),
 }
 impl Display for GenericSyntaxError {
@@ -100,10 +133,16 @@ impl From<Utf8Error> for SyntaxError {
     }
 }
 
+/// An error experienced while trying to parse [`crate::line::HlsLine::UnknownTag`].
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum UnknownTagSyntaxError {
+    /// The tag prefix `#EXT` existed but nothing more before the line ended or the `:` character
+    /// was found.
     UnexpectedNoTagName,
+    /// An `UnknownTag` was attempted to be parsed directly (via [`crate::tag::unknown::parse`]),
+    /// but the line did not start with `#EXT`.
     InvalidTag,
+    /// A generic syntax error that breaks parsing of the line.
     Generic(GenericSyntaxError),
 }
 impl Display for UnknownTagSyntaxError {
@@ -138,25 +177,42 @@ impl From<Utf8Error> for UnknownTagSyntaxError {
     }
 }
 
+/// An error experienced while trying to parse [`crate::date::DateTime`].
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum DateTimeSyntaxError {
+    /// The year component was not a valid number.
     InvalidYear(ParseNumberError),
+    /// The separator between year and month was not `-`.
     UnexpectedYearToMonthSeparator(Option<u8>),
+    /// The month component was not a valid number.
     InvalidMonth(ParseNumberError),
+    /// The separator between month and day was not `-`.
     UnexpectedMonthToDaySeparator(Option<u8>),
+    /// The day component was not a valid number.
     InvalidDay(ParseNumberError),
+    /// The separator between day and hour was not `T` or `t`.
     UnexpectedDayHourSeparator(Option<u8>),
+    /// The hour component was not a valid number.
     InvalidHour(ParseNumberError),
+    /// The separator between hour and minute was not `:`.
     UnexpectedHourMinuteSeparator(Option<u8>),
+    /// The minute component was not a valid number.
     InvalidMinute(ParseNumberError),
+    /// The separator between minute and second was not `:`.
     UnexpectedMinuteSecondSeparator(Option<u8>),
+    /// The second component was not a valid number.
     InvalidSecond,
+    /// No timezone information was provided.
     UnexpectedNoTimezone,
+    /// Characters existed after the timezone.
     UnexpectedCharactersAfterTimezone,
-    InvalidTimezone,
+    /// The hour component of the timezone offset was not a valid number.
     InvalidTimezoneHour(ParseNumberError),
+    /// The separator between hour and minute in the timezone was not `:`.
     UnexpectedTimezoneHourMinuteSeparator(Option<u8>),
+    /// The minute component of the timezone offset was not a valid number.
     InvalidTimezoneMinute(ParseNumberError),
+    /// A generic syntax error that breaks parsing of the line.
     Generic(GenericSyntaxError),
 }
 fn option_u8_to_string(u: &Option<u8>) -> String {
@@ -204,7 +260,6 @@ impl Display for DateTimeSyntaxError {
             Self::UnexpectedCharactersAfterTimezone => {
                 write!(f, "unexpected characters after timezone in date")
             }
-            Self::InvalidTimezone => write!(f, "timezone invalid in date"),
             Self::InvalidTimezoneHour(e) => {
                 write!(f, "invalid integer for hour in timezone due to {e}")
             }
@@ -232,28 +287,33 @@ impl From<GenericSyntaxError> for DateTimeSyntaxError {
     }
 }
 
+/// A syntax error found while trying to parse a tag value.
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum TagValueSyntaxError {
-    UnexpectedCharacter(u8),
+    /// Value was determined to be a decimal floating point but the data was not a valid float.
     InvalidFloatForDecimalFloatingPointValue,
+    /// Some part of the value could not be decoded as UTF-8.
     InvalidUtf8(Utf8Error),
+    /// Value was determined to be a decimal integer but the data was not a valid number.
     InvalidDecimalInteger(ParseNumberError),
+    /// The line ended while reading an attribute name in an attribute list.
     UnexpectedEndOfLineWhileReadingAttributeName,
-    UnexpectedCharacterInAttributeName(u8),
+    /// No value existed for an associated attribute name in an attribute list.
     UnexpectedEmptyAttributeValue,
+    /// The line ended while parsing a quoted string in an attribute list.
     UnexpectedEndOfLineWithinQuotedString,
+    /// The quoted string ended and was not immediately followed by `,` or end of line.
     UnexpectedCharacterAfterQuotedString(u8),
+    /// An attribute value contained whitespace unexpectedly.
     UnexpectedWhitespaceInAttributeValue,
-    InvalidIntegerInAttributeValue(ParseNumberError),
+    /// A value was determined to be a floating point but the data was not a valid float.
     InvalidFloatInAttributeValue,
+    /// A generic syntax error that breaks parsing of the line.
     Generic(GenericSyntaxError),
 }
 impl Display for TagValueSyntaxError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::UnexpectedCharacter(c) => {
-                write!(f, "unexpected character '{}'", *c as char)
-            }
             Self::InvalidFloatForDecimalFloatingPointValue => {
                 write!(f, "invalid float for decimal float value")
             }
@@ -263,9 +323,6 @@ impl Display for TagValueSyntaxError {
             }
             Self::UnexpectedEndOfLineWhileReadingAttributeName => {
                 write!(f, "unexpected end of line reading attribute name")
-            }
-            Self::UnexpectedCharacterInAttributeName(c) => {
-                write!(f, "unexpected character '{}' in attribute name", *c as char)
             }
             Self::UnexpectedEmptyAttributeValue => {
                 write!(f, "attribute name had no value")
@@ -281,9 +338,6 @@ impl Display for TagValueSyntaxError {
             ),
             Self::UnexpectedWhitespaceInAttributeValue => {
                 write!(f, "unexpected whitespace in attribute value")
-            }
-            Self::InvalidIntegerInAttributeValue(e) => {
-                write!(f, "invalid integer for attribute value due to {e}")
             }
             Self::InvalidFloatInAttributeValue => {
                 write!(f, "invalid float in attribute value")
@@ -319,17 +373,30 @@ impl From<Utf8Error> for TagValueSyntaxError {
     }
 }
 
+/// An error experienced while trying to convert into a known tag via `TryFrom<ParsedTag>`.
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum ValidationError {
+    /// The tag name did not match expectations for the tag.
     UnexpectedTagName,
+    /// The value of the tag did not match expectations for the tag.
     UnexpectedValueType(ValidationErrorValueKind),
+    /// A required attribute was missing (the associated value should be the required attribute
+    /// name).
     MissingRequiredAttribute(&'static str),
+    /// Parsing for this tag is not implemented.
     NotImplemented,
+    /// A playlist type value was expected but could not be parsed.
     InvalidPlaylistType(ParsePlaylistTypeError),
+    /// A decimal integer value was expected but could not be parsed.
     InvalidDecimalInteger(ParseNumberError),
+    /// A decimal integer range value was expected but could not be parsed.
     InvalidDecimalIntegerRange(ParseDecimalIntegerRangeError),
+    /// A [`crate::date::DateTime`] value was expected but could not be parsed.
     InvalidDateTime(DateTimeSyntaxError),
+    /// A float value was expected but could not be parsed.
     InvalidFloat(ParseFloatError),
+    /// The enumerated string extracted from
+    /// [`crate::tag::value::ParsedAttributeValue::UnquotedString`] was not a known value.
     InvalidEnumeratedString,
 }
 impl From<ParsePlaylistTypeError> for ValidationError {
@@ -358,11 +425,17 @@ impl From<ParseFloatError> for ValidationError {
     }
 }
 
+/// The kind of value that was found unexpectedly in [`ValidationError::UnexpectedValueType`].
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum ValidationErrorValueKind {
+    /// Corresponds to [`crate::tag::value::SemiParsedTagValue::Empty`].
     Empty,
+    /// Corresponds to
+    /// [`crate::tag::value::SemiParsedTagValue::DecimalFloatingPointWithOptionalTitle`].
     DecimalFloatingPointWithOptionalTitle,
+    /// Corresponds to [`crate::tag::value::SemiParsedTagValue::AttributeList`].
     AttributeList,
+    /// Corresponds to [`crate::tag::value::SemiParsedTagValue::Unparsed`].
     Unparsed,
 }
 impl From<&SemiParsedTagValue<'_>> for ValidationErrorValueKind {
@@ -378,10 +451,14 @@ impl From<&SemiParsedTagValue<'_>> for ValidationErrorValueKind {
     }
 }
 
+/// An error found while trying to parse a number.
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum ParseNumberError {
+    /// An invalid digit was found.
     InvalidDigit(u8),
+    /// The number was too big.
     NumberTooBig,
+    /// Empty data was found instead of a number.
     Empty,
 }
 impl Display for ParseNumberError {
@@ -395,8 +472,10 @@ impl Display for ParseNumberError {
 }
 impl Error for ParseNumberError {}
 
+/// An error when trying to parse the playlist type
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum ParsePlaylistTypeError {
+    /// The value provided was not `VOD` or `EVENT`.
     InvalidValue,
 }
 impl Display for ParsePlaylistTypeError {
@@ -408,9 +487,12 @@ impl Display for ParsePlaylistTypeError {
 }
 impl Error for ParsePlaylistTypeError {}
 
+/// An error when trying to parse a decimal integer range (`<n>[@<o>]`).
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum ParseDecimalIntegerRangeError {
+    /// The length component was not a valid number.
     InvalidLength(ParseNumberError),
+    /// The offset component was not a valid number.
     InvalidOffset(ParseNumberError),
 }
 impl Display for ParseDecimalIntegerRangeError {
@@ -423,6 +505,7 @@ impl Display for ParseDecimalIntegerRangeError {
 }
 impl Error for ParseDecimalIntegerRangeError {}
 
+/// An error found when trying to parse a float from a byte slice (`&[u8]`).
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct ParseFloatError;
 impl Display for ParseFloatError {
@@ -432,11 +515,14 @@ impl Display for ParseFloatError {
 }
 impl Error for ParseFloatError {}
 
+/// An enumerated string provided to a parsed tag was not recognized.
 #[derive(Debug, PartialEq, Clone)]
 pub struct UnrecognizedEnumerationError<'a> {
+    /// The unrecognized value that was found.
     pub value: &'a str,
 }
 impl<'a> UnrecognizedEnumerationError<'a> {
+    /// Construct a new instance of the error using the unrecognized value that was found.
     pub fn new(value: &'a str) -> Self {
         Self { value }
     }
@@ -448,11 +534,16 @@ impl<'a> Display for UnrecognizedEnumerationError<'a> {
 }
 impl Error for UnrecognizedEnumerationError<'_> {}
 
+/// An error found when trying to parse a decimal resolution (`<width>x<height>`).
 #[derive(Debug, PartialEq, Clone)]
 pub enum DecimalResolutionParseError {
+    /// The width component was missing.
     MissingWidth,
+    /// The width component was not a valid integer.
     InvalidWidth(ParseIntError),
+    /// The height component was missing.
     MissingHeight,
+    /// The height component was not a valid integer.
     InvalidHeight(ParseIntError),
 }
 impl Display for DecimalResolutionParseError {
