@@ -1,3 +1,8 @@
+//! Definitions and parsing for all tags defined in the HLS specification.
+//!
+//! At the time of writing `draft-pantos-hls-rfc8216bis-18-preliminary-v1` was used for all tag
+//! definitions.
+
 use crate::{
     error::ValidationError,
     tag::{
@@ -56,6 +61,11 @@ pub mod targetduration;
 mod test_macro;
 pub mod version;
 
+/// A HLS tag.
+///
+/// This includes all 32 known tags defined in the draft-pantos-hls specification. The associated
+/// value of each enum case contains the strongly typed tag definition which will have more
+/// documentation on its parameters.
 #[derive(Debug, PartialEq, Clone)]
 pub enum Tag<'a> {
     /// <https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.1.1>
@@ -239,6 +249,7 @@ impl<'a> IntoInnerTag<'a> for Tag<'a> {
 }
 
 impl Tag<'_> {
+    /// Get the known name of the tag.
     pub fn name(&self) -> TagName {
         match self {
             Tag::M3u(_) => TagName::M3u,
@@ -277,39 +288,72 @@ impl Tag<'_> {
     }
 }
 
+/// An enumeration of all the tag names defined in the HLS specification.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub enum TagName {
+    /// Corresponds to `#EXTM3U`.
     M3u,
+    /// Corresponds to `#EXT-X-VERSION`.
     Version,
+    /// Corresponds to `#EXT-X-INDEPENDENT-SEGMENTS`.
     IndependentSegments,
+    /// Corresponds to `#EXT-X-START`.
     Start,
+    /// Corresponds to `#EXT-X-DEFINE`.
     Define,
+    /// Corresponds to `#EXT-X-TARGETDURATION`.
     Targetduration,
+    /// Corresponds to `#EXT-X-MEDIA-SEQUENCE`.
     MediaSequence,
+    /// Corresponds to `#EXT-X-DISCONTINUITY-SEQUENCE`.
     DiscontinuitySequence,
+    /// Corresponds to `#EXT-X-ENDLIST`.
     Endlist,
+    /// Corresponds to `#EXT-X-PLAYLIST-TYPE`.
     PlaylistType,
+    /// Corresponds to `#EXT-X-I-FRAMES-ONLY`.
     IFramesOnly,
+    /// Corresponds to `#EXT-X-PART-INF`.
     PartInf,
+    /// Corresponds to `#EXT-X-SERVER-CONTROL`.
     ServerControl,
+    /// Corresponds to `#EXTINF`.
     Inf,
+    /// Corresponds to `#EXT-X-BYTERANGE`.
     Byterange,
+    /// Corresponds to `#EXT-X-DISCONTINUITY`.
     Discontinuity,
+    /// Corresponds to `#EXT-X-KEY`.
     Key,
+    /// Corresponds to `#EXT-X-MAP`.
     Map,
+    /// Corresponds to `#EXT-X-PROGRAM-DATE-TIME`.
     ProgramDateTime,
+    /// Corresponds to `#EXT-X-GAP`.
     Gap,
+    /// Corresponds to `#EXT-X-BITRATE`.
     Bitrate,
+    /// Corresponds to `#EXT-X-PART`.
     Part,
+    /// Corresponds to `#EXT-X-DATERANGE`.
     Daterange,
+    /// Corresponds to `#EXT-X-SKIP`.
     Skip,
+    /// Corresponds to `#EXT-X-PRELOAD-HINT`.
     PreloadHint,
+    /// Corresponds to `#EXT-X-RENDITION-REPORT`.
     RenditionReport,
+    /// Corresponds to `#EXT-X-MEDIA`.
     Media,
+    /// Corresponds to `#EXT-X-STREAM-INF`.
     StreamInf,
+    /// Corresponds to `#EXT-X-I-FRAME-STREAM-INF`.
     IFrameStreamInf,
+    /// Corresponds to `#EXT-X-SESSION-DATA`.
     SessionData,
+    /// Corresponds to `#EXT-X-SESSION-KEY`.
     SessionKey,
+    /// Corresponds to `#EXT-X-CONTENT-STEERING`.
     ContentSteering,
 }
 
@@ -356,6 +400,8 @@ impl TryFrom<&'_ str> for TagName {
 }
 
 impl TagName {
+    /// The string value that the library will parse as the name of the tag (i.e. the name portion
+    /// after the `#EXT` prefix).
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::M3u => "M3U",
@@ -393,6 +439,7 @@ impl TagName {
         }
     }
 
+    /// The type of tag this is, as defined by what sub-section of section 4 the tag appears in.
     pub fn tag_type(&self) -> TagType {
         match self {
             Self::M3u => TagType::Basic,
@@ -431,6 +478,41 @@ impl TagName {
     }
 }
 
+/// The type of tag, as determined by the tag sections in the HLS specification.
+///
+/// The sections that are defined are:
+/// * 4.4.1. Basic Tags
+///     * These tags are allowed in both Media Playlists and Multivariant Playlists.
+/// * 4.4.2. Media or Multivariant Playlist Tags
+///     * The tags in this section can appear in either Multivariant Playlists or Media Playlists.
+///       
+///       Tags in this section MUST NOT appear more than once in a Playlist. If one does, clients
+///       MUST fail to parse the Playlist. The only exception to this rule is EXT-X-DEFINE, which
+///       MAY appear more than once.
+/// * 4.4.3. Media Playlist Tags
+///     * Media Playlist tags describe global parameters of the Media Playlist. There MUST NOT be
+///       more than one Media Playlist tag of each type in any Media Playlist.
+///       
+///       A Media Playlist tag MUST NOT appear in a Multivariant Playlist.
+/// * 4.4.4. Media Segment Tags
+///     * Each Media Segment is specified by a series of Media Segment tags followed by a URI. Some
+///       Media Segment tags apply to just the next segment; others apply to all subsequent segments
+///       until another instance of the same tag.
+///       
+///       A Media Segment tag MUST NOT appear in a Multivariant Playlist. Clients MUST fail to parse
+///       Playlists that contain both Media Segment tags and Multivariant Playlist tags.
+/// * 4.4.5. Media Metadata Tags
+///     * Media Metadata tags provide information about the playlist that is not associated with
+///       specific Media Segments. There MAY be more than one Media Metadata tag of each type in any
+///       Media Playlist. The only exception to this rule is an EXT-X-SKIP, which MUST NOT appear
+///       more than once.
+/// * 4.4.6. Multivariant Playlist Tags
+///     * Multivariant Playlist tags define the Variant Streams, Renditions, and other global
+///       parameters of the presentation.
+///       
+///       Multivariant Playlist tags MUST NOT appear in a Media Playlist; clients MUST fail to parse
+///       any Playlist that contains both a Multivariant Playlist tag and either a Media Playlist
+///       tag or a Media Segment tag.
 pub enum TagType {
     /// <https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.1>
     Basic,
