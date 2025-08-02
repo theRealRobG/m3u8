@@ -42,51 +42,51 @@ use std::fmt::Display;
 /// Each of the following will fail compilation (thus providing some compile-time safety to usage):
 /// ```compile_fail
 /// # use m3u8::date_time;
-/// let bad_date = date_time!(10000-01-01 T 00:00:00.000);
+/// let bad_date = date_time!(10000-01-01 T 00:00:00.000);       // Year greater than 4 digits
 /// ```
 /// ```compile_fail
 /// # use m3u8::date_time;
-/// let bad_date = date_time!(1970-00-01 T 00:00:00.000);
+/// let bad_date = date_time!(1970-00-01 T 00:00:00.000);        // Month not greater than 0
 /// ```
 /// ```compile_fail
 /// # use m3u8::date_time;
-/// let bad_date = date_time!(1970-13-01 T 00:00:00.000);
+/// let bad_date = date_time!(1970-13-01 T 00:00:00.000);        // Month greater than 12
 /// ```
 /// ```compile_fail
 /// # use m3u8::date_time;
-/// let bad_date = date_time!(1970-01-00 T 00:00:00.000);
+/// let bad_date = date_time!(1970-01-00 T 00:00:00.000);        // Day not greater than 0
 /// ```
 /// ```compile_fail
 /// # use m3u8::date_time;
-/// let bad_date = date_time!(1970-01-32 T 00:00:00.000);
+/// let bad_date = date_time!(1970-01-32 T 00:00:00.000);        // Day greater than 31
 /// ```
 /// ```compile_fail
 /// # use m3u8::date_time;
-/// let bad_date = date_time!(1970-01-01 T 24:00:00.000);
+/// let bad_date = date_time!(1970-01-01 T 24:00:00.000);        // Hour greater than 23
 /// ```
 /// ```compile_fail
 /// # use m3u8::date_time;
-/// let bad_date = date_time!(1970-01-01 T 00:60:00.000);
+/// let bad_date = date_time!(1970-01-01 T 00:60:00.000);        // Minute greater than 59
 /// ```
 /// ```compile_fail
 /// # use m3u8::date_time;
-/// let bad_date = date_time!(1970-01-01 T 00:00:-1.000);
+/// let bad_date = date_time!(1970-01-01 T 00:00:-1.000);        // Seconds negative
 /// ```
 /// ```compile_fail
 /// # use m3u8::date_time;
-/// let bad_date = date_time!(1970-01-01 T 00:00:60.000);
+/// let bad_date = date_time!(1970-01-01 T 00:00:60.000);        // Seconds greater than 59
 /// ```
 /// ```compile_fail
 /// # use m3u8::date_time;
-/// let bad_date = date_time!(1970-01-01 T 00:00:00.000 -24:00);
+/// let bad_date = date_time!(1970-01-01 T 00:00:00.000 -24:00); // Hour offset less than -23
 /// ```
 /// ```compile_fail
 /// # use m3u8::date_time;
-/// let bad_date = date_time!(1970-01-01 T 00:00:00.000 24:00);
+/// let bad_date = date_time!(1970-01-01 T 00:00:00.000 24:00);  // Hour offset more than 23
 /// ```
 /// ```compile_fail
 /// # use m3u8::date_time;
-/// let bad_date = date_time!(1970-01-01 T 00:00:00.000 00:60);
+/// let bad_date = date_time!(1970-01-01 T 00:00:00.000 00:60);  // Minute offset more than 59
 /// ```
 ///
 /// [RFC3339]: https://datatracker.ietf.org/doc/html/rfc3339#section-5.6
