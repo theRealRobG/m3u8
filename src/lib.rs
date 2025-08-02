@@ -159,7 +159,7 @@
 //!                 inf.set_title(" Hello,");
 //!                 added_hello = true;
 //!             }
-//!             writer.write_hls_tag(hls::Tag::Inf(inf))?
+//!             writer.write_line(HlsLine::from(inf))?
 //!         }
 //!         line => writer.write_line(line)?,
 //!     };

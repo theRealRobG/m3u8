@@ -86,22 +86,6 @@ where
         self.write_line(HlsLine::Uri(uri.into()))
     }
 
-    /// Example:
-    /// ```
-    /// # use m3u8::Writer;
-    /// # use m3u8::tag::hls::Tag;
-    /// # use m3u8::tag::hls::Bitrate;
-    /// let mut writer = Writer::new(Vec::new());
-    /// writer.write_hls_tag(Tag::Bitrate(Bitrate::new(10000000))).unwrap();
-    /// assert_eq!(
-    ///     "#EXT-X-BITRATE:10000000\n".as_bytes(),
-    ///     writer.into_inner()
-    /// );
-    /// ```
-    pub fn write_hls_tag(&mut self, tag: crate::tag::hls::Tag) -> io::Result<usize> {
-        self.write_line(HlsLine::from(tag))
-    }
-
     /// Write a custom tag implementation to the inner writer.
     ///
     /// Note that if the custom tag is derived from parsed data (i.e. not user constructed), then

@@ -681,7 +681,7 @@ while let Ok(Some(line)) = reader.read_line() {
                 inf.set_title(String::from("Hello,"));
                 added_hello = true;
             }
-            writer.write_hls_tag(hls::Tag::Inf(inf)).unwrap()
+            writer.write_line(HlsLine::from(inf)).unwrap()
         }
         line => writer.write_line(line).unwrap(),
     };

@@ -302,7 +302,7 @@ fn make_delta_update<W: Write>(input: &[u8], output: &mut W) -> Result<(), Box<d
                     };
                     // The minimum version if we are introducing EXT-X-SKIP is 9.
                     if !state.did_write_version {
-                        writer.write_hls_tag(hls::Tag::Version(Version::new(9)))?;
+                        writer.write_line(HlsLine::from(Version::new(9)))?;
                     }
                     // We may not have written EXT-X-SERVER-CONTROL yet, if we found it before the
                     // EXT-X-TARGETDURATION tag, or if it was not present at all in the playlist. We
@@ -314,7 +314,7 @@ fn make_delta_update<W: Write>(input: &[u8], output: &mut W) -> Result<(), Box<d
                             server_control.set_can_skip_until(skip_until);
                             writer.write_line(HlsLine::from(server_control))?;
                         } else {
-                            writer.write_hls_tag(hls::Tag::ServerControl(
+                            writer.write_line(HlsLine::from(
                                 ServerControl::builder()
                                     .with_can_skip_until(skip_until)
                                     .finish(),
@@ -368,7 +368,7 @@ fn make_delta_update<W: Write>(input: &[u8], output: &mut W) -> Result<(), Box<d
     drain_lines(&mut state, &mut writer)?;
 
     // We need to write out how many segments we've skipped.
-    writer.write_hls_tag(hls::Tag::Skip(Skip::builder(state.removed_count).finish()))?;
+    writer.write_line(HlsLine::from(Skip::builder(state.removed_count).finish()))?;
 
     // Finally, write out whatever we have left.
     for line in state.lines {
