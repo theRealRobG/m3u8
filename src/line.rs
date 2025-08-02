@@ -196,47 +196,38 @@ macro_rules! impl_line_from_tag {
     };
 }
 
-impl_line_from_tag!(hls::m3u::M3u, M3u);
-impl_line_from_tag!(hls::version::Version<'a>, Version);
-impl_line_from_tag!(
-    hls::independent_segments::IndependentSegments,
-    IndependentSegments
-);
-impl_line_from_tag!(hls::start::Start<'a>, Start);
-impl_line_from_tag!(hls::define::Define<'a>, Define);
-impl_line_from_tag!(hls::targetduration::Targetduration<'a>, Targetduration);
-impl_line_from_tag!(hls::media_sequence::MediaSequence<'a>, MediaSequence);
-impl_line_from_tag!(
-    hls::discontinuity_sequence::DiscontinuitySequence<'a>,
-    DiscontinuitySequence
-);
-impl_line_from_tag!(hls::endlist::Endlist, Endlist);
-impl_line_from_tag!(hls::playlist_type::PlaylistType, PlaylistType);
-impl_line_from_tag!(hls::i_frames_only::IFramesOnly, IFramesOnly);
-impl_line_from_tag!(hls::part_inf::PartInf<'a>, PartInf);
-impl_line_from_tag!(hls::server_control::ServerControl<'a>, ServerControl);
-impl_line_from_tag!(hls::inf::Inf<'a>, Inf);
-impl_line_from_tag!(hls::byterange::Byterange<'a>, Byterange);
-impl_line_from_tag!(hls::discontinuity::Discontinuity, Discontinuity);
-impl_line_from_tag!(hls::key::Key<'a>, Key);
-impl_line_from_tag!(hls::map::Map<'a>, Map);
-impl_line_from_tag!(hls::program_date_time::ProgramDateTime<'a>, ProgramDateTime);
-impl_line_from_tag!(hls::gap::Gap, Gap);
-impl_line_from_tag!(hls::bitrate::Bitrate<'a>, Bitrate);
-impl_line_from_tag!(hls::part::Part<'a>, Part);
-impl_line_from_tag!(hls::daterange::Daterange<'a>, Daterange);
-impl_line_from_tag!(hls::skip::Skip<'a>, Skip);
-impl_line_from_tag!(hls::preload_hint::PreloadHint<'a>, PreloadHint);
-impl_line_from_tag!(hls::rendition_report::RenditionReport<'a>, RenditionReport);
-impl_line_from_tag!(hls::media::Media<'a>, Media);
-impl_line_from_tag!(hls::stream_inf::StreamInf<'a>, StreamInf);
-impl_line_from_tag!(
-    hls::i_frame_stream_inf::IFrameStreamInf<'a>,
-    IFrameStreamInf
-);
-impl_line_from_tag!(hls::session_data::SessionData<'a>, SessionData);
-impl_line_from_tag!(hls::session_key::SessionKey<'a>, SessionKey);
-impl_line_from_tag!(hls::content_steering::ContentSteering<'a>, ContentSteering);
+impl_line_from_tag!(hls::M3u, M3u);
+impl_line_from_tag!(hls::Version<'a>, Version);
+impl_line_from_tag!(hls::IndependentSegments, IndependentSegments);
+impl_line_from_tag!(hls::Start<'a>, Start);
+impl_line_from_tag!(hls::Define<'a>, Define);
+impl_line_from_tag!(hls::Targetduration<'a>, Targetduration);
+impl_line_from_tag!(hls::MediaSequence<'a>, MediaSequence);
+impl_line_from_tag!(hls::DiscontinuitySequence<'a>, DiscontinuitySequence);
+impl_line_from_tag!(hls::Endlist, Endlist);
+impl_line_from_tag!(hls::PlaylistType, PlaylistType);
+impl_line_from_tag!(hls::IFramesOnly, IFramesOnly);
+impl_line_from_tag!(hls::PartInf<'a>, PartInf);
+impl_line_from_tag!(hls::ServerControl<'a>, ServerControl);
+impl_line_from_tag!(hls::Inf<'a>, Inf);
+impl_line_from_tag!(hls::Byterange<'a>, Byterange);
+impl_line_from_tag!(hls::Discontinuity, Discontinuity);
+impl_line_from_tag!(hls::Key<'a>, Key);
+impl_line_from_tag!(hls::Map<'a>, Map);
+impl_line_from_tag!(hls::ProgramDateTime<'a>, ProgramDateTime);
+impl_line_from_tag!(hls::Gap, Gap);
+impl_line_from_tag!(hls::Bitrate<'a>, Bitrate);
+impl_line_from_tag!(hls::Part<'a>, Part);
+impl_line_from_tag!(hls::Daterange<'a>, Daterange);
+impl_line_from_tag!(hls::Skip<'a>, Skip);
+impl_line_from_tag!(hls::PreloadHint<'a>, PreloadHint);
+impl_line_from_tag!(hls::RenditionReport<'a>, RenditionReport);
+impl_line_from_tag!(hls::Media<'a>, Media);
+impl_line_from_tag!(hls::StreamInf<'a>, StreamInf);
+impl_line_from_tag!(hls::IFrameStreamInf<'a>, IFrameStreamInf);
+impl_line_from_tag!(hls::SessionData<'a>, SessionData);
+impl_line_from_tag!(hls::SessionKey<'a>, SessionKey);
+impl_line_from_tag!(hls::ContentSteering<'a>, ContentSteering);
 
 /// A slice of parsed line data from a HLS playlist.
 ///
@@ -286,7 +277,7 @@ where
 /// # config::ParsingOptions,
 /// # line::{HlsLine, ParsedLineSlice, parse},
 /// # error::ParseLineStrError,
-/// # tag::hls::{m3u::M3u, targetduration::Targetduration, version::Version},
+/// # tag::hls::{M3u, Targetduration, Version},
 /// # };
 /// const PLAYLIST: &str = r#"#EXTM3U
 /// #EXT-X-TARGETDURATION:10
@@ -334,7 +325,7 @@ pub fn parse<'a>(
 /// # error::{ParseLineStrError, ValidationError, ValidationErrorValueKind},
 /// # tag::known::{Tag, CustomTag, ParsedTag},
 /// # tag::value::{ParsedAttributeValue, SemiParsedTagValue},
-/// # tag::hls::{m3u::M3u, targetduration::Targetduration, version::Version},
+/// # tag::hls::{M3u, Targetduration, Version},
 /// # };
 /// #[derive(Debug, Clone, PartialEq)]
 /// struct UserDefinedTag<'a> {
@@ -516,7 +507,7 @@ mod tests {
     use crate::{
         config::ParsingOptionsBuilder,
         error::{ValidationError, ValidationErrorValueKind},
-        tag::hls::{self, m3u::M3u, start::Start},
+        tag::hls::{self, M3u, Start},
     };
     use pretty_assertions::assert_eq;
 

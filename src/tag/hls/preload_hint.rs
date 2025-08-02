@@ -10,13 +10,13 @@ use crate::{
 use std::{borrow::Cow, collections::HashMap, fmt::Display};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Type {
+pub enum PreloadHintType {
     /// The resource is a Partial Segment.
     Part,
     /// The resource is a Media Initialization Section.
     Map,
 }
-impl<'a> TryFrom<&'a str> for Type {
+impl<'a> TryFrom<&'a str> for PreloadHintType {
     type Error = UnrecognizedEnumerationError<'a>;
     fn try_from(value: &'a str) -> Result<Self, Self::Error> {
         match value {
@@ -26,26 +26,26 @@ impl<'a> TryFrom<&'a str> for Type {
         }
     }
 }
-impl Display for Type {
+impl Display for PreloadHintType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.as_cow())
     }
 }
-impl AsStaticCow for Type {
+impl AsStaticCow for PreloadHintType {
     fn as_cow(&self) -> Cow<'static, str> {
         match self {
-            Type::Part => Cow::Borrowed(PART),
-            Type::Map => Cow::Borrowed(MAP),
+            PreloadHintType::Part => Cow::Borrowed(PART),
+            PreloadHintType::Map => Cow::Borrowed(MAP),
         }
     }
 }
-impl From<Type> for Cow<'_, str> {
-    fn from(value: Type) -> Self {
+impl From<PreloadHintType> for Cow<'_, str> {
+    fn from(value: PreloadHintType) -> Self {
         value.as_cow()
     }
 }
-impl From<Type> for EnumeratedString<'_, Type> {
-    fn from(value: Type) -> Self {
+impl From<PreloadHintType> for EnumeratedString<'_, PreloadHintType> {
+    fn from(value: PreloadHintType) -> Self {
         Self::Known(value)
     }
 }
@@ -172,7 +172,7 @@ impl<'a> PreloadHint<'a> {
         PreloadHintBuilder::new(hint_type, uri)
     }
 
-    pub fn hint_type(&self) -> EnumeratedString<Type> {
+    pub fn hint_type(&self) -> EnumeratedString<PreloadHintType> {
         EnumeratedString::from(self.hint_type.as_ref())
     }
 
@@ -288,7 +288,7 @@ mod tests {
     fn as_str_with_no_options_should_be_valid() {
         assert_eq!(
             b"#EXT-X-PRELOAD-HINT:TYPE=PART,URI=\"part.2.mp4\"",
-            PreloadHint::builder(Type::Part, "part.2.mp4")
+            PreloadHint::builder(PreloadHintType::Part, "part.2.mp4")
                 .finish()
                 .into_inner()
                 .value()
@@ -299,7 +299,7 @@ mod tests {
     fn as_str_with_options_should_be_valid() {
         assert_eq!(
             b"#EXT-X-PRELOAD-HINT:TYPE=PART,URI=\"part.2.mp4\",BYTERANGE-START=512,BYTERANGE-LENGTH=1024",
-            PreloadHint::builder(Type::Part, "part.2.mp4")
+            PreloadHint::builder(PreloadHintType::Part, "part.2.mp4")
                 .with_byterange_start(512)
                 .with_byterange_length(1024)
                 .finish()
@@ -309,11 +309,11 @@ mod tests {
     }
 
     mutation_tests!(
-        PreloadHint::builder(Type::Map, "init.mp4")
+        PreloadHint::builder(PreloadHintType::Map, "init.mp4")
             .with_byterange_start(512)
             .with_byterange_length(1024)
             .finish(),
-        (hint_type, EnumeratedString::Known(Type::Part), @Attr="TYPE=PART"),
+        (hint_type, EnumeratedString::Known(PreloadHintType::Part), @Attr="TYPE=PART"),
         (uri, "part.2.mp4", @Attr="URI=\"part.2.mp4\""),
         (byterange_start, 100; @Default=0, @Attr="BYTERANGE-START=100"),
         (byterange_length, @Option 200, @Attr="BYTERANGE-LENGTH=200")

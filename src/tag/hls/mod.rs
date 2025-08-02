@@ -5,61 +5,80 @@
 
 use crate::{
     error::ValidationError,
-    tag::{
-        hls::{
-            bitrate::Bitrate, byterange::Byterange, content_steering::ContentSteering,
-            daterange::Daterange, define::Define, discontinuity::Discontinuity,
-            discontinuity_sequence::DiscontinuitySequence, endlist::Endlist, gap::Gap,
-            i_frame_stream_inf::IFrameStreamInf, i_frames_only::IFramesOnly,
-            independent_segments::IndependentSegments, inf::Inf, key::Key, m3u::M3u, map::Map,
-            media::Media, media_sequence::MediaSequence, part::Part, part_inf::PartInf,
-            playlist_type::PlaylistType, preload_hint::PreloadHint,
-            program_date_time::ProgramDateTime, rendition_report::RenditionReport,
-            server_control::ServerControl, session_data::SessionData, session_key::SessionKey,
-            skip::Skip, start::Start, stream_inf::StreamInf, targetduration::Targetduration,
-            version::Version,
-        },
-        known::{IntoInnerTag, ParsedTag, TagInner},
-    },
+    tag::known::{IntoInnerTag, ParsedTag, TagInner},
 };
-pub use enumerated_string::*;
 use std::fmt::Debug;
 
-pub mod bitrate;
-pub mod byterange;
-pub mod content_steering;
-pub mod daterange;
-pub mod define;
-pub mod discontinuity;
-pub mod discontinuity_sequence;
-pub mod endlist;
+mod bitrate;
+mod byterange;
+mod content_steering;
+mod daterange;
+mod define;
+mod discontinuity;
+mod discontinuity_sequence;
+mod endlist;
 mod enumerated_string;
-pub mod gap;
-pub mod i_frame_stream_inf;
-pub mod i_frames_only;
-pub mod independent_segments;
-pub mod inf;
-pub mod key;
-pub mod m3u;
-pub mod map;
-pub mod media;
-pub mod media_sequence;
-pub mod part;
-pub mod part_inf;
-pub mod playlist_type;
-pub mod preload_hint;
-pub mod program_date_time;
-pub mod rendition_report;
-pub mod server_control;
-pub mod session_data;
-pub mod session_key;
-pub mod skip;
-pub mod start;
-pub mod stream_inf;
-pub mod targetduration;
+mod gap;
+mod i_frame_stream_inf;
+mod i_frames_only;
+mod independent_segments;
+mod inf;
+mod key;
+mod m3u;
+mod map;
+mod media;
+mod media_sequence;
+mod part;
+mod part_inf;
+mod playlist_type;
+mod preload_hint;
+mod program_date_time;
+mod rendition_report;
+mod server_control;
+mod session_data;
+mod session_key;
+mod skip;
+mod start;
+mod stream_inf;
+mod targetduration;
 #[cfg(test)]
 mod test_macro;
-pub mod version;
+mod version;
+
+// Re-exporting all HLS tag types to `hls` module level.
+pub use bitrate::*;
+pub use byterange::*;
+pub use content_steering::*;
+pub use daterange::*;
+pub use define::*;
+pub use discontinuity::*;
+pub use discontinuity_sequence::*;
+pub use endlist::*;
+pub use enumerated_string::*;
+pub use gap::*;
+pub use i_frame_stream_inf::*;
+pub use i_frames_only::*;
+pub use independent_segments::*;
+pub use inf::*;
+pub use key::*;
+pub use m3u::*;
+pub use map::*;
+pub use media::*;
+pub use media_sequence::*;
+pub use part::*;
+pub use part_inf::*;
+pub use playlist_type::*;
+pub use preload_hint::*;
+pub use program_date_time::*;
+pub use rendition_report::*;
+pub use server_control::*;
+pub use session_data::*;
+pub use session_key::*;
+pub use skip::*;
+pub use start::*;
+pub use stream_inf::*;
+pub use targetduration::*;
+pub use version::*;
 
 /// A HLS tag.
 ///
@@ -1166,7 +1185,7 @@ mod tests {
     fn preload_hint() {
         assert_eq!(
             Ok(Tag::PreloadHint(
-                PreloadHint::builder(preload_hint::Type::Part, "part.2.mp4")
+                PreloadHint::builder(preload_hint::PreloadHintType::Part, "part.2.mp4")
                     .with_byterange_start(512)
                     .with_byterange_length(1024)
                     .finish()
@@ -1187,7 +1206,7 @@ mod tests {
         );
         assert_eq!(
             Ok(Tag::PreloadHint(
-                PreloadHint::builder(preload_hint::Type::Part, "part.2.mp4").finish()
+                PreloadHint::builder(preload_hint::PreloadHintType::Part, "part.2.mp4").finish()
             )),
             Tag::try_from(ParsedTag {
                 name: "-X-PRELOAD-HINT",
@@ -1238,7 +1257,7 @@ mod tests {
     fn media() {
         assert_eq!(
             Ok(Tag::Media(
-                Media::builder(media::Type::Audio, "English", "stereo")
+                Media::builder(media::MediaType::Audio, "English", "stereo")
                     .with_uri("audio/en/stereo.m3u8")
                     .with_language("en")
                     .with_assoc_language("en")
@@ -1301,7 +1320,7 @@ mod tests {
         );
         assert_eq!(
             Ok(Tag::Media(
-                Media::builder(media::Type::ClosedCaptions, "English", "cc")
+                Media::builder(media::MediaType::ClosedCaptions, "English", "cc")
                     .with_instream_id("CC1")
                     .finish()
             )),

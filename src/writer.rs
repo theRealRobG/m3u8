@@ -90,7 +90,7 @@ where
     /// ```
     /// # use m3u8::Writer;
     /// # use m3u8::tag::hls::Tag;
-    /// # use m3u8::tag::hls::bitrate::Bitrate;
+    /// # use m3u8::tag::hls::Bitrate;
     /// let mut writer = Writer::new(Vec::new());
     /// writer.write_hls_tag(Tag::Bitrate(Bitrate::new(10000000))).unwrap();
     /// assert_eq!(
@@ -219,10 +219,7 @@ mod tests {
         config::ParsingOptionsBuilder,
         error::ValidationError,
         tag::{
-            hls::{
-                self, inf::Inf, m3u::M3u, media_sequence::MediaSequence,
-                targetduration::Targetduration, version::Version,
-            },
+            hls::{self, Inf, M3u, MediaSequence, Targetduration, Version},
             known::{CustomTag, ParsedTag, WritableTag},
             value::{MutableParsedAttributeValue, MutableSemiParsedTagValue},
         },

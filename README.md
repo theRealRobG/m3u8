@@ -8,9 +8,7 @@ example is provided below:
 use m3u8::{
     config::ParsingOptionsBuilder,
     line::HlsLine,
-    tag::hls::{
-        endlist::Endlist, inf::Inf, m3u::M3u, targetduration::Targetduration, version::Version,
-    },
+    tag::hls::{ Endlist, Inf, M3u, Targetduration, Version },
     Reader,
 };
 
@@ -133,7 +131,7 @@ use m3u8::{
     error::{ValidationError, ValidationErrorValueKind},
     line::HlsLine,
     tag::{
-        hls::inf::Inf,
+        hls::Inf,
         known::{self, CustomTag, ParsedTag, WritableCustomTag, WritableTag},
         value::{
             DecimalResolution, MutableParsedAttributeValue, MutableSemiParsedTagValue,
@@ -327,7 +325,7 @@ use m3u8::{
     config::ParsingOptionsBuilder,
     line::HlsLine,
     tag::{
-        hls::{self, EnumeratedString, stream_inf::VideoRange},
+        hls::{self, EnumeratedString, VideoRange},
         known,
     },
 };
@@ -400,7 +398,7 @@ use m3u8::{
     config::ParsingOptionsBuilder,
     line::HlsLine,
     tag::{
-        hls::{self, EnumeratedString, EnumeratedStringList, daterange::Cue},
+        hls::{self, EnumeratedString, EnumeratedStringList, Cue},
         known,
     },
 };
@@ -472,10 +470,8 @@ use m3u8::{
     tag::{
         hls::{
             self,
-            media::{
-                AudioCodingIdentifier, ChannelSpecialUsageIdentifier, Channels, ValidChannels,
-            },
-            stream_inf::{VideoChannelSpecifier, VideoProjectionSpecifier},
+            AudioCodingIdentifier, ChannelSpecialUsageIdentifier, Channels, ValidChannels,
+            VideoChannelSpecifier, VideoProjectionSpecifier,
         },
         known,
     },

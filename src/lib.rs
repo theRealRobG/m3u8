@@ -71,9 +71,7 @@
 //! # use m3u8::{
 //! #     config::ParsingOptionsBuilder,
 //! #     line::HlsLine,
-//! #     tag::hls::{
-//! #         endlist::Endlist, inf::Inf, m3u::M3u, targetduration::Targetduration, version::Version,
-//! #     },
+//! #     tag::hls::{ Endlist, Inf, M3u, Targetduration, Version },
 //! #     Reader,
 //! # };
 //! #

@@ -10,7 +10,7 @@ use crate::{
 use std::{borrow::Cow, collections::HashMap, fmt::Display, str::Split};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Type {
+pub enum MediaType {
     /// Specifies an audio rendition.
     Audio,
     /// Specifies a video rendition.
@@ -22,7 +22,7 @@ pub enum Type {
     /// present in the Media Segments of every video Rendition.
     ClosedCaptions,
 }
-impl<'a> TryFrom<&'a str> for Type {
+impl<'a> TryFrom<&'a str> for MediaType {
     type Error = UnrecognizedEnumerationError<'a>;
     fn try_from(value: &'a str) -> Result<Self, Self::Error> {
         match value {
@@ -34,28 +34,28 @@ impl<'a> TryFrom<&'a str> for Type {
         }
     }
 }
-impl Display for Type {
+impl Display for MediaType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.as_cow())
     }
 }
-impl AsStaticCow for Type {
+impl AsStaticCow for MediaType {
     fn as_cow(&self) -> Cow<'static, str> {
         match self {
-            Type::Audio => Cow::Borrowed(AUDIO),
-            Type::Video => Cow::Borrowed(VIDEO),
-            Type::Subtitles => Cow::Borrowed(SUBTITLES),
-            Type::ClosedCaptions => Cow::Borrowed(CLOSED_CAPTIONS),
+            MediaType::Audio => Cow::Borrowed(AUDIO),
+            MediaType::Video => Cow::Borrowed(VIDEO),
+            MediaType::Subtitles => Cow::Borrowed(SUBTITLES),
+            MediaType::ClosedCaptions => Cow::Borrowed(CLOSED_CAPTIONS),
         }
     }
 }
-impl From<Type> for Cow<'_, str> {
-    fn from(value: Type) -> Self {
+impl From<MediaType> for Cow<'_, str> {
+    fn from(value: MediaType) -> Self {
         value.as_cow()
     }
 }
-impl From<Type> for EnumeratedString<'_, Type> {
-    fn from(value: Type) -> Self {
+impl From<MediaType> for EnumeratedString<'_, MediaType> {
+    fn from(value: MediaType) -> Self {
         Self::Known(value)
     }
 }
@@ -724,7 +724,7 @@ impl<'a> Media<'a> {
         MediaBuilder::new(media_type, name, group_id)
     }
 
-    pub fn media_type(&self) -> EnumeratedString<Type> {
+    pub fn media_type(&self) -> EnumeratedString<MediaType> {
         EnumeratedString::from(self.media_type.as_ref())
     }
     pub fn name(&self) -> &str {
@@ -1092,7 +1092,7 @@ mod tests {
                 "INSTREAM-ID=\"CC1\""
             )
             .as_bytes(),
-            Media::builder(Type::ClosedCaptions, "English", "cc")
+            Media::builder(MediaType::ClosedCaptions, "English", "cc")
                 .with_instream_id("CC1")
                 .finish()
                 .into_inner()
@@ -1121,7 +1121,7 @@ mod tests {
                 "CHANNELS=\"2\"",
             )
             .as_bytes(),
-            Media::builder(Type::Audio, "English", "stereo")
+            Media::builder(MediaType::Audio, "English", "stereo")
                 .with_uri("audio/en/stereo.m3u8")
                 .with_language("en")
                 .with_assoc_language("en")
@@ -1140,7 +1140,7 @@ mod tests {
     }
 
     mutation_tests!(
-        Media::builder(Type::Audio, "English", "stereo")
+        Media::builder(MediaType::Audio, "English", "stereo")
             .with_uri("audio/en/stereo.m3u8")
             .with_language("en")
             .with_assoc_language("en")
@@ -1151,7 +1151,7 @@ mod tests {
             .with_characteristics("public.accessibility.describes-video")
             .with_channels("2")
             .finish(),
-        (media_type, EnumeratedString::Known(Type::Video), @Attr="TYPE=VIDEO"),
+        (media_type, EnumeratedString::Known(MediaType::Video), @Attr="TYPE=VIDEO"),
         (name, "Spanish", @Attr="NAME=\"Spanish\""),
         (group_id, "surround", @Attr="GROUP-ID=\"surround\""),
         (uri, @Option "example", @Attr="URI=\"example\""),

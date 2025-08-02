@@ -5,9 +5,7 @@ use m3u8::{
     config::ParsingOptionsBuilder,
     line::HlsLine,
     tag::{
-        hls::{
-            self, TagName, TagType, server_control::ServerControl, skip::Skip, version::Version,
-        },
+        hls::{self, ServerControl, Skip, TagName, TagType, Version},
         known,
     },
 };

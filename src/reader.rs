@@ -20,10 +20,7 @@ use std::marker::PhantomData;
 /// # use m3u8::{HlsLine, Reader};
 /// # use m3u8::config::ParsingOptions;
 /// # use m3u8::tag::{
-/// #     hls::{
-/// #         self, discontinuity_sequence::DiscontinuitySequence, media_sequence::MediaSequence,
-/// #         targetduration::Targetduration, version::Version, m3u::M3u
-/// #     },
+/// #     hls::{ self, DiscontinuitySequence, MediaSequence, Targetduration, Version, M3u },
 /// #     known,
 /// # };
 /// # let playlist = r#"#EXTM3U
@@ -144,7 +141,7 @@ use std::marker::PhantomData;
 /// # Reader, HlsLine, Writer,
 /// # config::ParsingOptionsBuilder,
 /// # tag::known,
-/// # tag::hls::{self, daterange::{Cue, Daterange, ExtensionAttributeValue}},
+/// # tag::hls::{self, Cue, Daterange, ExtensionAttributeValue},
 /// # };
 /// # use std::{borrow::Cow, error::Error, io::Write};
 /// # fn advert_id_from_scte35_out(_: &str) -> Option<String> { None }
@@ -224,7 +221,7 @@ use std::marker::PhantomData;
 /// # config::ParsingOptionsBuilder,
 /// # date::DateTime,
 /// # tag::known::{self, ParsedTag, CustomTag, WritableCustomTag},
-/// # tag::hls::{self, daterange::{Cue, Daterange, ExtensionAttributeValue}},
+/// # tag::hls::{self, Cue, Daterange, ExtensionAttributeValue},
 /// # error::ValidationError,
 /// # };
 /// # use std::{borrow::Cow, error::Error, io::Write, marker::PhantomData};
@@ -428,10 +425,7 @@ mod tests {
         config::ParsingOptionsBuilder,
         error::{SyntaxError, UnknownTagSyntaxError, ValidationError, ValidationErrorValueKind},
         tag::{
-            hls::{
-                endlist::Endlist, inf::Inf, m3u::M3u, targetduration::Targetduration,
-                version::Version,
-            },
+            hls::{Endlist, Inf, M3u, Targetduration, Version},
             known::{CustomTagAccess, ParsedTag},
             unknown,
             value::{ParsedAttributeValue, SemiParsedTagValue},
