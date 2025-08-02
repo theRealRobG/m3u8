@@ -33,21 +33,81 @@ use std::fmt::Display;
 /// )
 /// ```
 ///
+/// ## Input validation
+///
+/// The macro is also able to validate input looks correct (with the exception of the `$D` parameter
+/// which depends on which month is used, so it just validates that the value passed is less than
+/// 31).
+///
+/// Each of the following will fail compilation (thus providing some compile-time safety to usage):
+/// ```compile_fail
+/// # use m3u8::date_time;
+/// let bad_date = date_time!(10000-01-01 T 00:00:00.000);
+/// ```
+/// ```compile_fail
+/// # use m3u8::date_time;
+/// let bad_date = date_time!(1970-00-01 T 00:00:00.000);
+/// ```
+/// ```compile_fail
+/// # use m3u8::date_time;
+/// let bad_date = date_time!(1970-13-01 T 00:00:00.000);
+/// ```
+/// ```compile_fail
+/// # use m3u8::date_time;
+/// let bad_date = date_time!(1970-01-00 T 00:00:00.000);
+/// ```
+/// ```compile_fail
+/// # use m3u8::date_time;
+/// let bad_date = date_time!(1970-01-32 T 00:00:00.000);
+/// ```
+/// ```compile_fail
+/// # use m3u8::date_time;
+/// let bad_date = date_time!(1970-01-01 T 24:00:00.000);
+/// ```
+/// ```compile_fail
+/// # use m3u8::date_time;
+/// let bad_date = date_time!(1970-01-01 T 00:60:00.000);
+/// ```
+/// ```compile_fail
+/// # use m3u8::date_time;
+/// let bad_date = date_time!(1970-01-01 T 00:00:-1.000);
+/// ```
+/// ```compile_fail
+/// # use m3u8::date_time;
+/// let bad_date = date_time!(1970-01-01 T 00:00:60.000);
+/// ```
+/// ```compile_fail
+/// # use m3u8::date_time;
+/// let bad_date = date_time!(1970-01-01 T 00:00:00.000 -24:00);
+/// ```
+/// ```compile_fail
+/// # use m3u8::date_time;
+/// let bad_date = date_time!(1970-01-01 T 00:00:00.000 24:00);
+/// ```
+/// ```compile_fail
+/// # use m3u8::date_time;
+/// let bad_date = date_time!(1970-01-01 T 00:00:00.000 00:60);
+/// ```
+///
 /// [RFC3339]: https://datatracker.ietf.org/doc/html/rfc3339#section-5.6
 #[macro_export]
 macro_rules! date_time {
     ($Y:literal-$M:literal-$D:literal T $h:literal:$m:literal:$s:literal) => {
-        $crate::date::DateTime {
-            date_fullyear: $Y,
-            date_month: $M,
-            date_mday: $D,
-            time_hour: $h,
-            time_minute: $m,
-            time_second: $s,
-            timezone_offset: Default::default(),
-        }
+        date_time!($Y-$M-$D T $h:$m:$s 0:0)
     };
-    ($Y:literal-$M:literal-$D:literal T $h:literal:$m:literal:$s:literal $x:literal:$y:literal) => {
+    ($Y:literal-$M:literal-$D:literal T $h:literal:$m:literal:$s:literal $x:literal:$y:literal) => {{
+        const _: () = assert!($Y <= 9999, "Year must be at most 4 digits");
+        const _: () = assert!($M > 0, "Month must be greater than 0");
+        const _: () = assert!($M <= 12, "Month must be less than or equal to 12");
+        const _: () = assert!($D > 0, "Day must be greater than 0");
+        const _: () = assert!($D <= 31, "Day must be less than or equal to 31");
+        const _: () = assert!($h < 24, "Hour must be less than 24");
+        const _: () = assert!($m < 60, "Minute must be less than 60");
+        const _: () = assert!($s >= 0.0, "Seconds must be positive");
+        const _: () = assert!($s < 60.0, "Seconds must be less than 60.0");
+        const _: () = assert!($x > -24, "Hour offset must be greater than -24");
+        const _: () = assert!($x < 24, "Hour offset must be less than 24");
+        const _: () = assert!($y < 60, "Minute offset must be less than 60");
         $crate::date::DateTime {
             date_fullyear: $Y,
             date_month: $M,
@@ -60,7 +120,7 @@ macro_rules! date_time {
                 time_minute: $y,
             },
         }
-    };
+    }};
 }
 
 /// A struct representing a date in the format of [RFC3339].
