@@ -7,7 +7,136 @@ use std::{
     io::{self, Write},
 };
 
-#[derive(Clone)]
+/// A writer of HLS lines.
+///
+/// This structure wraps a [`std::io::Write`] with methods that make writing parsed (or user
+/// constructed) HLS lines easier. The `Writer` handles inserting new lines where necessary and
+/// formatting for tags. An important note to make, is that with every tag implementation within
+/// [`crate::tag::hls`], the reference to the original input data is used directly when writing.
+/// This means that we avoid unnecessary allocations unless the data has been mutated. The same is
+/// true of [`crate::tag::known::Tag::Custom`] tags (as described in
+/// [`crate::tag::known::CustomTagAccess`]). Where necessary, the inner [`std::io::Write`] can be
+/// accessed in any type of ownership semantics (owned via [`Self::into_inner`], mutable borrow via
+/// [`Self::get_mut`], borrow via [`Self::get_ref`]).
+///
+/// ## Mutate data as proxy
+///
+/// A common use case for using `Writer` is when implementing a proxy service for a HLS stream that
+/// modifies the playlist. In that case, the [`crate::Reader`] is used to extract information from
+/// the upstream bytes, the various tag types can be used to modify the data where necessary, and
+/// the `Writer` is then used to write the result to data for the body of the HTTP response. Below
+/// we provide a toy example of this (for a more interesting example, the repository includes an
+/// implementation of a HLS delta update in `benches/delta_update_bench.rs`).
+/// ```
+/// # use m3u8::{ config::ParsingOptions, line::HlsLine, tag::{hls, known}, Reader, Writer };
+/// # use std::io::{self, Write};
+/// const INPUT: &str = r#"
+/// #EXTINF:4
+/// segment_100.mp4
+/// #EXTINF:4
+/// segment_101.mp4
+/// "#;
+///
+/// let mut reader = Reader::from_str(INPUT, ParsingOptions::default());
+/// let mut writer = Writer::new(Vec::new());
+///
+/// let mut added_hello = false;
+/// loop {
+///     match reader.read_line() {
+///         // In this branch we match the #EXTINF tag and update the title property to add a
+///         // message.
+///         Ok(Some(HlsLine::KnownTag(known::Tag::Hls(hls::Tag::Inf(mut tag))))) => {
+///             if added_hello {
+///                 tag.set_title("World!");
+///             } else {
+///                 tag.set_title("Hello,");
+///                 added_hello = true;
+///             }
+///             writer.write_line(HlsLine::from(tag))?;
+///         }
+///         // For all other lines we just write out what we received as input.
+///         Ok(Some(line)) => {
+///             writer.write_line(line)?;
+///         }
+///         // When we encounter `Ok(None)` it indicates that we have reached the end of the
+///         // playlist and so we break the loop.
+///         Ok(None) => break,
+///         // Even when encountering errors we can access the original problem line, then take a
+///         // mutable borrow on the inner writer, and write out the bytes. In this way we can be a
+///         // very unopinionated proxy. This is completely implementation specific, and other use
+///         // cases may require an implementation that rejects the playlist, or we may also choose
+///         // to implement tracing in such cases. We're just showing the possibility here.
+///         Err(e) => writer.get_mut().write_all(e.errored_line.as_bytes())?,
+///     };
+/// }
+///
+/// const EXPECTED: &str = r#"
+/// #EXTINF:4,Hello,
+/// segment_100.mp4
+/// #EXTINF:4,World!
+/// segment_101.mp4
+/// "#;
+/// assert_eq!(EXPECTED, String::from_utf8_lossy(&writer.into_inner()));
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+///
+/// ## Construct a playlist output
+///
+/// It may also be the case that a user may want to write a complete playlist out without having to
+/// parse any data. This is also possible (and may be made easier in the future if we implement a
+/// playlist and playlist builder type). And of course, the user can mix and match, parsing some
+/// input, mutating where necessary, introducing new lines as needed, and writing it all out. Below
+/// is another toy example of how we may construct the [9.4. Multivariant Playlist] example provided
+/// in the HLS specification.
+///
+/// ```
+/// # use m3u8::{
+/// #     HlsLine, Writer,
+/// #     tag::hls::{M3u, StreamInf},
+/// # };
+/// # use std::error::Error;
+/// const EXPECTED: &str = r#"#EXTM3U
+/// #EXT-X-STREAM-INF:BANDWIDTH=1280000,AVERAGE-BANDWIDTH=1000000
+/// http://example.com/low.m3u8
+/// #EXT-X-STREAM-INF:BANDWIDTH=2560000,AVERAGE-BANDWIDTH=2000000
+/// http://example.com/mid.m3u8
+/// #EXT-X-STREAM-INF:BANDWIDTH=7680000,AVERAGE-BANDWIDTH=6000000
+/// http://example.com/hi.m3u8
+/// #EXT-X-STREAM-INF:BANDWIDTH=65000,CODECS="mp4a.40.5"
+/// http://example.com/audio-only.m3u8
+/// "#;
+///
+/// let mut writer = Writer::new(Vec::new());
+/// writer.write_line(HlsLine::from(M3u))?;
+/// writer.write_line(HlsLine::from(
+///     StreamInf::builder(1280000)
+///         .with_average_bandwidth(1000000)
+///         .finish(),
+/// ))?;
+/// writer.write_uri("http://example.com/low.m3u8")?;
+/// writer.write_line(HlsLine::from(
+///     StreamInf::builder(2560000)
+///         .with_average_bandwidth(2000000)
+///         .finish(),
+/// ))?;
+/// writer.write_uri("http://example.com/mid.m3u8")?;
+/// writer.write_line(HlsLine::from(
+///     StreamInf::builder(7680000)
+///         .with_average_bandwidth(6000000)
+///         .finish(),
+/// ))?;
+/// writer.write_uri("http://example.com/hi.m3u8")?;
+/// writer.write_line(HlsLine::from(
+///     StreamInf::builder(65000).with_codecs("mp4a.40.5").finish(),
+/// ))?;
+/// writer.write_uri("http://example.com/audio-only.m3u8")?;
+///
+/// assert_eq!(EXPECTED, std::str::from_utf8(&writer.into_inner())?);
+/// # Ok::<(), Box<dyn Error>>(())
+/// ```
+///
+/// [9.4. Multivariant Playlist]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-9.4
+#[derive(Debug, Clone)]
 pub struct Writer<W>
 where
     W: Write,
@@ -43,7 +172,8 @@ where
     /// Write the `HlsLine` to the underlying writer. Returns the number of bytes consumed during
     /// writing or an `io::Error` from the underlying writer.
     ///
-    /// In this case the `CustomTag` generic is the default `NoCustomTag` struct.
+    /// In this case the `CustomTag` generic is the default `NoCustomTag` struct. See [`Self`] for
+    /// more detailed documentation.
     pub fn write_line(&mut self, line: HlsLine) -> io::Result<usize> {
         self.write_custom_line(line)
     }
@@ -154,7 +284,87 @@ where
     }
 
     /// Write the `HlsLine` to the underlying writer. Returns the number of bytes consumed during
-    /// writing or an `io::Error` from the underlying writer.
+    /// writing or an `io::Error` from the underlying writer. Ultimately, all the other write
+    /// methods are wrappers for this method.
+    ///
+    /// This method is necessary to use where the input lines carry a custom tag type (other than
+    /// [`crate::tag::known::NoCustomTag`]). For example, say we are parsing some data using a
+    /// reader that supports our own custom defined tag (`SomeCustomTag`).
+    /// ```
+    /// # use m3u8::{
+    /// # Reader,
+    /// # config::ParsingOptions,
+    /// # tag::known::{ParsedTag, CustomTag, WritableCustomTag, WritableTag},
+    /// # error::ValidationError
+    /// # };
+    /// # use std::marker::PhantomData;
+    /// # #[derive(Debug, PartialEq, Clone)]
+    /// # struct SomeCustomTag;
+    /// # impl TryFrom<ParsedTag<'_>> for SomeCustomTag {
+    /// #     type Error = ValidationError;
+    /// #     fn try_from(_: ParsedTag) -> Result<Self, Self::Error> { todo!() }
+    /// # }
+    /// # impl CustomTag<'_> for SomeCustomTag {
+    /// #     fn is_known_name(_: &str) -> bool { todo!() }
+    /// # }
+    /// # impl<'a> WritableCustomTag<'a> for SomeCustomTag {
+    /// #     fn into_writable_tag(self) -> WritableTag<'a> { todo!() }
+    /// # }
+    /// # let input = "";
+    /// # let options = ParsingOptions::default();
+    /// let mut reader = Reader::with_custom_from_str(
+    ///     input,
+    ///     options,
+    ///     PhantomData::<SomeCustomTag>
+    /// );
+    /// ```
+    /// If we tried to use the [`Self::write_line`] method, it would fail to compile (as that method
+    /// expects that the generic `Custom` type is [`crate::tag::known::NoCustomTag`], which is a
+    /// struct provided by the library that never succeeds the
+    /// [`crate::tag::known::CustomTag::is_known_name`] check so is never parsed). Therefore we must
+    /// use the `write_custom_line` method in this case (even if we are not writing the custom tag
+    /// itself):
+    /// ```
+    /// # use m3u8::{
+    /// # Reader, Writer,
+    /// # config::ParsingOptions,
+    /// # tag::known::{ParsedTag, CustomTag, WritableCustomTag, WritableTag},
+    /// # error::ValidationError
+    /// # };
+    /// # use std::{error::Error, marker::PhantomData};
+    /// # #[derive(Debug, PartialEq, Clone)]
+    /// # struct SomeCustomTag;
+    /// # impl TryFrom<ParsedTag<'_>> for SomeCustomTag {
+    /// #     type Error = ValidationError;
+    /// #     fn try_from(_: ParsedTag) -> Result<Self, Self::Error> { todo!() }
+    /// # }
+    /// # impl CustomTag<'_> for SomeCustomTag {
+    /// #     fn is_known_name(_: &str) -> bool { todo!() }
+    /// # }
+    /// # impl<'a> WritableCustomTag<'a> for SomeCustomTag {
+    /// #     fn into_writable_tag(self) -> WritableTag<'a> { todo!() }
+    /// # }
+    /// # let input = "";
+    /// # let options = ParsingOptions::default();
+    /// # let mut reader = Reader::with_custom_from_str(
+    /// #     input,
+    /// #     options,
+    /// #     PhantomData::<SomeCustomTag>
+    /// # );
+    /// let mut writer = Writer::new(Vec::new());
+    /// loop {
+    ///     match reader.read_line() {
+    ///         // --snip--
+    ///         Ok(Some(line)) => {
+    ///             writer.write_custom_line(line)?;
+    ///         }
+    ///         // --snip--
+    /// #        Ok(None) => break,
+    /// #        _ => todo!(),
+    ///     };
+    /// }
+    /// # Ok::<(), Box<dyn Error>>(())
+    /// ```
     pub fn write_custom_line<'a, Custom>(&mut self, line: HlsLine<'a, Custom>) -> io::Result<usize>
     where
         Custom: WritableCustomTag<'a>,
