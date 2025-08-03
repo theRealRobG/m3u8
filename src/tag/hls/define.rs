@@ -8,6 +8,9 @@ use crate::{
 };
 use std::borrow::Cow;
 
+/// Corresponds to the #EXT-X-DEFINE tag where `NAME` and `VALUE` are used.
+///
+/// See [`Define`] for a link to the HLS documentation for this attribute.
 #[derive(Debug, Clone)]
 pub struct Name<'a> {
     name: Cow<'a, str>,
@@ -23,6 +26,7 @@ impl<'a> PartialEq for Name<'a> {
 }
 
 impl<'a> Name<'a> {
+    /// Construct a new `Name`.
     pub fn new(name: impl Into<Cow<'a, str>>, value: impl Into<Cow<'a, str>>) -> Self {
         let name = name.into();
         let value = value.into();
@@ -35,19 +39,31 @@ impl<'a> Name<'a> {
         }
     }
 
+    /// Corresponds to the `NAME` attribute.
+    ///
+    /// See [`Define`] for a link to the HLS documentation for this attribute.
     pub fn name(&self) -> &str {
         &self.name
     }
 
+    /// Corresponds to the `VALUE` attribute.
+    ///
+    /// See [`Define`] for a link to the HLS documentation for this attribute.
     pub fn value(&self) -> &str {
         &self.value
     }
 
+    /// Sets the `NAME` attribute.
+    ///
+    /// See [`Define`] for a link to the HLS documentation for this attribute.
     pub fn set_name(&mut self, name: impl Into<Cow<'a, str>>) {
         self.name = name.into();
         self.output_line_is_dirty = true;
     }
 
+    /// Sets the `VALUE` attribute.
+    ///
+    /// See [`Define`] for a link to the HLS documentation for this attribute.
     pub fn set_value(&mut self, value: impl Into<Cow<'a, str>>) {
         self.value = value.into();
         self.output_line_is_dirty = true;
@@ -65,6 +81,9 @@ impl<'a> Name<'a> {
 
 into_inner_tag!(Name);
 
+/// Corresponds to the #EXT-X-DEFINE tag where `IMPORT` is used.
+///
+/// See [`Define`] for a link to the HLS documentation for this attribute.
 #[derive(Debug, Clone)]
 pub struct Import<'a> {
     import: Cow<'a, str>,
@@ -79,6 +98,7 @@ impl<'a> PartialEq for Import<'a> {
 }
 
 impl<'a> Import<'a> {
+    /// Construct a new `Import`.
     pub fn new(import: impl Into<Cow<'a, str>>) -> Self {
         let import = import.into();
         let output_line = Cow::Owned(Self::calculate_line(&import));
@@ -89,10 +109,16 @@ impl<'a> Import<'a> {
         }
     }
 
+    /// Corresponds to the `IMPORT` attribute.
+    ///
+    /// See [`Define`] for a link to the HLS documentation for this attribute.
     pub fn import(&self) -> &str {
         &self.import
     }
 
+    /// Sets the `IMPORT` attribute.
+    ///
+    /// See [`Define`] for a link to the HLS documentation for this attribute.
     pub fn set_import(&mut self, import: impl Into<Cow<'a, str>>) {
         self.import = import.into();
         self.output_line_is_dirty = true;
@@ -110,6 +136,9 @@ impl<'a> Import<'a> {
 
 into_inner_tag!(Import);
 
+/// Corresponds to the #EXT-X-DEFINE tag where `QUERYPARAM` is used.
+///
+/// See [`Define`] for a link to the HLS documentation for this attribute.
 #[derive(Debug, Clone)]
 pub struct Queryparam<'a> {
     queryparam: Cow<'a, str>,
@@ -124,6 +153,7 @@ impl<'a> PartialEq for Queryparam<'a> {
 }
 
 impl<'a> Queryparam<'a> {
+    /// Construct a new `Queryparam`.
     pub fn new(queryparam: impl Into<Cow<'a, str>>) -> Self {
         let queryparam = queryparam.into();
         let output_line = Cow::Owned(Self::calculate_line(&queryparam));
@@ -134,10 +164,16 @@ impl<'a> Queryparam<'a> {
         }
     }
 
+    /// Corresponds to the `QUERYPARAM` attribute.
+    ///
+    /// See [`Define`] for a link to the HLS documentation for this attribute.
     pub fn queryparam(&self) -> &str {
         &self.queryparam
     }
 
+    /// Sets the `QUERYPARAM` attribute.
+    ///
+    /// See [`Define`] for a link to the HLS documentation for this attribute.
     pub fn set_queryparam(&mut self, queryparam: impl Into<Cow<'a, str>>) {
         self.queryparam = queryparam.into();
         self.output_line_is_dirty = true;
@@ -155,11 +191,16 @@ impl<'a> Queryparam<'a> {
 
 into_inner_tag!(Queryparam);
 
+/// Corresponds to the #EXT-X-DEFINE tag.
+///
 /// <https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.2.3>
 #[derive(Debug, PartialEq, Clone)]
 pub enum Define<'a> {
+    /// The `#EXT-X-DEFINE` tag is being used with `NAME` and `VALUE`.
     Name(Name<'a>),
+    /// The `#EXT-X-DEFINE` tag is being used with `IMPORT`
     Import(Import<'a>),
+    /// The `#EXT-X-DEFINE` tag is being used with `QUERYPARAM`
     Queryparam(Queryparam<'a>),
 }
 
@@ -205,18 +246,24 @@ impl<'a> TryFrom<ParsedTag<'a>> for Define<'a> {
 }
 
 impl<'a> Define<'a> {
+    /// Constructs a new `#EXT-X-DEFINE` tag using `NAME` and `VALUE`.
     pub fn new_name(name: impl Into<Cow<'a, str>>, value: impl Into<Cow<'a, str>>) -> Self {
         Self::Name(Name::new(name, value))
     }
 
+    /// Constructs a new `#EXT-X-DEFINE` tag using `IMPORT`.
     pub fn new_import(import: impl Into<Cow<'a, str>>) -> Self {
         Self::Import(Import::new(import))
     }
 
+    /// Constructs a new `#EXT-X-DEFINE` tag using `QUERYPARAM`.
     pub fn new_queryparam(queryparam: impl Into<Cow<'a, str>>) -> Self {
         Self::Queryparam(Queryparam::new(queryparam))
     }
 
+    /// Corresponds to the `NAME` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn name(&self) -> Option<&str> {
         match self {
             Self::Name(name) => Some(name.name()),
@@ -224,6 +271,9 @@ impl<'a> Define<'a> {
         }
     }
 
+    /// Corresponds to the `VALUE` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn value(&self) -> Option<&str> {
         match self {
             Self::Name(name) => Some(name.value()),
@@ -231,6 +281,9 @@ impl<'a> Define<'a> {
         }
     }
 
+    /// Corresponds to the `IMPORT` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn import(&self) -> Option<&str> {
         match self {
             Self::Import(import) => Some(import.import()),
@@ -238,6 +291,9 @@ impl<'a> Define<'a> {
         }
     }
 
+    /// Corresponds to the `QUERYPARAM` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn queryparam(&self) -> Option<&str> {
         match self {
             Self::Queryparam(queryparam) => Some(queryparam.queryparam()),
@@ -245,6 +301,11 @@ impl<'a> Define<'a> {
         }
     }
 
+    /// Sets both `NAME` and `VALUE` attributes.
+    ///
+    /// This will unset any `IMPORT` or `QUERYPARAM` attributes.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_name_and_value(
         &mut self,
         name: impl Into<Cow<'a, str>>,
@@ -253,10 +314,20 @@ impl<'a> Define<'a> {
         *self = Self::new_name(name, value);
     }
 
+    /// Sets the `IMPORT` attribute.
+    ///
+    /// This will unset any `NAME`, `VALUE`, or `QUERYPARAM` attributes.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_import(&mut self, import: impl Into<Cow<'a, str>>) {
         *self = Self::new_import(import);
     }
 
+    /// Sets the `QUERYPARAM` attribute.
+    ///
+    /// This will unset any `NAME`, `VALUE`, or `IMPORT` attributes.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_queryparam(&mut self, queryparam: impl Into<Cow<'a, str>>) {
         *self = Self::new_queryparam(queryparam);
     }

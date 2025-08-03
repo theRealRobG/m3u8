@@ -4,6 +4,8 @@ use crate::{
 };
 use std::borrow::Cow;
 
+/// Corresponds to the #EXTINF tag.
+///
 /// <https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.4.1>
 #[derive(Debug, Clone)]
 pub struct Inf<'a> {
@@ -46,6 +48,7 @@ impl<'a> TryFrom<ParsedTag<'a>> for Inf<'a> {
 }
 
 impl<'a> Inf<'a> {
+    /// Constructs a new `Inf`.
     pub fn new(duration: f64, title: impl Into<Cow<'a, str>>) -> Self {
         let title = title.into();
         let output_line = Cow::Owned(calculate_line(duration, &title));
@@ -57,19 +60,33 @@ impl<'a> Inf<'a> {
         }
     }
 
+    /// Corresponds to the duration component of the tag value (`duration` in
+    /// `#EXTINF:<duration>,[<title>]`).
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn duration(&self) -> f64 {
         self.duration
     }
 
+    /// Corresponds to the title component of the tag value (`title` in
+    /// `#EXTINF:<duration>,[<title>]`).
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn title(&self) -> &str {
         &self.title
     }
 
+    /// Sets the duration component value.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_duration(&mut self, duration: f64) {
         self.duration = duration;
         self.output_line_is_dirty = true;
     }
 
+    /// Sets the title component value.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_title(&mut self, title: impl Into<Cow<'a, str>>) {
         self.title = title.into();
         self.output_line_is_dirty = true;

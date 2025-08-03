@@ -4,6 +4,8 @@ use crate::{
 };
 use std::borrow::Cow;
 
+/// Corresponds to the #EXT-X-DISCONTINUITY-SEQUENCE tag.
+///
 /// <https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.3.3>
 #[derive(Debug, Clone)]
 pub struct DiscontinuitySequence<'a> {
@@ -37,6 +39,7 @@ impl<'a> TryFrom<ParsedTag<'a>> for DiscontinuitySequence<'a> {
 }
 
 impl<'a> DiscontinuitySequence<'a> {
+    /// Construct a new `DiscontinuitySequence`.
     pub fn new(discontinuity_sequence: u64) -> Self {
         let output_line = Cow::Owned(calculate_line(discontinuity_sequence));
         Self {
@@ -46,10 +49,16 @@ impl<'a> DiscontinuitySequence<'a> {
         }
     }
 
+    /// Corresponds to the value of the tag (`#EXT-X-DISCONTINUITY-SEQUENCE:<number>`).
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn discontinuity_sequence(&self) -> u64 {
         self.discontinuity_sequence
     }
 
+    /// Sets the value of the tag.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_discontinuity_sequence(&mut self, discontinuity_sequence: u64) {
         self.discontinuity_sequence = discontinuity_sequence;
         self.output_line_is_dirty = true;
