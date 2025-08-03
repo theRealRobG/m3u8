@@ -4,6 +4,8 @@ use crate::{
 };
 use std::borrow::Cow;
 
+/// Corresponds to the `#EXT-X-VERSION` tag.
+///
 /// <https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.1.2>
 #[derive(Debug, Clone)]
 pub struct Version<'a> {
@@ -37,6 +39,7 @@ impl<'a> TryFrom<ParsedTag<'a>> for Version<'a> {
 }
 
 impl<'a> Version<'a> {
+    /// Construct a new `Version` tag.
     pub fn new(version: u64) -> Self {
         Self {
             version,
@@ -45,10 +48,16 @@ impl<'a> Version<'a> {
         }
     }
 
+    /// Corresponds to the value of the tag (`#EXT-X-VERSION:<n>`).
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn version(&self) -> u64 {
         self.version
     }
 
+    /// Sets the value of the tag.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_version(&mut self, version: u64) {
         self.version = version;
         self.output_line_is_dirty = true;

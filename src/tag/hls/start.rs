@@ -8,18 +8,29 @@ use crate::{
 };
 use std::{borrow::Cow, collections::HashMap};
 
+/// The attribute list for the tag (`#EXT-X-START:<attribute-list>`).
+///
+/// See [`Start`] for a link to the HLS documentation for this attribute.
 #[derive(Debug, PartialEq, Clone)]
 pub struct StartAttributeList {
+    /// Corresponds to the `TIME-OFFSET` attribute.
+    ///
+    /// See [`Start`] for a link to the HLS documentation for this attribute.
     pub time_offset: f64,
+    /// Corresponds to the `PRECISE` attribute.
+    ///
+    /// See [`Start`] for a link to the HLS documentation for this attribute.
     pub precise: bool,
 }
 
+/// A builder for convenience in constructing a [`Start`].
 #[derive(Debug, PartialEq, Clone)]
 pub struct StartBuilder {
     time_offset: f64,
     precise: bool,
 }
 impl StartBuilder {
+    /// Creates a new builder.
     pub fn new(time_offset: f64) -> Self {
         Self {
             time_offset,
@@ -27,6 +38,7 @@ impl StartBuilder {
         }
     }
 
+    /// Finish building and construct the `Start`.
     pub fn finish<'a>(self) -> Start<'a> {
         Start::new(StartAttributeList {
             time_offset: self.time_offset,
@@ -34,12 +46,15 @@ impl StartBuilder {
         })
     }
 
+    /// Add the provided `precise` to the attributes built into `Start`.
     pub fn with_precise(mut self) -> Self {
         self.precise = true;
         self
     }
 }
 
+/// Corresponds to the `#EXT-X-START` tag.
+///
 /// <https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.2.2>
 #[derive(Debug, Clone)]
 pub struct Start<'a> {
@@ -84,6 +99,7 @@ impl<'a> TryFrom<ParsedTag<'a>> for Start<'a> {
 }
 
 impl<'a> Start<'a> {
+    /// Constructs a new `Start` tag.
     pub fn new(attribute_list: StartAttributeList) -> Self {
         let output_line = Cow::Owned(calculate_line(&attribute_list));
         let StartAttributeList {
@@ -99,14 +115,29 @@ impl<'a> Start<'a> {
         }
     }
 
+    /// Starts a builder for producing `Self`.
+    ///
+    /// For example, we could construct a `Start` as such:
+    /// ```
+    /// # use m3u8::tag::hls::Start;
+    /// let start = Start::builder(-18.0)
+    ///     .with_precise()
+    ///     .finish();
+    /// ```
     pub fn builder(time_offset: f64) -> StartBuilder {
         StartBuilder::new(time_offset)
     }
 
+    /// Corresponds to the `TIME-OFFSET` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn time_offset(&self) -> f64 {
         self.time_offset
     }
 
+    /// Corresponds to the `PRECISE` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn precise(&self) -> bool {
         if let Some(precise) = self.precise {
             precise
@@ -118,12 +149,18 @@ impl<'a> Start<'a> {
         }
     }
 
+    /// Sets the `TIME-OFFSET` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_time_offset(&mut self, time_offset: f64) {
         self.attribute_list.remove(TIME_OFFSET);
         self.time_offset = time_offset;
         self.output_line_is_dirty = true;
     }
 
+    /// Sets the `PRECISE` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_precise(&mut self, precise: bool) {
         self.attribute_list.remove(PRECISE);
         self.precise = Some(precise);

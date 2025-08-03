@@ -8,18 +8,27 @@ use crate::{
 };
 use std::{borrow::Cow, collections::HashMap};
 
+/// The attribute list for the tag (`#EXT-X-SKIP:<attribute-list>`).
 #[derive(Debug, PartialEq, Clone)]
 pub struct SkipAttributeList<'a> {
+    /// Corresponds to the `SKIPPED-SEGMENTS` attribute.
+    ///
+    /// See [`Skip`] for a link to the HLS documentation for this attribute.
     pub skipped_segments: u64,
+    /// Corresponds to the `RECENTLY-REMOVED-DATERANGES` attribute.
+    ///
+    /// See [`Skip`] for a link to the HLS documentation for this attribute.
     pub recently_removed_dateranges: Option<Cow<'a, str>>,
 }
 
+/// A builder for convenience in constructing a [`Skip`].
 #[derive(Debug, PartialEq, Clone)]
 pub struct SkipBuilder<'a> {
     skipped_segments: u64,
     recently_removed_dateranges: Option<Cow<'a, str>>,
 }
 impl<'a> SkipBuilder<'a> {
+    /// Creates a new builder.
     pub fn new(skipped_segments: u64) -> Self {
         Self {
             skipped_segments,
@@ -27,6 +36,7 @@ impl<'a> SkipBuilder<'a> {
         }
     }
 
+    /// Finish building and construct the `Skip`.
     pub fn finish(self) -> Skip<'a> {
         Skip::new(SkipAttributeList {
             skipped_segments: self.skipped_segments,
@@ -34,6 +44,7 @@ impl<'a> SkipBuilder<'a> {
         })
     }
 
+    /// Add the provided `recently_removed_dateranges` to the attributes built for `Skip`.
     pub fn with_recently_removed_dateranges(
         mut self,
         recently_removed_dateranges: impl Into<Cow<'a, str>>,
@@ -43,6 +54,8 @@ impl<'a> SkipBuilder<'a> {
     }
 }
 
+/// Corresponds to the `#EXT-X-SKIP` tag.
+///
 /// <https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.5.2>
 #[derive(Debug, Clone)]
 pub struct Skip<'a> {
@@ -87,6 +100,7 @@ impl<'a> TryFrom<ParsedTag<'a>> for Skip<'a> {
 }
 
 impl<'a> Skip<'a> {
+    /// Constructs a new `Skip` tag.
     pub fn new(attribute_list: SkipAttributeList<'a>) -> Self {
         let output_line = Cow::Owned(calculate_line(&attribute_list));
         let SkipAttributeList {
@@ -102,14 +116,29 @@ impl<'a> Skip<'a> {
         }
     }
 
+    /// Starts a builder for producing `Self`.
+    ///
+    /// For example, we could construct a `Skip` as such:
+    /// ```
+    /// # use m3u8::tag::hls::Skip;
+    /// let skip = Skip::builder(1000)
+    ///     .with_recently_removed_dateranges("id_1\tid_2\tid_3")
+    ///     .finish();
+    /// ```
     pub fn builder(skipped_segments: u64) -> SkipBuilder<'a> {
         SkipBuilder::new(skipped_segments)
     }
 
+    /// Corresponds to the `SKIPPED-SEGMENTS` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn skipped_segments(&self) -> u64 {
         self.skipped_segments
     }
 
+    /// Corresponds to the `RECENTLY-REMOVED-DATERANGES` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn recently_removed_dateranges(&self) -> Option<&str> {
         if let Some(recently_removed_dateranges) = &self.recently_removed_dateranges {
             Some(recently_removed_dateranges)
@@ -121,12 +150,18 @@ impl<'a> Skip<'a> {
         }
     }
 
+    /// Sets the `SKIPPED-SEGMENTS` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_skipped_segments(&mut self, skipped_segments: u64) {
         self.attribute_list.remove(SKIPPED_SEGMENTS);
         self.skipped_segments = skipped_segments;
         self.output_line_is_dirty = true;
     }
 
+    /// Sets the `RECENTLY-REMOVED-DATERANGES` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_recently_removed_dateranges(
         &mut self,
         recently_removed_dateranges: impl Into<Cow<'a, str>>,
@@ -136,6 +171,9 @@ impl<'a> Skip<'a> {
         self.output_line_is_dirty = true;
     }
 
+    /// Unsets the `RECENTLY-REMOVED-DATERANGES` attribute (sets it to `None`).
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_recently_removed_dateranges(&mut self) {
         self.attribute_list.remove(RECENTLY_REMOVED_DATERANGES);
         self.recently_removed_dateranges = None;

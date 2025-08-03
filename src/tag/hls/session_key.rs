@@ -8,15 +8,34 @@ use crate::{
 };
 use std::{borrow::Cow, collections::HashMap};
 
+/// The attribute list for the tag (`#EXT-X-SESSION-KEY:<attribute-list>`).
+///
+/// See [`Key`] for a link to the HLS documentation for this attribute.
 #[derive(Debug, PartialEq, Clone)]
 pub struct SessionKeyAttributeList<'a> {
+    /// Corresponds to the `METHOD` attribute.
+    ///
+    /// See [`SessionKey`] for a link to the HLS documentation for this attribute.
     pub method: Cow<'a, str>,
+    /// Corresponds to the `URI` attribute.
+    ///
+    /// See [`SessionKey`] for a link to the HLS documentation for this attribute.
     pub uri: Cow<'a, str>,
+    /// Corresponds to the `IV` attribute.
+    ///
+    /// See [`SessionKey`] for a link to the HLS documentation for this attribute.
     pub iv: Option<Cow<'a, str>>,
+    /// Corresponds to the `KEYFORMAT` attribute.
+    ///
+    /// See [`SessionKey`] for a link to the HLS documentation for this attribute.
     pub keyformat: Option<Cow<'a, str>>,
+    /// Corresponds to the `KEYFORMATVERSIONS` attribute.
+    ///
+    /// See [`SessionKey`] for a link to the HLS documentation for this attribute.
     pub keyformatversions: Option<Cow<'a, str>>,
 }
 
+/// A builder for convenience in constructing a [`SessionKey`].
 #[derive(Debug, PartialEq, Clone)]
 pub struct SessionKeyBuilder<'a> {
     method: Cow<'a, str>,
@@ -26,6 +45,7 @@ pub struct SessionKeyBuilder<'a> {
     keyformatversions: Option<Cow<'a, str>>,
 }
 impl<'a> SessionKeyBuilder<'a> {
+    /// Create a new builder.
     pub fn new(method: impl Into<Cow<'a, str>>, uri: impl Into<Cow<'a, str>>) -> Self {
         Self {
             method: method.into(),
@@ -36,6 +56,7 @@ impl<'a> SessionKeyBuilder<'a> {
         }
     }
 
+    /// Finish building and construct the `SessionKey`.
     pub fn finish(self) -> SessionKey<'a> {
         SessionKey::new(SessionKeyAttributeList {
             method: self.method,
@@ -46,20 +67,25 @@ impl<'a> SessionKeyBuilder<'a> {
         })
     }
 
+    /// Add the provided `iv` to the attributes built into `SessionKey`.
     pub fn with_iv(mut self, iv: impl Into<Cow<'a, str>>) -> Self {
         self.iv = Some(iv.into());
         self
     }
+    /// Add the provided `keyformat` to the attributes built into `SessionKey`.
     pub fn with_keyformat(mut self, keyformat: impl Into<Cow<'a, str>>) -> Self {
         self.keyformat = Some(keyformat.into());
         self
     }
+    /// Add the provided `keyformatversions` to the attributes built into `SessionKey`.
     pub fn with_keyformatversions(mut self, keyformatversions: impl Into<Cow<'a, str>>) -> Self {
         self.keyformatversions = Some(keyformatversions.into());
         self
     }
 }
 
+/// Corresponds to the `#EXT-X-SESSION-KEY` tag.
+///
 /// <https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.6.5>
 #[derive(Debug, Clone)]
 pub struct SessionKey<'a> {
@@ -112,6 +138,7 @@ impl<'a> TryFrom<ParsedTag<'a>> for SessionKey<'a> {
 }
 
 impl<'a> SessionKey<'a> {
+    /// Constructs a new `SessionKey` tag.
     pub fn new(attribute_list: SessionKeyAttributeList<'a>) -> Self {
         let output_line = Cow::Owned(calculate_line(&attribute_list));
         let SessionKeyAttributeList {
@@ -133,6 +160,16 @@ impl<'a> SessionKey<'a> {
         }
     }
 
+    /// Starts a builder for producing `Self`.
+    ///
+    /// For example, we could construct a `SessionKey` as such:
+    /// ```
+    /// # use m3u8::tag::hls::{SessionKey, Method};
+    /// let session_key = SessionKey::builder(Method::SampleAes, "skd://1234")
+    ///     .with_keyformat("com.apple.streamingkeydelivery")
+    ///     .with_keyformatversions("1")
+    ///     .finish();
+    /// ```
     pub fn builder(
         method: impl Into<Cow<'a, str>>,
         uri: impl Into<Cow<'a, str>>,
@@ -140,14 +177,23 @@ impl<'a> SessionKey<'a> {
         SessionKeyBuilder::new(method, uri)
     }
 
+    /// Corresponds to the `METHOD` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn method(&self) -> EnumeratedString<Method> {
         EnumeratedString::from(self.method.as_ref())
     }
 
+    /// Corresponds to the `URI` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn uri(&self) -> &str {
         &self.uri
     }
 
+    /// Corresponds to the `IV` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn iv(&self) -> Option<&str> {
         if let Some(iv) = &self.iv {
             Some(iv)
@@ -159,6 +205,9 @@ impl<'a> SessionKey<'a> {
         }
     }
 
+    /// Corresponds to the `KEYFORMAT` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn keyformat(&self) -> &str {
         if let Some(keyformat) = &self.keyformat {
             keyformat
@@ -170,6 +219,9 @@ impl<'a> SessionKey<'a> {
         }
     }
 
+    /// Corresponds to the `KEYFORMATVERSIONS` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn keyformatversions(&self) -> Option<&str> {
         if let Some(keyformatversions) = &self.keyformatversions {
             Some(keyformatversions)
@@ -183,48 +235,72 @@ impl<'a> SessionKey<'a> {
         }
     }
 
+    /// Sets the `METHOD` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_method(&mut self, method: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(METHOD);
         self.method = method.into();
         self.output_line_is_dirty = true;
     }
 
+    /// Sets the `URI` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_uri(&mut self, uri: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(URI);
         self.uri = uri.into();
         self.output_line_is_dirty = true;
     }
 
+    /// Sets the `IV` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_iv(&mut self, iv: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(IV);
         self.iv = Some(iv.into());
         self.output_line_is_dirty = true;
     }
 
+    /// Unset the `IV` attribute (sets it to `None`).
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_iv(&mut self) {
         self.attribute_list.remove(IV);
         self.iv = None;
         self.output_line_is_dirty = true;
     }
 
+    /// Sets the `KEYFORMAT` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_keyformat(&mut self, keyformat: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(KEYFORMAT);
         self.keyformat = Some(keyformat.into());
         self.output_line_is_dirty = true;
     }
 
+    /// Unset the `KEYFORMAT` attribute (sets it to `None`).
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_keyformat(&mut self) {
         self.attribute_list.remove(KEYFORMAT);
         self.keyformat = None;
         self.output_line_is_dirty = true;
     }
 
+    /// Sets the `KEYFORMATVERSIONS` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_keyformatversions(&mut self, keyformatversions: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(KEYFORMATVERSIONS);
         self.keyformatversions = Some(keyformatversions.into());
         self.output_line_is_dirty = true;
     }
 
+    /// Unset the `KEYFORMATVERSIONS` attribute (sets it to `None`).
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_keyformatversions(&mut self) {
         self.attribute_list.remove(KEYFORMATVERSIONS);
         self.keyformatversions = None;

@@ -4,6 +4,8 @@ use crate::{
 };
 use std::borrow::Cow;
 
+/// Corresponds to the `#EXT-X-TARGETDURATION` tag.
+///
 /// <https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.3.1>
 #[derive(Debug, Clone)]
 pub struct Targetduration<'a> {
@@ -37,6 +39,7 @@ impl<'a> TryFrom<ParsedTag<'a>> for Targetduration<'a> {
 }
 
 impl<'a> Targetduration<'a> {
+    /// Construct a new `Targetduration` tag.
     pub fn new(target_duration: u64) -> Self {
         Self {
             target_duration,
@@ -45,10 +48,16 @@ impl<'a> Targetduration<'a> {
         }
     }
 
+    /// Corresponds to the value of the tag (`#EXT-X-TARGETDURATION:<s>`).
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn target_duration(&self) -> u64 {
         self.target_duration
     }
 
+    /// Sets the value of the tag.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_target_duration(&mut self, target_duration: u64) {
         self.target_duration = target_duration;
         self.output_line_is_dirty = true;
