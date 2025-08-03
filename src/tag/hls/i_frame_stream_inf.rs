@@ -11,23 +11,69 @@ use crate::{
 };
 use std::{borrow::Cow, collections::HashMap};
 
+/// The attribute list for the tag (`#EXT-X-I-FRAME-STREAM-INF:<attribute-list>`)
+///
+/// See [`IFrameStreamInf`] for a link to the HLS documentation for this attribute.
 pub struct IFrameStreamInfAttributeList<'a> {
+    /// Corresponds to the `URI` attribute.
+    ///
+    /// See [`IFrameStreamInf`] for a link to the HLS documentation for this attribute.
     pub uri: Cow<'a, str>,
+    /// Corresponds to the BANDWIDTH attribute.
+    ///
+    /// See [`IFrameStreamInf`] for a link to the HLS documentation for this attribute.
     pub bandwidth: u64,
+    /// Corresponds to the AVERAGE-BANDWIDTH attribute.
+    ///
+    /// See [`IFrameStreamInf`] for a link to the HLS documentation for this attribute.
     pub average_bandwidth: Option<u64>,
+    /// Corresponds to the SCORE attribute.
+    ///
+    /// See [`IFrameStreamInf`] for a link to the HLS documentation for this attribute.
     pub score: Option<f64>,
+    /// Corresponds to the CODECS attribute.
+    ///
+    /// See [`IFrameStreamInf`] for a link to the HLS documentation for this attribute.
     pub codecs: Option<Cow<'a, str>>,
+    /// Corresponds to the SUPPLEMENTAL-CODECS attribute.
+    ///
+    /// See [`IFrameStreamInf`] for a link to the HLS documentation for this attribute.
     pub supplemental_codecs: Option<Cow<'a, str>>,
+    /// Corresponds to the RESOLUTION attribute.
+    ///
+    /// See [`IFrameStreamInf`] for a link to the HLS documentation for this attribute.
     pub resolution: Option<DecimalResolution>,
+    /// Corresponds to the HDCP-LEVEL attribute.
+    ///
+    /// See [`IFrameStreamInf`] for a link to the HLS documentation for this attribute.
     pub hdcp_level: Option<Cow<'a, str>>,
+    /// Corresponds to the ALLOWED-CPC attribute.
+    ///
+    /// See [`IFrameStreamInf`] for a link to the HLS documentation for this attribute.
     pub allowed_cpc: Option<Cow<'a, str>>,
+    /// Corresponds to the VIDEO-RANGE attribute.
+    ///
+    /// See [`IFrameStreamInf`] for a link to the HLS documentation for this attribute.
     pub video_range: Option<Cow<'a, str>>,
+    /// Corresponds to the REQ-VIDEO-LAYOUT attribute.
+    ///
+    /// See [`IFrameStreamInf`] for a link to the HLS documentation for this attribute.
     pub req_video_layout: Option<Cow<'a, str>>,
+    /// Corresponds to the STABLE-VARIANT-ID attribute.
+    ///
+    /// See [`IFrameStreamInf`] for a link to the HLS documentation for this attribute.
     pub stable_variant_id: Option<Cow<'a, str>>,
+    /// Corresponds to the VIDEO attribute.
+    ///
+    /// See [`IFrameStreamInf`] for a link to the HLS documentation for this attribute.
     pub video: Option<Cow<'a, str>>,
+    /// Corresponds to the PATHWAY-ID attribute.
+    ///
+    /// See [`IFrameStreamInf`] for a link to the HLS documentation for this attribute.
     pub pathway_id: Option<Cow<'a, str>>,
 }
 
+/// A builder for convenience in constructing a [`IFrameStreamInf`].
 pub struct IFrameStreamInfBuilder<'a> {
     uri: Cow<'a, str>,
     bandwidth: u64,
@@ -45,6 +91,7 @@ pub struct IFrameStreamInfBuilder<'a> {
     pathway_id: Option<Cow<'a, str>>,
 }
 impl<'a> IFrameStreamInfBuilder<'a> {
+    /// Creates a new builder.
     pub fn new(uri: impl Into<Cow<'a, str>>, bandwidth: u64) -> Self {
         Self {
             uri: uri.into(),
@@ -64,6 +111,7 @@ impl<'a> IFrameStreamInfBuilder<'a> {
         }
     }
 
+    /// Finish building and construct the `IFrameStreamInf`.
     pub fn finish(self) -> IFrameStreamInf<'a> {
         IFrameStreamInf::new(IFrameStreamInfAttributeList {
             uri: self.uri,
@@ -83,21 +131,25 @@ impl<'a> IFrameStreamInfBuilder<'a> {
         })
     }
 
+    /// Add the provided `average_bandwidth` to the attributes built into `IFrameStreamInf`.
     pub fn with_average_bandwidth(mut self, average_bandwidth: u64) -> Self {
         self.average_bandwidth = Some(average_bandwidth);
         self
     }
 
+    /// Add the provided `score` to the attributes built into `IFrameStreamInf`.
     pub fn with_score(mut self, score: f64) -> Self {
         self.score = Some(score);
         self
     }
 
+    /// Add the provided `codecs` to the attributes built into `IFrameStreamInf`.
     pub fn with_codecs(mut self, codecs: impl Into<Cow<'a, str>>) -> Self {
         self.codecs = Some(codecs.into());
         self
     }
 
+    /// Add the provided `supplemental_codecs` to the attributes built into `IFrameStreamInf`.
     pub fn with_supplemental_codecs(
         mut self,
         supplemental_codecs: impl Into<Cow<'a, str>>,
@@ -106,41 +158,101 @@ impl<'a> IFrameStreamInfBuilder<'a> {
         self
     }
 
+    /// Add the provided `resolution` to the attributes built into `IFrameStreamInf`.
     pub fn with_resolution(mut self, resolution: DecimalResolution) -> Self {
         self.resolution = Some(resolution);
         self
     }
 
+    /// Add the provided `hdcp_level` to the attributes built into `IFrameStreamInf`.
+    ///
+    /// Note that [`HdcpLevel`] implements `Into<Cow<str>>` and therefore can be used directly here.
+    /// For example:
+    /// ```
+    /// # use m3u8::tag::hls::{IFrameStreamInfBuilder, HdcpLevel};
+    /// let builder = IFrameStreamInfBuilder::new("uri", 10000000)
+    ///     .with_hdcp_level(HdcpLevel::Type1);
+    /// ```
+    /// Alternatively, a string slice can be used:
+    /// ```
+    /// # use m3u8::tag::hls::{IFrameStreamInfBuilder, HdcpLevel};
+    /// let builder = IFrameStreamInfBuilder::new("uri", 10000000)
+    ///     .with_hdcp_level("TYPE-1");
+    /// ```
     pub fn with_hdcp_level(mut self, hdcp_level: impl Into<Cow<'a, str>>) -> Self {
         self.hdcp_level = Some(hdcp_level.into());
         self
     }
 
+    /// Add the provided `allowed_cpc` to the attributes built into `IFrameStreamInf`.
     pub fn with_allowed_cpc(mut self, allowed_cpc: impl Into<Cow<'a, str>>) -> Self {
         self.allowed_cpc = Some(allowed_cpc.into());
         self
     }
 
+    /// Add the provided `video_range` to the attributes built into `IFrameStreamInf`.
+    ///
+    /// Note that [`VideoRange`] implements `Into<Cow<str>>` and therefore can be used directly
+    /// here. For example:
+    /// ```
+    /// # use m3u8::tag::hls::{IFrameStreamInfBuilder, VideoRange};
+    /// let builder = IFrameStreamInfBuilder::new("uri", 10000000)
+    ///     .with_video_range(VideoRange::Pq);
+    /// ```
+    /// Alternatively, a string slice can be used:
+    /// ```
+    /// # use m3u8::tag::hls::{IFrameStreamInfBuilder, VideoRange};
+    /// let builder = IFrameStreamInfBuilder::new("uri", 10000000)
+    ///     .with_video_range("PQ");
+    /// ```
     pub fn with_video_range(mut self, video_range: impl Into<Cow<'a, str>>) -> Self {
         self.video_range = Some(video_range.into());
         self
     }
 
+    /// Add the provided `req_video_layout` to the attributes built into `IFrameStreamInf`.
+    ///
+    /// Note that [`crate::tag::hls::VideoLayout`] implements `Into<Cow<str>>` and therefore can be
+    /// used directly here. For example:
+    /// ```
+    /// # use m3u8::tag::hls::{
+    /// # IFrameStreamInfBuilder, VideoLayout, EnumeratedStringList, VideoChannelSpecifier,
+    /// # VideoProjectionSpecifier
+    /// # };
+    /// let builder = IFrameStreamInfBuilder::new("uri", 10000000)
+    ///     .with_req_video_layout(VideoLayout::new(
+    ///         EnumeratedStringList::from([VideoChannelSpecifier::Stereo]),
+    ///         EnumeratedStringList::from([VideoProjectionSpecifier::Equirectangular]),
+    ///     ));
+    /// ```
+    /// Alternatively, a string slice can be used, but care should be taken to follow the correct
+    /// syntax defined for `REQ-VIDEO-LAYOUT`.
+    /// ```
+    /// # use m3u8::tag::hls::{
+    /// # IFrameStreamInfBuilder, VideoLayout, EnumeratedStringList, VideoChannelSpecifier,
+    /// # VideoProjectionSpecifier
+    /// # };
+    /// let builder = IFrameStreamInfBuilder::new("uri", 10000000)
+    ///     .with_req_video_layout("CH-STEREO/PROJ-EQUI");
+    /// ```
     pub fn with_req_video_layout(mut self, req_video_layout: impl Into<Cow<'a, str>>) -> Self {
         self.req_video_layout = Some(req_video_layout.into());
         self
     }
 
+    /// Add the provided `stable_variant_id` to the attributes built into `IFrameStreamInf`.
     pub fn with_stable_variant_id(mut self, stable_variant_id: impl Into<Cow<'a, str>>) -> Self {
         self.stable_variant_id = Some(stable_variant_id.into());
         self
     }
 
+    /// Add the provided `video` to the attributes built into `IFrameStreamInf`.
     pub fn with_video(mut self, video: impl Into<Cow<'a, str>>) -> Self {
         self.video = Some(video.into());
         self
     }
 
+    /// Add the provided `pathway_id` to the attributes built into `IFrameStreamInf`.
     pub fn with_pathway_id(mut self, pathway_id: impl Into<Cow<'a, str>>) -> Self {
         self.pathway_id = Some(pathway_id.into());
         self
@@ -227,6 +339,7 @@ impl<'a> TryFrom<ParsedTag<'a>> for IFrameStreamInf<'a> {
 }
 
 impl<'a> IFrameStreamInf<'a> {
+    /// Constructs a new `IFrameStreamInf` tag.
     pub fn new(attribute_list: IFrameStreamInfAttributeList<'a>) -> Self {
         let output_line = Cow::Owned(calculate_line(&attribute_list));
         let IFrameStreamInfAttributeList {
@@ -266,20 +379,42 @@ impl<'a> IFrameStreamInf<'a> {
         }
     }
 
+    /// Starts a builder for producing `Self`.
+    ///
+    /// For example, we could construct a `IFrameStreamInf` as such:
+    /// ```
+    /// # use m3u8::tag::{value::DecimalResolution, hls::{IFrameStreamInf, HdcpLevel, VideoRange}};
+    /// let i_frame_stream_inf = IFrameStreamInf::builder("uri", 10000000)
+    ///     .with_codecs("hvc1.2.4.L153.b0")
+    ///     .with_supplemental_codecs("dvh1.08.07/db4h")
+    ///     .with_resolution(DecimalResolution { width: 3840, height: 2160 })
+    ///     .with_hdcp_level(HdcpLevel::Type1)
+    ///     .with_video_range(VideoRange::Hlg)
+    ///     .finish();
+    /// ```
     pub fn builder(uri: impl Into<Cow<'a, str>>, bandwidth: u64) -> IFrameStreamInfBuilder<'a> {
         IFrameStreamInfBuilder::new(uri, bandwidth)
     }
 
     // === GETTERS ===
 
+    /// Corresponds to the `URI` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn uri(&self) -> &str {
         &self.uri
     }
 
+    /// Corresponds to the `BANDWIDTH` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn bandwidth(&self) -> u64 {
         self.bandwidth
     }
 
+    /// Corresponds to the `AVERAGE-BANDWIDTH` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn average_bandwidth(&self) -> Option<u64> {
         if let Some(average_bandwidth) = self.average_bandwidth {
             Some(average_bandwidth)
@@ -291,6 +426,9 @@ impl<'a> IFrameStreamInf<'a> {
         }
     }
 
+    /// Corresponds to the `SCORE` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn score(&self) -> Option<f64> {
         if let Some(score) = self.score {
             Some(score)
@@ -302,6 +440,9 @@ impl<'a> IFrameStreamInf<'a> {
         }
     }
 
+    /// Corresponds to the `CODECS` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn codecs(&self) -> Option<&str> {
         if let Some(codecs) = &self.codecs {
             Some(codecs)
@@ -313,6 +454,9 @@ impl<'a> IFrameStreamInf<'a> {
         }
     }
 
+    /// Corresponds to the `SUPPLEMENTAL-CODECS` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn supplemental_codecs(&self) -> Option<&str> {
         if let Some(supplemental_codecs) = &self.supplemental_codecs {
             Some(supplemental_codecs)
@@ -324,6 +468,9 @@ impl<'a> IFrameStreamInf<'a> {
         }
     }
 
+    /// Corresponds to the `RESOLUTION` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn resolution(&self) -> Option<DecimalResolution> {
         if let Some(decimal_resolution) = self.resolution {
             Some(decimal_resolution)
@@ -337,6 +484,9 @@ impl<'a> IFrameStreamInf<'a> {
         }
     }
 
+    /// Corresponds to the `HDCP-LEVEL` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn hdcp_level(&self) -> Option<EnumeratedString<HdcpLevel>> {
         if let Some(hdcp_level) = &self.hdcp_level {
             Some(EnumeratedString::from(hdcp_level.as_ref()))
@@ -348,6 +498,9 @@ impl<'a> IFrameStreamInf<'a> {
         }
     }
 
+    /// Corresponds to the `ALLOWED-CPC` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn allowed_cpc(&self) -> Option<&str> {
         if let Some(allowed_cpc) = &self.allowed_cpc {
             Some(allowed_cpc)
@@ -359,6 +512,9 @@ impl<'a> IFrameStreamInf<'a> {
         }
     }
 
+    /// Corresponds to the `VIDEO-RANGE` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn video_range(&self) -> Option<EnumeratedString<VideoRange>> {
         if let Some(video_range) = &self.video_range {
             Some(EnumeratedString::from(video_range.as_ref()))
@@ -370,6 +526,12 @@ impl<'a> IFrameStreamInf<'a> {
         }
     }
 
+    /// Corresponds to the `REQ-VIDEO-LAYOUT` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
+    ///
+    /// See [`crate::tag::hls::StreamInf::req_video_layout`] for more information on usage of
+    /// [`VideoLayout`].
     pub fn req_video_layout(&self) -> Option<VideoLayout> {
         if let Some(req_video_layout) = &self.req_video_layout {
             Some(VideoLayout::from(req_video_layout.as_ref()))
@@ -381,6 +543,9 @@ impl<'a> IFrameStreamInf<'a> {
         }
     }
 
+    /// Corresponds to the `STABLE-VARIANT-ID` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn stable_variant_id(&self) -> Option<&str> {
         if let Some(stable_variant_id) = &self.stable_variant_id {
             Some(stable_variant_id)
@@ -392,6 +557,9 @@ impl<'a> IFrameStreamInf<'a> {
         }
     }
 
+    /// Corresponds to the `VIDEO` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn video(&self) -> Option<&str> {
         if let Some(video) = &self.video {
             Some(video)
@@ -403,6 +571,9 @@ impl<'a> IFrameStreamInf<'a> {
         }
     }
 
+    /// Corresponds to the `PATHWAY-ID` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn pathway_id(&self) -> Option<&str> {
         if let Some(pathway_id) = &self.pathway_id {
             Some(pathway_id)
@@ -416,156 +587,237 @@ impl<'a> IFrameStreamInf<'a> {
 
     // === SETTERS ===
 
+    /// Sets the `URI` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_uri(&mut self, uri: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(URI);
         self.uri = uri.into();
         self.output_line_is_dirty = true;
     }
 
+    /// Sets the `BANDWIDTH` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_bandwidth(&mut self, bandwidth: u64) {
         self.attribute_list.remove(BANDWIDTH);
         self.bandwidth = bandwidth;
         self.output_line_is_dirty = true;
     }
 
+    /// Sets the `AVERAGE-BANDWIDTH` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_average_bandwidth(&mut self, average_bandwidth: u64) {
         self.attribute_list.remove(AVERAGE_BANDWIDTH);
         self.average_bandwidth = Some(average_bandwidth);
         self.output_line_is_dirty = true;
     }
 
+    /// Unsets the `AVERAGE-BANDWIDTH` attribute (sets it to `None`).
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_average_bandwidth(&mut self) {
         self.attribute_list.remove(AVERAGE_BANDWIDTH);
         self.average_bandwidth = None;
         self.output_line_is_dirty = true;
     }
 
+    /// Sets the `SCORE` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_score(&mut self, score: f64) {
         self.attribute_list.remove(SCORE);
         self.score = Some(score);
         self.output_line_is_dirty = true;
     }
 
+    /// Unsets the `SCORE` attribute (sets it to `None`).
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_score(&mut self) {
         self.attribute_list.remove(SCORE);
         self.score = None;
         self.output_line_is_dirty = true;
     }
 
+    /// Sets the `CODECS` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_codecs(&mut self, codecs: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(CODECS);
         self.codecs = Some(codecs.into());
         self.output_line_is_dirty = true;
     }
 
+    /// Unsets the `CODECS` attribute (sets it to `None`).
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_codecs(&mut self) {
         self.attribute_list.remove(CODECS);
         self.codecs = None;
         self.output_line_is_dirty = true;
     }
 
+    /// Sets the `SUPPLEMENTAL-CODECS` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_supplemental_codecs(&mut self, supplemental_codecs: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(SUPPLEMENTAL_CODECS);
         self.supplemental_codecs = Some(supplemental_codecs.into());
         self.output_line_is_dirty = true;
     }
 
+    /// Unsets the `SUPPLEMENTAL-CODECS` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_supplemental_codecs(&mut self) {
         self.attribute_list.remove(SUPPLEMENTAL_CODECS);
         self.supplemental_codecs = None;
         self.output_line_is_dirty = true;
     }
 
+    /// Sets the `RESOLUTION` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_resolution(&mut self, resolution: DecimalResolution) {
         self.attribute_list.remove(RESOLUTION);
         self.resolution = Some(resolution);
         self.output_line_is_dirty = true;
     }
 
+    /// Unsets the `RESOLUTION` attribute (sets it to `None`).
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_resolution(&mut self) {
         self.attribute_list.remove(RESOLUTION);
         self.resolution = None;
         self.output_line_is_dirty = true;
     }
 
+    /// Sets the `HDCP-LEVEL` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_hdcp_level(&mut self, hdcp_level: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(HDCP_LEVEL);
         self.hdcp_level = Some(hdcp_level.into());
         self.output_line_is_dirty = true;
     }
 
+    /// Unsets the `HDCP-LEVEL` attribute (sets it to `None`).
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_hdcp_level(&mut self) {
         self.attribute_list.remove(HDCP_LEVEL);
         self.hdcp_level = None;
         self.output_line_is_dirty = true;
     }
 
+    /// Sets the `ALLOWED-CPC` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_allowed_cpc(&mut self, allowed_cpc: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(ALLOWED_CPC);
         self.allowed_cpc = Some(allowed_cpc.into());
         self.output_line_is_dirty = true;
     }
 
+    /// Unsets the `ALLOWED-CPC` attribute (sets it to `None`).
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_allowed_cpc(&mut self) {
         self.attribute_list.remove(ALLOWED_CPC);
         self.allowed_cpc = None;
         self.output_line_is_dirty = true;
     }
 
+    /// Sets the `VIDEO-RANGE` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_video_range(&mut self, video_range: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(VIDEO_RANGE);
         self.video_range = Some(video_range.into());
         self.output_line_is_dirty = true;
     }
 
+    /// Unsets the `VIDEO-RANGE` attribute (sets it to `None`).
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_video_range(&mut self) {
         self.attribute_list.remove(VIDEO_RANGE);
         self.video_range = None;
         self.output_line_is_dirty = true;
     }
 
+    /// Sets the `REQ-VIDEO-LAYOUT` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
+    ///
+    /// See [`crate::tag::hls::StreamInf::set_req_video_layout`] for more information on how to use
+    /// this method.
     pub fn set_req_video_layout(&mut self, req_video_layout: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(REQ_VIDEO_LAYOUT);
         self.req_video_layout = Some(req_video_layout.into());
         self.output_line_is_dirty = true;
     }
 
+    /// Unsets the `REQ-VIDEO-LAYOUT` attribute (sets it to `None`).
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_req_video_layout(&mut self) {
         self.attribute_list.remove(REQ_VIDEO_LAYOUT);
         self.req_video_layout = None;
         self.output_line_is_dirty = true;
     }
 
+    /// Sets the `STABLE-VARIANT-ID` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_stable_variant_id(&mut self, stable_variant_id: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(STABLE_VARIANT_ID);
         self.stable_variant_id = Some(stable_variant_id.into());
         self.output_line_is_dirty = true;
     }
 
+    /// Unsets the `STABLE-VARIANT-ID` attribute (sets it to `None`).
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_stable_variant_id(&mut self) {
         self.attribute_list.remove(STABLE_VARIANT_ID);
         self.stable_variant_id = None;
         self.output_line_is_dirty = true;
     }
 
+    /// Sets the `VIDEO` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_video(&mut self, video: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(VIDEO);
         self.video = Some(video.into());
         self.output_line_is_dirty = true;
     }
 
+    /// Unsets the `VIDEO` attribute (sets it to `None`).
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_video(&mut self) {
         self.attribute_list.remove(VIDEO);
         self.video = None;
         self.output_line_is_dirty = true;
     }
 
+    /// Sets the `PATHWAY-ID` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_pathway_id(&mut self, pathway_id: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(PATHWAY_ID);
         self.pathway_id = Some(pathway_id.into());
         self.output_line_is_dirty = true;
     }
 
+    /// Unsets the `PATHWAY-ID` attribute (sets it to `None`).
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_pathway_id(&mut self) {
         self.attribute_list.remove(PATHWAY_ID);
         self.pathway_id = None;
