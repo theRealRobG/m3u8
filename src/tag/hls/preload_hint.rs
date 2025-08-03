@@ -9,6 +9,9 @@ use crate::{
 };
 use std::{borrow::Cow, collections::HashMap, fmt::Display};
 
+/// Corresponds to the `#EXT-X-PRELOAD-HINT:TYPE` attribute.
+///
+/// See [`PreloadHint`] for a link to the HLS documentation for this attribute.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum PreloadHintType {
     /// The resource is a Partial Segment.
@@ -52,14 +55,30 @@ impl From<PreloadHintType> for EnumeratedString<'_, PreloadHintType> {
 const PART: &str = "PART";
 const MAP: &str = "MAP";
 
+/// The attribute list for the tag (`#EXT-X-PRELOAD-HINT:<attribute-list>`).
+///
+/// See [`PreloadHint`] for a link to the HLS documentation for this attribute.
 #[derive(Debug, PartialEq, Clone)]
 pub struct PreloadHintAttributeList<'a> {
+    /// Corresponds to the `TYPE` attribute.
+    ///
+    /// See [`PreloadHint`] for a link to the HLS documentation for this attribute.
     pub hint_type: Cow<'a, str>,
+    /// Corresponds to the `URI` attribute.
+    ///
+    /// See [`PreloadHint`] for a link to the HLS documentation for this attribute.
     pub uri: Cow<'a, str>,
+    /// Corresponds to the `BYTERANGE-START` attribute.
+    ///
+    /// See [`PreloadHint`] for a link to the HLS documentation for this attribute.
     pub byterange_start: Option<u64>,
+    /// Corresponds to the `BYTERANGE-LENGTH` attribute.
+    ///
+    /// See [`PreloadHint`] for a link to the HLS documentation for this attribute.
     pub byterange_length: Option<u64>,
 }
 
+/// A builder for convenience in constructing a [`PreloadHint`].
 #[derive(Debug, PartialEq, Clone)]
 pub struct PreloadHintBuilder<'a> {
     hint_type: Cow<'a, str>,
@@ -68,6 +87,7 @@ pub struct PreloadHintBuilder<'a> {
     byterange_length: Option<u64>,
 }
 impl<'a> PreloadHintBuilder<'a> {
+    /// Creates a new builder.
     pub fn new(hint_type: impl Into<Cow<'a, str>>, uri: impl Into<Cow<'a, str>>) -> Self {
         Self {
             hint_type: hint_type.into(),
@@ -77,6 +97,7 @@ impl<'a> PreloadHintBuilder<'a> {
         }
     }
 
+    /// Finish building and construct the `PreloadHint`.
     pub fn finish(self) -> PreloadHint<'a> {
         PreloadHint::new(PreloadHintAttributeList {
             hint_type: self.hint_type,
@@ -86,17 +107,21 @@ impl<'a> PreloadHintBuilder<'a> {
         })
     }
 
+    /// Add the provided `byterange_start` to the attributes built into `PreloadHint`.
     pub fn with_byterange_start(mut self, byterange_start: u64) -> Self {
         self.byterange_start = Some(byterange_start);
         self
     }
 
+    /// Add the provided `byterange_length` to the attributes built into `PreloadHint`.
     pub fn with_byterange_length(mut self, byterange_length: u64) -> Self {
         self.byterange_length = Some(byterange_length);
         self
     }
 }
 
+/// Corresponds to the `#EXT-X-PRELOAD-HINT` tag.
+///
 /// <https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.5.3>
 #[derive(Debug, Clone)]
 pub struct PreloadHint<'a> {
@@ -146,6 +171,7 @@ impl<'a> TryFrom<ParsedTag<'a>> for PreloadHint<'a> {
 }
 
 impl<'a> PreloadHint<'a> {
+    /// Constructs a new `PreloadHint` tag.
     pub fn new(attribute_list: PreloadHintAttributeList<'a>) -> Self {
         let output_line = Cow::Owned(calculate_line(&attribute_list));
         let PreloadHintAttributeList {
@@ -165,6 +191,16 @@ impl<'a> PreloadHint<'a> {
         }
     }
 
+    /// Starts a builder for producing `Self`.
+    ///
+    /// For example, we could construct a `PreloadHint` as such:
+    /// ```
+    /// # use m3u8::tag::hls::{PreloadHint, PreloadHintType};
+    /// let preload_hint = PreloadHint::builder(PreloadHintType::Part, "part.100.2.mp4")
+    ///     .with_byterange_start(1024)
+    ///     .with_byterange_length(1024)
+    ///     .finish();
+    /// ```
     pub fn builder(
         hint_type: impl Into<Cow<'a, str>>,
         uri: impl Into<Cow<'a, str>>,
@@ -172,14 +208,23 @@ impl<'a> PreloadHint<'a> {
         PreloadHintBuilder::new(hint_type, uri)
     }
 
+    /// Corresponds to the `TYPE` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn hint_type(&self) -> EnumeratedString<PreloadHintType> {
         EnumeratedString::from(self.hint_type.as_ref())
     }
 
+    /// Corresponds to the `URI` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn uri(&self) -> &str {
         &self.uri
     }
 
+    /// Corresponds to the `BYTERANGE-START` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn byterange_start(&self) -> u64 {
         if let Some(byterange_start) = self.byterange_start {
             byterange_start
@@ -191,6 +236,9 @@ impl<'a> PreloadHint<'a> {
         }
     }
 
+    /// Corresponds to the `BYTERANGE-LENGTH` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn byterange_length(&self) -> Option<u64> {
         if let Some(byterange_length) = self.byterange_length {
             Some(byterange_length)
@@ -202,36 +250,54 @@ impl<'a> PreloadHint<'a> {
         }
     }
 
+    /// Sets the `TYPE` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_hint_type(&mut self, hint_type: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(TYPE);
         self.hint_type = hint_type.into();
         self.output_line_is_dirty = true;
     }
 
+    /// Sets the `URI` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_uri(&mut self, uri: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(URI);
         self.uri = uri.into();
         self.output_line_is_dirty = true;
     }
 
+    /// Sets the `BYTERANGE-START` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_byterange_start(&mut self, byterange_start: u64) {
         self.attribute_list.remove(BYTERANGE_START);
         self.byterange_start = Some(byterange_start);
         self.output_line_is_dirty = true;
     }
 
+    /// Unsets the `BYTERANGE-START` attribute (sets it to `None`).
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_byterange_start(&mut self) {
         self.attribute_list.remove(BYTERANGE_START);
         self.byterange_start = None;
         self.output_line_is_dirty = true;
     }
 
+    /// Sets the `BYTERANGE-LENGTH` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_byterange_length(&mut self, byterange_length: u64) {
         self.attribute_list.remove(BYTERANGE_LENGTH);
         self.byterange_length = Some(byterange_length);
         self.output_line_is_dirty = true;
     }
 
+    /// Unsets the `BYTERANGE-LENGTH` attribute (sets it to `None`).
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_byterange_length(&mut self) {
         self.attribute_list.remove(BYTERANGE_LENGTH);
         self.byterange_length = None;

@@ -8,15 +8,34 @@ use crate::{
 };
 use std::{borrow::Cow, collections::HashMap};
 
+/// The attribute list for the tag (`#EXT-X-SERVER-CONTROL:<attribute-list>`).
+///
+/// See [`ServerControl`] for a link to the HLS documentation for this attribute.
 #[derive(Debug, PartialEq, Clone)]
 pub struct ServerControlAttributeList {
+    /// Corresponds to the `CAN-SKIP-UNTIL` attribute.
+    ///
+    /// See [`ServerControl`] for a link to the HLS documentation for this attribute.
     pub can_skip_until: Option<f64>,
+    /// Corresponds to the `CAN-SKIP-DATERANGES` attribute.
+    ///
+    /// See [`ServerControl`] for a link to the HLS documentation for this attribute.
     pub can_skip_dateranges: bool,
+    /// Corresponds to the `HOLD-BACK` attribute.
+    ///
+    /// See [`ServerControl`] for a link to the HLS documentation for this attribute.
     pub hold_back: Option<f64>,
+    /// Corresponds to the `PART-HOLD-BACK` attribute.
+    ///
+    /// See [`ServerControl`] for a link to the HLS documentation for this attribute.
     pub part_hold_back: Option<f64>,
+    /// Corresponds to the `CAN-BLOCK-RELOAD` attribute.
+    ///
+    /// See [`ServerControl`] for a link to the HLS documentation for this attribute.
     pub can_block_reload: bool,
 }
 
+/// A builder for convenience in constructing a [`ServerControl`].
 #[derive(Debug, PartialEq, Clone)]
 pub struct ServerControlBuilder {
     can_skip_until: Option<f64>,
@@ -26,6 +45,7 @@ pub struct ServerControlBuilder {
     can_block_reload: bool,
 }
 impl ServerControlBuilder {
+    /// Creates a new builder.
     pub fn new() -> Self {
         Self {
             can_skip_until: Default::default(),
@@ -36,6 +56,7 @@ impl ServerControlBuilder {
         }
     }
 
+    /// Finish building and construct the `ServerControl`.
     pub fn finish<'a>(self) -> ServerControl<'a> {
         ServerControl::new(ServerControlAttributeList {
             can_skip_until: self.can_skip_until,
@@ -46,22 +67,27 @@ impl ServerControlBuilder {
         })
     }
 
+    /// Add the provided `can_skip_until` to the attributes built into `ServerControl`
     pub fn with_can_skip_until(mut self, can_skip_until: f64) -> Self {
         self.can_skip_until = Some(can_skip_until);
         self
     }
+    /// Add the provided `can_skip_dateranges` to the attributes built into `ServerControl`
     pub fn with_can_skip_dateranges(mut self) -> Self {
         self.can_skip_dateranges = true;
         self
     }
+    /// Add the provided `hold_back` to the attributes built into `ServerControl`
     pub fn with_hold_back(mut self, hold_back: f64) -> Self {
         self.hold_back = Some(hold_back);
         self
     }
+    /// Add the provided `part_hold_back` to the attributes built into `ServerControl`
     pub fn with_part_hold_back(mut self, part_hold_back: f64) -> Self {
         self.part_hold_back = Some(part_hold_back);
         self
     }
+    /// Add the provided `can_block_reload` to the attributes built into `ServerControl`
     pub fn with_can_block_reload(mut self) -> Self {
         self.can_block_reload = true;
         self
@@ -73,6 +99,8 @@ impl Default for ServerControlBuilder {
     }
 }
 
+/// Corresponds to the `#EXT-X-SERVER-CONTROL` tag.
+///
 /// <https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.3.8>
 #[derive(Debug, Clone)]
 pub struct ServerControl<'a> {
@@ -119,6 +147,7 @@ impl<'a> TryFrom<ParsedTag<'a>> for ServerControl<'a> {
 }
 
 impl<'a> ServerControl<'a> {
+    /// Constructs a new `ServerControl` tag.
     pub fn new(attribute_list: ServerControlAttributeList) -> Self {
         let output_line = Cow::Owned(calculate_line(&attribute_list));
         let ServerControlAttributeList {
@@ -140,10 +169,23 @@ impl<'a> ServerControl<'a> {
         }
     }
 
+    /// Starts a builder for producing `Self`.
+    ///
+    /// For example, we could construct a `ServerControl` as such:
+    /// ```
+    /// # use m3u8::tag::hls::ServerControl;
+    /// let server_control = ServerControl::builder()
+    ///     .with_can_skip_until(36.0)
+    ///     .with_can_skip_dateranges()
+    ///     .finish();
+    /// ```
     pub fn builder() -> ServerControlBuilder {
         ServerControlBuilder::new()
     }
 
+    /// Corresponds to the `CAN-SKIP-UNTIL` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn can_skip_until(&self) -> Option<f64> {
         if let Some(can_skip_until) = self.can_skip_until {
             Some(can_skip_until)
@@ -157,6 +199,9 @@ impl<'a> ServerControl<'a> {
         }
     }
 
+    /// Corresponds to the `CAN-SKIP-DATERANGES` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn can_skip_dateranges(&self) -> bool {
         if let Some(can_skip_dateranges) = self.can_skip_dateranges {
             can_skip_dateranges
@@ -168,6 +213,9 @@ impl<'a> ServerControl<'a> {
         }
     }
 
+    /// Corresponds to the `HOLD-BACK` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn hold_back(&self) -> Option<f64> {
         if let Some(hold_back) = self.hold_back {
             Some(hold_back)
@@ -180,6 +228,9 @@ impl<'a> ServerControl<'a> {
             }
         }
     }
+    /// Corresponds to the `PART-HOLD-BACK` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn part_hold_back(&self) -> Option<f64> {
         if let Some(part_hold_back) = self.part_hold_back {
             Some(part_hold_back)
@@ -193,6 +244,9 @@ impl<'a> ServerControl<'a> {
         }
     }
 
+    /// Corresponds to the `CAN-BLOCK-RELOAD` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn can_block_reload(&self) -> bool {
         if let Some(can_block_reload) = self.can_block_reload {
             can_block_reload
@@ -204,48 +258,72 @@ impl<'a> ServerControl<'a> {
         }
     }
 
+    /// Sets the `CAN-SKIP-UNTIL` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_can_skip_until(&mut self, can_skip_until: f64) {
         self.attribute_list.remove(CAN_SKIP_UNTIL);
         self.can_skip_until = Some(can_skip_until);
         self.output_line_is_dirty = true;
     }
 
+    /// Unsets the `CAN-SKIP-UNTIL` attribute (sets it to `None`).
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_can_skip_until(&mut self) {
         self.attribute_list.remove(CAN_SKIP_UNTIL);
         self.can_skip_until = None;
         self.output_line_is_dirty = true;
     }
 
+    /// Sets the `CAN-SKIP-DATERANGES` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_can_skip_dateranges(&mut self, can_skip_dateranges: bool) {
         self.attribute_list.remove(CAN_SKIP_DATERANGES);
         self.can_skip_dateranges = Some(can_skip_dateranges);
         self.output_line_is_dirty = true;
     }
 
+    /// Sets the `HOLD-BACK` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_hold_back(&mut self, hold_back: f64) {
         self.attribute_list.remove(HOLD_BACK);
         self.hold_back = Some(hold_back);
         self.output_line_is_dirty = true;
     }
 
+    /// Unsets the `HOLD-BACK` attribute (sets it to `None`).
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_hold_back(&mut self) {
         self.attribute_list.remove(HOLD_BACK);
         self.hold_back = None;
         self.output_line_is_dirty = true;
     }
 
+    /// Sets the `PART-HOLD-BACK` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_part_hold_back(&mut self, part_hold_back: f64) {
         self.attribute_list.remove(PART_HOLD_BACK);
         self.part_hold_back = Some(part_hold_back);
         self.output_line_is_dirty = true;
     }
 
+    /// Unsets the `PART-HOLD-BACK` attribute (sets it to `None`).
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_part_hold_back(&mut self) {
         self.attribute_list.remove(PART_HOLD_BACK);
         self.part_hold_back = None;
         self.output_line_is_dirty = true;
     }
 
+    /// Sets the `CAN-BLOCK-RELOAD` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_can_block_reload(&mut self, can_block_reload: bool) {
         self.attribute_list.remove(CAN_BLOCK_RELOAD);
         self.can_block_reload = Some(can_block_reload);

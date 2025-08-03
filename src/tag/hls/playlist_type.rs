@@ -8,6 +8,8 @@ use crate::{
 };
 use std::borrow::Cow;
 
+/// Corresponds to the `#EXT-X-PLAYLIST-TYPE` tag.
+///
 /// <https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.3.5>
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct PlaylistType(HlsPlaylistType);
@@ -26,14 +28,21 @@ impl TryFrom<ParsedTag<'_>> for PlaylistType {
 }
 
 impl PlaylistType {
+    /// Construct a new `PlaylistType` tag.
     pub fn new(playlist_type: HlsPlaylistType) -> Self {
         Self(playlist_type)
     }
 
+    /// Corresponds to the value of the tag (`#EXT-X-PLAYLIST-TYPE:<type-enum>`).
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn playlist_type(&self) -> HlsPlaylistType {
         self.0
     }
 
+    /// Sets the value of the tag.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_playlist_type(&mut self, playlist_type: HlsPlaylistType) {
         self.0 = playlist_type;
     }

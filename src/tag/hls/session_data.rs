@@ -9,6 +9,9 @@ use crate::{
 };
 use std::{borrow::Cow, collections::HashMap, fmt::Display};
 
+/// Corresponds to the `#EXT-X-SESSION-DATA:FORMAT` attribute.
+///
+/// See [`SessionData`] for a link to the HLS documentation for this attribute.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Format {
     /// The URI MUST reference a JSON (RFC8259) format file.
@@ -52,15 +55,34 @@ impl From<Format> for EnumeratedString<'_, Format> {
 const JSON: &str = "JSON";
 const RAW: &str = "RAW";
 
+/// The attribute list for the tag (`#EXT-X-SESSION-DATA:<attribute-list>`).
+///
+/// See [`SessionData`] for a link to the HLS documentation for this attribute.
 #[derive(Debug, PartialEq, Clone)]
 pub struct SessionDataAttributeList<'a> {
+    /// Corresponds to the `DATA-ID` attribute.
+    ///
+    /// See [`SessionData`] for a link to the HLS documentation for this attribute.
     pub data_id: Cow<'a, str>,
+    /// Corresponds to the `VALUE` attribute.
+    ///
+    /// See [`SessionData`] for a link to the HLS documentation for this attribute.
     pub value: Option<Cow<'a, str>>,
+    /// Corresponds to the `URI` attribute.
+    ///
+    /// See [`SessionData`] for a link to the HLS documentation for this attribute.
     pub uri: Option<Cow<'a, str>>,
+    /// Corresponds to the `FORMAT` attribute.
+    ///
+    /// See [`SessionData`] for a link to the HLS documentation for this attribute.
     pub format: Option<Cow<'a, str>>,
+    /// Corresponds to the `LANGUAGE` attribute.
+    ///
+    /// See [`SessionData`] for a link to the HLS documentation for this attribute.
     pub language: Option<Cow<'a, str>>,
 }
 
+/// A builder for convenience in constructing a [`SessionData`].
 #[derive(Debug, PartialEq, Clone)]
 pub struct SessionDataBuilder<'a> {
     data_id: Cow<'a, str>,
@@ -70,6 +92,7 @@ pub struct SessionDataBuilder<'a> {
     language: Option<Cow<'a, str>>,
 }
 impl<'a> SessionDataBuilder<'a> {
+    /// Creates a new builder.
     pub fn new(data_id: impl Into<Cow<'a, str>>) -> Self {
         Self {
             data_id: data_id.into(),
@@ -80,6 +103,7 @@ impl<'a> SessionDataBuilder<'a> {
         }
     }
 
+    /// Finish building and construct the `SessionData`.
     pub fn finish(self) -> SessionData<'a> {
         SessionData::new(SessionDataAttributeList {
             data_id: self.data_id,
@@ -90,24 +114,30 @@ impl<'a> SessionDataBuilder<'a> {
         })
     }
 
+    /// Add the provided `value` to the attributes built into `SessionData`.
     pub fn with_value(mut self, value: impl Into<Cow<'a, str>>) -> Self {
         self.value = Some(value.into());
         self
     }
+    /// Add the provided `uri` to the attributes built into `SessionData`.
     pub fn with_uri(mut self, uri: impl Into<Cow<'a, str>>) -> Self {
         self.uri = Some(uri.into());
         self
     }
+    /// Add the provided `format` to the attributes built into `SessionData`.
     pub fn with_format(mut self, format: impl Into<Cow<'a, str>>) -> Self {
         self.format = Some(format.into());
         self
     }
+    /// Add the provided `language` to the attributes built into `SessionData`.
     pub fn with_language(mut self, language: impl Into<Cow<'a, str>>) -> Self {
         self.language = Some(language.into());
         self
     }
 }
 
+/// Corresponds to the `#EXT-X-SESSION-DATA` tag.
+///
 /// <https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.6.4>
 #[derive(Debug, Clone)]
 pub struct SessionData<'a> {
@@ -157,6 +187,7 @@ impl<'a> TryFrom<ParsedTag<'a>> for SessionData<'a> {
 }
 
 impl<'a> SessionData<'a> {
+    /// Constructs a new `SessionData` tag.
     pub fn new(attribute_list: SessionDataAttributeList<'a>) -> Self {
         let output_line = Cow::Owned(calculate_line(&attribute_list));
         let SessionDataAttributeList {
@@ -178,14 +209,30 @@ impl<'a> SessionData<'a> {
         }
     }
 
+    /// Starts a builder for producing `Self`.
+    ///
+    /// For example, we could construct a `SessionData` as such:
+    /// ```
+    /// # use m3u8::tag::hls::{SessionData, Format};
+    /// let session_data = SessionData::builder("1234")
+    ///     .with_uri("data.bin")
+    ///     .with_format(Format::Raw)
+    ///     .finish();
+    /// ```
     pub fn builder(data_id: impl Into<Cow<'a, str>>) -> SessionDataBuilder<'a> {
         SessionDataBuilder::new(data_id)
     }
 
+    /// Corresponds to the `DATA-ID` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn data_id(&self) -> &str {
         &self.data_id
     }
 
+    /// Corresponds to the `VALUE` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn value(&self) -> Option<&str> {
         if let Some(value) = &self.value {
             Some(value)
@@ -197,6 +244,9 @@ impl<'a> SessionData<'a> {
         }
     }
 
+    /// Corresponds to the `URI` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn uri(&self) -> Option<&str> {
         if let Some(uri) = &self.uri {
             Some(uri)
@@ -208,6 +258,9 @@ impl<'a> SessionData<'a> {
         }
     }
 
+    /// Corresponds to the `FORMAT` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn format(&self) -> EnumeratedString<Format> {
         if let Some(format) = &self.format {
             EnumeratedString::from(format.as_ref())
@@ -219,6 +272,9 @@ impl<'a> SessionData<'a> {
         }
     }
 
+    /// Corresponds to the `LANGUAGE` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn language(&self) -> Option<&str> {
         if let Some(language) = &self.language {
             Some(language)
@@ -230,54 +286,81 @@ impl<'a> SessionData<'a> {
         }
     }
 
+    /// Sets the `DATA-ID` attribute.
+    ///
+    /// See [`SessionData`] for a link to the HLS documentation for this attribute.
     pub fn set_data_id(&mut self, data_id: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(DATA_ID);
         self.data_id = data_id.into();
         self.output_line_is_dirty = true;
     }
 
+    /// Sets the `VALUE` attribute.
+    ///
+    /// See [`SessionData`] for a link to the HLS documentation for this attribute.
     pub fn set_value(&mut self, value: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(VALUE);
         self.value = Some(value.into());
         self.output_line_is_dirty = true;
     }
 
+    /// Unsets the `VALUE` attribute (sets it to `None`).
+    ///
+    /// See [`SessionData`] for a link to the HLS documentation for this attribute.
     pub fn unset_value(&mut self) {
         self.attribute_list.remove(VALUE);
         self.value = None;
         self.output_line_is_dirty = true;
     }
 
+    /// Sets the `URI` attribute.
+    ///
+    /// See [`SessionData`] for a link to the HLS documentation for this attribute.
     pub fn set_uri(&mut self, uri: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(URI);
         self.uri = Some(uri.into());
         self.output_line_is_dirty = true;
     }
 
+    /// Unsets the `URI` attribute (sets it to `None`).
+    ///
+    /// See [`SessionData`] for a link to the HLS documentation for this attribute.
     pub fn unset_uri(&mut self) {
         self.attribute_list.remove(URI);
         self.uri = None;
         self.output_line_is_dirty = true;
     }
 
+    /// Sets the `FORMAT` attribute.
+    ///
+    /// See [`SessionData`] for a link to the HLS documentation for this attribute.
     pub fn set_format(&mut self, format: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(FORMAT);
         self.format = Some(format.into());
         self.output_line_is_dirty = true;
     }
 
+    /// Unsets the `FORMAT` attribute (sets it to `None`).
+    ///
+    /// See [`SessionData`] for a link to the HLS documentation for this attribute.
     pub fn unset_format(&mut self) {
         self.attribute_list.remove(FORMAT);
         self.format = None;
         self.output_line_is_dirty = true;
     }
 
+    /// Sets the `LANGUAGE` attribute.
+    ///
+    /// See [`SessionData`] for a link to the HLS documentation for this attribute.
     pub fn set_language(&mut self, language: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(LANGUAGE);
         self.language = Some(language.into());
         self.output_line_is_dirty = true;
     }
 
+    /// Unsets the `LANGUAGE` attribute (sets it to `None`).
+    ///
+    /// See [`SessionData`] for a link to the HLS documentation for this attribute.
     pub fn unset_language(&mut self) {
         self.attribute_list.remove(LANGUAGE);
         self.language = None;

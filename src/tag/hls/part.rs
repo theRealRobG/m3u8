@@ -8,15 +8,34 @@ use crate::{
 };
 use std::{borrow::Cow, collections::HashMap, fmt::Display};
 
+/// The attribute list for the tag (`#EXT-X-PART:<attribute-list>`).
+///
+/// See [`Part`] for a link to the HLS documentation for this attribute.
 #[derive(Debug, PartialEq, Clone)]
 pub struct PartAttributeList<'a> {
+    /// Corresponds to the `URI` attribute.
+    ///
+    /// See [`Part`] for a link to the HLS documentation for this attribute.
     pub uri: Cow<'a, str>,
+    /// Corresponds to the `DURATION` attribute.
+    ///
+    /// See [`Part`] for a link to the HLS documentation for this attribute.
     pub duration: f64,
+    /// Corresponds to the `INDEPENDENT` attribute.
+    ///
+    /// See [`Part`] for a link to the HLS documentation for this attribute.
     pub independent: bool,
+    /// Corresponds to the `BYTERANGE` attribute.
+    ///
+    /// See [`Part`] for a link to the HLS documentation for this attribute.
     pub byterange: Option<PartByterange>,
+    /// Corresponds to the `GAP` attribute.
+    ///
+    /// See [`Part`] for a link to the HLS documentation for this attribute.
     pub gap: bool,
 }
 
+/// A builder for convenience in constructing a [`Part`].
 #[derive(Debug, PartialEq, Clone)]
 pub struct PartBuilder<'a> {
     uri: Cow<'a, str>,
@@ -26,6 +45,7 @@ pub struct PartBuilder<'a> {
     gap: bool,
 }
 impl<'a> PartBuilder<'a> {
+    /// Creates a new builder.
     pub fn new(uri: impl Into<Cow<'a, str>>, duration: f64) -> Self {
         Self {
             uri: uri.into(),
@@ -36,6 +56,7 @@ impl<'a> PartBuilder<'a> {
         }
     }
 
+    /// Finish building and construct the `Part`.
     pub fn finish(self) -> Part<'a> {
         Part::new(PartAttributeList {
             uri: self.uri,
@@ -46,20 +67,25 @@ impl<'a> PartBuilder<'a> {
         })
     }
 
+    /// Add the provided `independent` to the attributes built into `Part`.
     pub fn with_independent(mut self) -> Self {
         self.independent = true;
         self
     }
+    /// Add the provided `byterange` to the attributes built into `Part`.
     pub fn with_byterange(mut self, byterange: PartByterange) -> Self {
         self.byterange = Some(byterange);
         self
     }
+    /// Add the provided `gap` to the attributes built into `Part`.
     pub fn with_gap(mut self) -> Self {
         self.gap = true;
         self
     }
 }
 
+/// Corresponds to the `#EXT-X-PART` tag.
+///
 /// <https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.4.9>
 #[derive(Debug, Clone)]
 pub struct Part<'a> {
@@ -72,9 +98,16 @@ pub struct Part<'a> {
     output_line: Cow<'a, [u8]>,                                 // Used with Writer
     output_line_is_dirty: bool,                                 // If should recalculate output_line
 }
+/// Corresponds to the value of the `#EXT-X-PART:BYTERANGE` attribute.
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct PartByterange {
+    /// Corresponds to the length component in the value (`n` in `<n>[@<o>]`).
+    ///
+    /// See [`Part`] for a link to the HLS documentation for this attribute.
     pub length: u64,
+    /// Corresponds to the offset component in the value (`o` in `<n>[@<o>]`).
+    ///
+    /// See [`Part`] for a link to the HLS documentation for this attribute.
     pub offset: Option<u64>,
 }
 impl Display for PartByterange {
@@ -129,6 +162,7 @@ impl<'a> TryFrom<ParsedTag<'a>> for Part<'a> {
 }
 
 impl<'a> Part<'a> {
+    /// Constructs a new `Part` tag.
     pub fn new(attribute_list: PartAttributeList<'a>) -> Self {
         let output_line = Cow::Owned(calculate_line(&attribute_list));
         let PartAttributeList {
@@ -150,18 +184,37 @@ impl<'a> Part<'a> {
         }
     }
 
+    /// Starts a builder for producing `Self`.
+    ///
+    /// For example, we could construct a `Part` as such:
+    /// ```
+    /// # use m3u8::tag::hls::{Part, PartByterange};
+    /// let part = Part::builder("part.100.0.mp4", 0.5)
+    ///     .with_independent()
+    ///     .with_byterange(PartByterange { length: 1024, offset: None })
+    ///     .finish();
+    /// ```
     pub fn builder(uri: impl Into<Cow<'a, str>>, duration: f64) -> PartBuilder<'a> {
         PartBuilder::new(uri, duration)
     }
 
+    /// Corresponds to the `URI` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn uri(&self) -> &str {
         &self.uri
     }
 
+    /// Corresponds to the `DURATION` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn duration(&self) -> f64 {
         self.duration
     }
 
+    /// Corresponds to the `INDEPENDENT` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn independent(&self) -> bool {
         if let Some(independent) = self.independent {
             independent
@@ -173,6 +226,9 @@ impl<'a> Part<'a> {
         }
     }
 
+    /// Corresponds to the `BYTERANGE` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn byterange(&self) -> Option<PartByterange> {
         if let Some(byterange) = self.byterange {
             Some(byterange)
@@ -195,6 +251,9 @@ impl<'a> Part<'a> {
         }
     }
 
+    /// Corresponds to the `GAP` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn gap(&self) -> bool {
         if let Some(gap) = self.gap {
             gap
@@ -206,31 +265,49 @@ impl<'a> Part<'a> {
         }
     }
 
+    /// Sets the `URI` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_uri(&mut self, uri: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(URI);
         self.uri = uri.into();
         self.output_line_is_dirty = true;
     }
+    /// Sets the `DURATION` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_duration(&mut self, duration: f64) {
         self.attribute_list.remove(DURATION);
         self.duration = duration;
         self.output_line_is_dirty = true;
     }
+    /// Sets the `INDEPENDENT` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_independent(&mut self, independent: bool) {
         self.attribute_list.remove(INDEPENDENT);
         self.independent = Some(independent);
         self.output_line_is_dirty = true;
     }
+    /// Sets the `BYTERANGE` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_byterange(&mut self, byterange: PartByterange) {
         self.attribute_list.remove(BYTERANGE);
         self.byterange = Some(byterange);
         self.output_line_is_dirty = true;
     }
+    /// Unsets the `BYTERANGE` attribute (sets it to `None`).
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_byterange(&mut self) {
         self.attribute_list.remove(BYTERANGE);
         self.byterange = None;
         self.output_line_is_dirty = true;
     }
+    /// Sets the `GAP` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_gap(&mut self, gap: bool) {
         self.attribute_list.remove(GAP);
         self.gap = Some(gap);

@@ -5,6 +5,8 @@ use crate::{
 };
 use std::borrow::Cow;
 
+/// Corresponds to the `#EXT-X-PROGRAM-DATE-TIME` tag.
+///
 /// <https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.4.6>
 #[derive(Debug, Clone)]
 pub struct ProgramDateTime<'a> {
@@ -38,6 +40,34 @@ impl<'a> TryFrom<ParsedTag<'a>> for ProgramDateTime<'a> {
 }
 
 impl<'a> ProgramDateTime<'a> {
+    /// Construct a new `ProgramDateTime` tag.
+    ///
+    /// Note, the library provides a convenience `date_time!` macro, in case you are setting the
+    /// `DateTime` using literal values:
+    /// ```
+    /// use m3u8::{
+    ///     date_time,
+    ///     tag::hls::ProgramDateTime,
+    ///     date::{ DateTime, DateTimeTimezoneOffset}
+    /// };
+    ///
+    /// let pdt = ProgramDateTime::new(date_time!(2025-08-03 T 18:26:34.439 -05:00));
+    /// assert_eq!(
+    ///     pdt.program_date_time(),
+    ///     DateTime {
+    ///         date_fullyear: 2025,
+    ///         date_month: 8,
+    ///         date_mday: 3,
+    ///         time_hour: 18,
+    ///         time_minute: 26,
+    ///         time_second: 34.439,
+    ///         timezone_offset: DateTimeTimezoneOffset {
+    ///             time_hour: -5,
+    ///             time_minute: 0,
+    ///         },
+    ///     },
+    /// );
+    /// ```
     pub fn new(program_date_time: DateTime) -> Self {
         Self {
             program_date_time,
@@ -46,10 +76,16 @@ impl<'a> ProgramDateTime<'a> {
         }
     }
 
+    /// Corresponds to the value of the tag (`#EXT-X-PROGRAM-DATE-TIME:<date-time-msec>`).
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn program_date_time(&self) -> DateTime {
         self.program_date_time
     }
 
+    /// Sets the value of the tag.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_program_date_time(&mut self, program_date_time: DateTime) {
         self.program_date_time = program_date_time;
         self.output_line_is_dirty = true;

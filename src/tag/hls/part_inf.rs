@@ -8,6 +8,8 @@ use crate::{
 };
 use std::borrow::Cow;
 
+/// Corresponds to the `#EXT-X-PART-INF` tag.
+///
 /// <https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.3.7>
 #[derive(Debug, Clone)]
 pub struct PartInf<'a> {
@@ -48,6 +50,7 @@ impl<'a> TryFrom<ParsedTag<'a>> for PartInf<'a> {
 }
 
 impl<'a> PartInf<'a> {
+    /// Construct a new `PartInf` tag.
     pub fn new(part_target: f64) -> Self {
         Self {
             part_target,
@@ -56,10 +59,16 @@ impl<'a> PartInf<'a> {
         }
     }
 
+    /// Corresponds to the `PART-TARGET` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn part_target(&self) -> f64 {
         self.part_target
     }
 
+    /// Sets `PART-TARGET` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_part_target(&mut self, part_target: f64) {
         self.part_target = part_target;
         self.output_line_is_dirty = true;

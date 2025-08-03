@@ -8,13 +8,26 @@ use crate::{
 };
 use std::{borrow::Cow, collections::HashMap};
 
+/// The attribute list for the tag (`#EXT-X-RENDITION-REPORT:<attribute-list>`).
+///
+/// See [`RenditionReport`] for a link to the HLS documentation for this attribute.
 #[derive(Debug, PartialEq, Clone)]
 pub struct RenditionReportAttributeList<'a> {
+    /// Corresponds to the `URI` attribute.
+    ///
+    /// See [`RenditionReport`] for a link to the HLS documentation for this attribute.
     pub uri: Cow<'a, str>,
+    /// Corresponds to the `LAST-MSN` attribute.
+    ///
+    /// See [`RenditionReport`] for a link to the HLS documentation for this attribute.
     pub last_msn: u64,
+    /// Corresponds to the `LAST-PART` attribute.
+    ///
+    /// See [`RenditionReport`] for a link to the HLS documentation for this attribute.
     pub last_part: Option<u64>,
 }
 
+/// A builder for convenience in constructing a [`RenditionReport`].
 #[derive(Debug, PartialEq, Clone)]
 pub struct RenditionReportBuilder<'a> {
     uri: Cow<'a, str>,
@@ -22,6 +35,7 @@ pub struct RenditionReportBuilder<'a> {
     last_part: Option<u64>,
 }
 impl<'a> RenditionReportBuilder<'a> {
+    /// Creates a new builder.
     pub fn new(uri: impl Into<Cow<'a, str>>, last_msn: u64) -> Self {
         Self {
             uri: uri.into(),
@@ -30,6 +44,7 @@ impl<'a> RenditionReportBuilder<'a> {
         }
     }
 
+    /// Finish building and construct the `RenditionReport`.
     pub fn finish(self) -> RenditionReport<'a> {
         RenditionReport::new(RenditionReportAttributeList {
             uri: self.uri,
@@ -38,6 +53,7 @@ impl<'a> RenditionReportBuilder<'a> {
         })
     }
 
+    /// Add the provided `last_part` to the attributes built into `RenditionReport`.
     pub fn with_last_part(mut self, last_part: u64) -> Self {
         self.last_part = Some(last_part);
         self
@@ -91,6 +107,7 @@ impl<'a> TryFrom<ParsedTag<'a>> for RenditionReport<'a> {
 }
 
 impl<'a> RenditionReport<'a> {
+    /// Constructs a new `RenditionReport` tag.
     pub fn new(attribute_list: RenditionReportAttributeList<'a>) -> Self {
         let output_line = Cow::Owned(calculate_line(&attribute_list));
         let RenditionReportAttributeList {
@@ -108,18 +125,36 @@ impl<'a> RenditionReport<'a> {
         }
     }
 
+    /// Starts a builder for producing `Self`.
+    ///
+    /// For example, we could construct a `RenditionReport` as such:
+    /// ```
+    /// # use m3u8::tag::hls::RenditionReport;
+    /// let rendition_report = RenditionReport::builder("hi.m3u8", 100)
+    ///     .with_last_part(3)
+    ///     .finish();
+    /// ```
     pub fn builder(uri: impl Into<Cow<'a, str>>, last_msn: u64) -> RenditionReportBuilder<'a> {
         RenditionReportBuilder::new(uri, last_msn)
     }
 
+    /// Corresponds to the `URI` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn uri(&self) -> &str {
         &self.uri
     }
 
+    /// Corresponds to the `LAST-MSN` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn last_msn(&self) -> u64 {
         self.last_msn
     }
 
+    /// Corresponds to the `LAST-PART` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn last_part(&self) -> Option<u64> {
         if let Some(last_part) = self.last_part {
             Some(last_part)
@@ -131,24 +166,36 @@ impl<'a> RenditionReport<'a> {
         }
     }
 
+    /// Sets the `URI` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_uri(&mut self, uri: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(URI);
         self.uri = uri.into();
         self.output_line_is_dirty = true;
     }
 
+    /// Sets the `LAST-MSN` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_last_msn(&mut self, last_msn: u64) {
         self.attribute_list.remove(LAST_MSN);
         self.last_msn = last_msn;
         self.output_line_is_dirty = true;
     }
 
+    /// Sets the `LAST-PART` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_last_part(&mut self, last_part: u64) {
         self.attribute_list.remove(LAST_PART);
         self.last_part = Some(last_part);
         self.output_line_is_dirty = true;
     }
 
+    /// Unsets the `LAST-PART` attribute (sets it to `None`).
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_last_part(&mut self) {
         self.attribute_list.remove(LAST_PART);
         self.last_part = None;
