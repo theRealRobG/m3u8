@@ -9,6 +9,9 @@ use crate::{
 };
 use std::{borrow::Cow, collections::HashMap, fmt::Display, str::Split};
 
+/// Corresponds to the `#EXT-X-MEDIA:TYPE` attribute.
+///
+/// See [`Media`] for a link to the HLS documentation for this attribute.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum MediaType {
     /// Specifies an audio rendition.
@@ -64,13 +67,33 @@ const VIDEO: &str = "VIDEO";
 const SUBTITLES: &str = "SUBTITLES";
 const CLOSED_CAPTIONS: &str = "CLOSED-CAPTIONS";
 
+/// Corresponds to the `#EXT-X-MEDIA:INSTREAM-ID` attribute when it is describing a Line 21 Data
+/// Services (CEA608) channel.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Cea608InstreamId {
+    /// CC1 as per CEA-608 specification.
     Cc1,
+    /// CC2 as per CEA-608 specification.
     Cc2,
+    /// CC3 as per CEA-608 specification.
     Cc3,
+    /// CC4 as per CEA-608 specification.
     Cc4,
 }
+/// Corresponds to the `#EXT-X-MEDIA:INSTREAM-ID` attribute.
+///
+/// Note, as of draft 18, it is valid to use `INSTREAM-ID` to indicate other types of media that are
+/// contained within the Media Segments. Specifically:
+/// > For all other [than CLOSED-CAPTIONS] types, the mechanism for carrying a Rendition and mapping
+/// > from the INSTREAM-ID to the content within the segment is defined by the segment, sample or
+/// > bitstream format. The value is a string containing characters from the set [A-Z], [a-z],
+/// > [0-9], and '.'. If the value does not match any alternative content, the client SHOULD ignore
+/// > this and treat it as if no INSTREAM-ID was provided in the EXT-X-MEDIA tag.
+///
+/// Given that `InstreamId` is wrapped within [`EnumeratedString`] when exposed on [`Media`], and
+/// `EnumeratedString` already has an [`EnumeratedString::Unknown`] case, we will not add support
+/// for "unknown" `INSTREAM-ID` formats here and leave it to be exposed via the `Unknown` case of
+/// `EnumeratedString` instead.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum InstreamId {
     /// The value identifies a Line 21 Data Services (CEA608) channel.
@@ -127,6 +150,12 @@ const CC3: &str = "CC3";
 const CC4: &str = "CC4";
 const SERVICE: &str = "SERVICE";
 
+/// Corresponds to some of the available values for the `#EXT-X-MEDIA:CHARACTERISTICS` attribute.
+///
+/// These are just the values that are called out as recognized in the HLS specification. There may
+/// be many other characteristics; however, given that this is wrapped in [`EnumeratedString`] when
+/// exposed on [`Media`], and that already has an [`EnumeratedString::Unknown`] case, we don't need
+/// to support the "unknown" case here.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum MediaCharacteristicTag {
     /// Indicates that the rendition includes legible content that transcribes spoken dialog. It's
@@ -191,6 +220,8 @@ const EASY_TO_READ: &str = "public.easy-to-read";
 const DESCRIBES_VIDEO: &str = "public.accessibility.describes-video";
 const MACHINE_GENERATED: &str = "public.machine-generated";
 
+/// Corresponds to the "supplementary indications of special channel usage" parameter in the
+/// `#EXT-X-MEDIA:CHANNELS` attribute.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ChannelSpecialUsageIdentifier {
     /// The audio is binaural (either recorded or synthesized). It SHOULD NOT be dynamically
@@ -267,6 +298,8 @@ const DOWNMIX: &str = "DOWNMIX";
 const BED: &str = "BED";
 const DOF: &str = "DOF";
 
+/// Corresponds to the "presence of spatial audio of some kind" parameter in the
+/// `#EXT-X-MEDIA:CHANNELS` attribute.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum AudioCodingIdentifier {
     /// A coding technique that allows up to 15 full range channels or objects, plus LFE channel, to
@@ -318,12 +351,38 @@ impl From<AudioCodingIdentifier> for EnumeratedString<'_, AudioCodingIdentifier>
 const JOC: &str = "JOC";
 const OA: &str = "OA";
 
+/// Describes a `CHANNELS` attribute value that has at least a valid `count`.
+///
+/// The format described in HLS is a slash separated list of parameters. At the time of writing
+/// there were 3 defined parameters:
+/// * The count of audio channels
+/// * An indicator of spatial audio of some kind
+/// * Supplementary indication of special channel usage
 #[derive(Debug, Clone, PartialEq)]
 pub struct ValidChannels<'a> {
     count: u32,
     inner: Cow<'a, str>,
 }
 impl<'a> ValidChannels<'a> {
+    /// Construct a new `ValidChannels`.
+    ///
+    /// Note that `AudioCodingIdentifier` and `ChannelSpecialUsageIdentifier` can be used directly
+    /// here. For example:
+    /// ```
+    /// # use m3u8::tag::hls::{EnumeratedStringList, ValidChannels, AudioCodingIdentifier,
+    /// # ChannelSpecialUsageIdentifier};
+    /// let channels = ValidChannels::new(
+    ///     16,
+    ///     EnumeratedStringList::from([AudioCodingIdentifier::JointObjectCoding]),
+    ///     EnumeratedStringList::from([ChannelSpecialUsageIdentifier::Binaural])
+    /// );
+    /// ```
+    /// Since `&str` implements `Into<EnumeratedStringList>` we can also use string slice directly,
+    /// but care should be taken to follow the correct format:
+    /// ```
+    /// # use m3u8::tag::hls::{EnumeratedStringList, ValidChannels};
+    /// let channels = ValidChannels::new(16, "JOC", "BINAURAL");
+    /// ```
     pub fn new(
         count: u32,
         spatial_audio: impl Into<EnumeratedStringList<'a, AudioCodingIdentifier>>,
@@ -415,12 +474,38 @@ impl<'a> From<ValidChannels<'a>> for Cow<'a, str> {
         value.inner
     }
 }
+/// Corresponds to the `#EXT-X-MEDIA:CHANNELS` attribute value.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Channels<'a> {
+    /// The value contained at least a valid channels count.
     Valid(ValidChannels<'a>),
+    /// The value was malformed and unrecognized. The original data is still provided.
     Invalid(&'a str),
 }
+/// Used to provide a convenience accessor on `Option<Channels>` for the `ValidChannels` case. For
+/// example:
+/// ```
+/// # use m3u8::tag::hls::{Channels, ValidChannels };
+/// use m3u8::tag::hls::GetValid;
+///
+/// let some_channels = Some(Channels::Valid(ValidChannels::new(6, "", "")));
+/// let some_valid_channels = some_channels.valid();
+/// assert_eq!(6, some_valid_channels.expect("should be defined").count());
+/// ```
+pub trait GetValid<'a> {
+    /// Convenience accessor for the valid case.
+    fn valid(self) -> Option<ValidChannels<'a>>;
+}
+impl<'a> GetValid<'a> for Option<Channels<'a>> {
+    fn valid(self) -> Option<ValidChannels<'a>> {
+        match self {
+            Some(Channels::Valid(channels)) => Some(channels),
+            Some(Channels::Invalid(_)) | None => None,
+        }
+    }
+}
 impl<'a> Channels<'a> {
+    /// Convenience accessor for the valid case.
     pub fn valid(&self) -> Option<&ValidChannels<'a>> {
         match self {
             Channels::Valid(valid_channels) => Some(valid_channels),
@@ -453,25 +538,74 @@ impl<'a> From<Channels<'a>> for Cow<'a, str> {
     }
 }
 
+/// The attribute list for the tag (`#EXT-X-MEDIA:<attribute-list>`).
+///
+/// See [`Media`] for a link to the HLS documentation for this attribute.
 #[derive(Debug, PartialEq, Clone)]
 pub struct MediaAttributeList<'a> {
+    /// Corresponds to the `TYPE` attribute.
+    ///
+    /// See [`Media`] for a link to the HLS documentation for this attribute.
     pub media_type: Cow<'a, str>,
+    /// Corresponds to the `NAME` attribute.
+    ///
+    /// See [`Media`] for a link to the HLS documentation for this attribute.
     pub name: Cow<'a, str>,
+    /// Corresponds to the `GROUP-ID` attribute.
+    ///
+    /// See [`Media`] for a link to the HLS documentation for this attribute.
     pub group_id: Cow<'a, str>,
+    /// Corresponds to the `URI` attribute.
+    ///
+    /// See [`Media`] for a link to the HLS documentation for this attribute.
     pub uri: Option<Cow<'a, str>>,
+    /// Corresponds to the `LANGUAGE` attribute.
+    ///
+    /// See [`Media`] for a link to the HLS documentation for this attribute.
     pub language: Option<Cow<'a, str>>,
+    /// Corresponds to the `ASSOC-LANGUAGE` attribute.
+    ///
+    /// See [`Media`] for a link to the HLS documentation for this attribute.
     pub assoc_language: Option<Cow<'a, str>>,
+    /// Corresponds to the `STABLE-RENDITION-ID` attribute.
+    ///
+    /// See [`Media`] for a link to the HLS documentation for this attribute.
     pub stable_rendition_id: Option<Cow<'a, str>>,
+    /// Corresponds to the `DEFAULT` attribute.
+    ///
+    /// See [`Media`] for a link to the HLS documentation for this attribute.
     pub default: bool,
+    /// Corresponds to the `AUTOSELECT` attribute.
+    ///
+    /// See [`Media`] for a link to the HLS documentation for this attribute.
     pub autoselect: bool,
+    /// Corresponds to the `FORCED` attribute.
+    ///
+    /// See [`Media`] for a link to the HLS documentation for this attribute.
     pub forced: bool,
+    /// Corresponds to the `INSTREAM-ID` attribute.
+    ///
+    /// See [`Media`] for a link to the HLS documentation for this attribute.
     pub instream_id: Option<Cow<'a, str>>,
+    /// Corresponds to the `BIT-DEPTH` attribute.
+    ///
+    /// See [`Media`] for a link to the HLS documentation for this attribute.
     pub bit_depth: Option<u64>,
+    /// Corresponds to the `SAMPLE-RATE` attribute.
+    ///
+    /// See [`Media`] for a link to the HLS documentation for this attribute.
     pub sample_rate: Option<u64>,
+    /// Corresponds to the `CHARACTERISTICS` attribute.
+    ///
+    /// See [`Media`] for a link to the HLS documentation for this attribute.
     pub characteristics: Option<Cow<'a, str>>,
+    /// Corresponds to the `CHANNELS` attribute.
+    ///
+    /// See [`Media`] for a link to the HLS documentation for this attribute.
     pub channels: Option<Cow<'a, str>>,
 }
 
+/// A builder for convenience in constructing a [`Media`].
 #[derive(Debug, PartialEq, Clone)]
 pub struct MediaBuilder<'a> {
     media_type: Cow<'a, str>,
@@ -491,6 +625,7 @@ pub struct MediaBuilder<'a> {
     channels: Option<Cow<'a, str>>,
 }
 impl<'a> MediaBuilder<'a> {
+    /// Creates a new builder.
     pub fn new(
         media_type: impl Into<Cow<'a, str>>,
         name: impl Into<Cow<'a, str>>,
@@ -515,6 +650,7 @@ impl<'a> MediaBuilder<'a> {
         }
     }
 
+    /// Finish building and construct the `Media`.
     pub fn finish(self) -> Media<'a> {
         Media::new(MediaAttributeList {
             media_type: self.media_type,
@@ -535,18 +671,22 @@ impl<'a> MediaBuilder<'a> {
         })
     }
 
+    /// Add the provided `uri` to the attributes built into `Media`.
     pub fn with_uri(mut self, uri: impl Into<Cow<'a, str>>) -> Self {
         self.uri = Some(uri.into());
         self
     }
+    /// Add the provided `language` to the attributes built into `Media`.
     pub fn with_language(mut self, language: impl Into<Cow<'a, str>>) -> Self {
         self.language = Some(language.into());
         self
     }
+    /// Add the provided `assoc_language` to the attributes built into `Media`.
     pub fn with_assoc_language(mut self, assoc_language: impl Into<Cow<'a, str>>) -> Self {
         self.assoc_language = Some(assoc_language.into());
         self
     }
+    /// Add the provided `stable_rendition_id` to the attributes built into `Media`.
     pub fn with_stable_rendition_id(
         mut self,
         stable_rendition_id: impl Into<Cow<'a, str>>,
@@ -554,40 +694,72 @@ impl<'a> MediaBuilder<'a> {
         self.stable_rendition_id = Some(stable_rendition_id.into());
         self
     }
+    /// Add the provided `default` to the attributes built into `Media`.
     pub fn with_default(mut self) -> Self {
         self.default = true;
         self
     }
+    /// Add the provided `autoselect` to the attributes built into `Media`.
     pub fn with_autoselect(mut self) -> Self {
         self.autoselect = true;
         self
     }
+    /// Add the provided `forced` to the attributes built into `Media`.
     pub fn with_forced(mut self) -> Self {
         self.forced = true;
         self
     }
+    /// Add the provided `instream_id` to the attributes built into `Media`.
     pub fn with_instream_id(mut self, instream_id: impl Into<Cow<'a, str>>) -> Self {
         self.instream_id = Some(instream_id.into());
         self
     }
+    /// Add the provided `bit_depth` to the attributes built into `Media`.
     pub fn with_bit_depth(mut self, bit_depth: u64) -> Self {
         self.bit_depth = Some(bit_depth);
         self
     }
+    /// Add the provided `sample_rate` to the attributes built into `Media`.
     pub fn with_sample_rate(mut self, sample_rate: u64) -> Self {
         self.sample_rate = Some(sample_rate);
         self
     }
+    /// Add the provided `characteristics` to the attributes built into `Media`.
     pub fn with_characteristics(mut self, characteristics: impl Into<Cow<'a, str>>) -> Self {
         self.characteristics = Some(characteristics.into());
         self
     }
+    /// Add the provided `channels` to the attributes built into `Media`.
+    ///
+    /// Note that [`ValidChannels`] implements `Into<Cow<str>>` and therefore can be
+    /// used directly here. For example:
+    /// ```
+    /// # use m3u8::tag::hls::{
+    /// # Media, ValidChannels, MediaType, EnumeratedStringList, AudioCodingIdentifier,
+    /// # ChannelSpecialUsageIdentifier
+    /// # };
+    /// let builder = Media::new(MediaType::Audio, "ENGLISH", "SPECIAL-GROUP")
+    ///     .with_channels(ValidChannels::new(
+    ///         16,
+    ///         EnumeratedStringList::from([AudioCodingIdentifier::JointObjectCoding]),
+    ///         EnumeratedStringList::from([ChannelSpecialUsageIdentifier::Binaural]),
+    ///     ));
+    /// ```
+    /// Alternatively, a string slice can be used, but care should be taken to follow the correct
+    /// syntax defined for `CHANNELS`.
+    /// ```
+    /// # use m3u8::tag::hls::{ Media, MediaType };
+    /// let builder = Media::new(MediaType::Audio, "ENGLISH", "SPECIAL-GROUP")
+    ///     .with_channels("16/JOC/BINAURAL");
+    /// ```
     pub fn with_channels(mut self, channels: impl Into<Cow<'a, str>>) -> Self {
         self.channels = Some(channels.into());
         self
     }
 }
 
+/// Corresponds to the `#EXT-X-MEDIA` tag.
+///
 /// <https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.6.1>
 #[derive(Debug, Clone)]
 pub struct Media<'a> {
@@ -675,6 +847,7 @@ impl<'a> TryFrom<ParsedTag<'a>> for Media<'a> {
 }
 
 impl<'a> Media<'a> {
+    /// Constructs a new `Media` tag.
     pub fn new(attribute_list: MediaAttributeList<'a>) -> Self {
         let output_line = Cow::Owned(calculate_line(&attribute_list));
         let MediaAttributeList {
@@ -716,6 +889,28 @@ impl<'a> Media<'a> {
         }
     }
 
+    /// Starts a builder for producing `Self`.
+    ///
+    /// For example, we could construct a `Media` as such:
+    /// ```
+    /// # use m3u8::tag::hls::{Media, MediaType, EnumeratedStringList, MediaCharacteristicTag,
+    /// # ValidChannels, AudioCodingIdentifier, ChannelSpecialUsageIdentifier};
+    /// let media = Media::builder(MediaType::Audio, "ENGLISH", "SPECIAL-GROUP")
+    ///     .with_uri("special-audio.m3u8")
+    ///     .with_language("en")
+    ///     .with_default()
+    ///     .with_autoselect()
+    ///     .with_characteristics(EnumeratedStringList::from([
+    ///         MediaCharacteristicTag::DescribesVideo,
+    ///         MediaCharacteristicTag::MachineGenerated,
+    ///     ]))
+    ///     .with_channels(ValidChannels::new(
+    ///         16,
+    ///         EnumeratedStringList::from([AudioCodingIdentifier::JointObjectCoding]),
+    ///         EnumeratedStringList::from([ChannelSpecialUsageIdentifier::Binaural]),
+    ///     ))
+    ///     .finish();
+    /// ```
     pub fn builder(
         media_type: impl Into<Cow<'a, str>>,
         name: impl Into<Cow<'a, str>>,
@@ -724,15 +919,27 @@ impl<'a> Media<'a> {
         MediaBuilder::new(media_type, name, group_id)
     }
 
+    /// Corresponds to the `TYPE` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn media_type(&self) -> EnumeratedString<MediaType> {
         EnumeratedString::from(self.media_type.as_ref())
     }
+    /// Corresponds to the `NAME` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn name(&self) -> &str {
         &self.name
     }
+    /// Corresponds to the `GROUP-ID` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn group_id(&self) -> &str {
         &self.group_id
     }
+    /// Corresponds to the `URI` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn uri(&self) -> Option<&str> {
         if let Some(uri) = &self.uri {
             Some(uri)
@@ -743,6 +950,9 @@ impl<'a> Media<'a> {
             }
         }
     }
+    /// Corresponds to the `LANGUAGE` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn language(&self) -> Option<&str> {
         if let Some(language) = &self.language {
             Some(language)
@@ -753,6 +963,9 @@ impl<'a> Media<'a> {
             }
         }
     }
+    /// Corresponds to the `ASSOC-LANGUAGE` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn assoc_language(&self) -> Option<&str> {
         if let Some(assoc_language) = &self.assoc_language {
             Some(assoc_language)
@@ -763,6 +976,9 @@ impl<'a> Media<'a> {
             }
         }
     }
+    /// Corresponds to the `STABLE-RENDITION-ID` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn stable_rendition_id(&self) -> Option<&str> {
         if let Some(stable_rendition_id) = &self.stable_rendition_id {
             Some(stable_rendition_id)
@@ -773,6 +989,9 @@ impl<'a> Media<'a> {
             }
         }
     }
+    /// Corresponds to the `DEFAULT` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn default(&self) -> bool {
         if let Some(default) = self.default {
             default
@@ -783,6 +1002,9 @@ impl<'a> Media<'a> {
             )
         }
     }
+    /// Corresponds to the `AUTOSELECT` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn autoselect(&self) -> bool {
         if let Some(autoselect) = self.autoselect {
             autoselect
@@ -793,6 +1015,9 @@ impl<'a> Media<'a> {
             )
         }
     }
+    /// Corresponds to the `FORCED` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn forced(&self) -> bool {
         if let Some(forced) = self.forced {
             forced
@@ -803,6 +1028,9 @@ impl<'a> Media<'a> {
             )
         }
     }
+    /// Corresponds to the `INSTREAM-ID` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn instream_id(&self) -> Option<EnumeratedString<InstreamId>> {
         if let Some(instream_id) = &self.instream_id {
             Some(EnumeratedString::from(instream_id.as_ref()))
@@ -813,6 +1041,9 @@ impl<'a> Media<'a> {
             }
         }
     }
+    /// Corresponds to the `BIT-DEPTH` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn bit_depth(&self) -> Option<u64> {
         if let Some(bit_depth) = self.bit_depth {
             Some(bit_depth)
@@ -823,6 +1054,9 @@ impl<'a> Media<'a> {
             }
         }
     }
+    /// Corresponds to the `SAMPLE-RATE` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn sample_rate(&self) -> Option<u64> {
         if let Some(sample_rate) = self.sample_rate {
             Some(sample_rate)
@@ -833,6 +1067,9 @@ impl<'a> Media<'a> {
             }
         }
     }
+    /// Corresponds to the `CHARACTERISTICS` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn characteristics(&self) -> Option<EnumeratedStringList<MediaCharacteristicTag>> {
         if let Some(characteristics) = &self.characteristics {
             Some(EnumeratedStringList::from(characteristics.as_ref()))
@@ -843,6 +1080,44 @@ impl<'a> Media<'a> {
             }
         }
     }
+    /// Corresponds to the `CHANNELS` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
+    ///
+    /// The `Channels` enum provides a strongly typed wrapper around the string value of the
+    /// `CHANNELS` attribute. Given that we need at least a valid `count` but internally we store
+    /// the raw value of the attribute (as `Cow<str>` so we only validate UTF-8), the translation to
+    /// a valid "channels" struct may fail. This is why we expose `Channels` as an enum with a
+    /// [`Channels::Valid`] case and [`ValidChannels`] is really the strongly typed wrapper.
+    ///
+    /// [`ValidChannels`] abstracts the slash separated list and the syntax around it. We use
+    /// [`EnumeratedStringList`] to provide a pseudo-set-like abstraction over each of the "spatial"
+    /// and "special" parameters of the `CHANNELS` attribute. This does not allocate to the heap (as
+    /// would be the case with a `Vec` or `HashSet`) so is relatively little cost over using the
+    /// `&str` directly but provides convenience types and methods. For example:
+    /// ```
+    /// # use m3u8::{Reader, HlsLine, config::ParsingOptions, tag::{known, hls}};
+    /// # use m3u8::tag::hls::{Media, ChannelSpecialUsageIdentifier};
+    /// // NOTE: This trait needs to be in scope to use the convenience `valid` method that the
+    /// // library defines on `Option<Channels>` to get to `Option<ValidChannels>`.
+    /// use m3u8::tag::hls::GetValid;
+    ///
+    /// let tag = r#"#EXT-X-MEDIA:TYPE=AUDIO,NAME="a",GROUP-ID="a",CHANNELS="6/-/DOWNMIX,BED-4""#;
+    /// let mut reader = Reader::from_str(tag, ParsingOptions::default());
+    /// match reader.read_line() {
+    ///     Ok(Some(HlsLine::KnownTag(known::Tag::Hls(hls::Tag::Media(media))))) => {
+    ///         let channels = media.channels().valid().expect("should be defined");
+    ///         assert_eq!(6, channels.count());
+    ///         assert!(channels.spatial_audio().is_empty());
+    ///         assert_eq!(2, channels.special_usage().iter().count());
+    ///         assert!(channels.special_usage().contains(ChannelSpecialUsageIdentifier::Downmix));
+    ///         assert!(channels.special_usage().contains(ChannelSpecialUsageIdentifier::Bed(4)));
+    ///         // At any stage we can escape-hatch to the inner `&str` representation:
+    ///         assert_eq!("6/-/DOWNMIX,BED-4", channels.as_ref());
+    ///     }
+    ///     r => panic!("unexpected result {r:?}"),
+    /// }
+    /// ```
     pub fn channels(&self) -> Option<Channels> {
         if let Some(channels) = &self.channels {
             Some(Channels::from(channels.as_ref()))
@@ -854,121 +1129,193 @@ impl<'a> Media<'a> {
         }
     }
 
+    /// Sets the `TYPE` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_media_type(&mut self, media_type: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(TYPE);
         self.media_type = media_type.into();
         self.output_line_is_dirty = true;
     }
+    /// Sets the `NAME` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_name(&mut self, name: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(NAME);
         self.name = name.into();
         self.output_line_is_dirty = true;
     }
+    /// Sets the `GROUP-ID` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_group_id(&mut self, group_id: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(GROUP_ID);
         self.group_id = group_id.into();
         self.output_line_is_dirty = true;
     }
+    /// Sets the `URI` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_uri(&mut self, uri: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(URI);
         self.uri = Some(uri.into());
         self.output_line_is_dirty = true;
     }
+    /// Unsets the `URI` attribute (sets it to `None`).
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_uri(&mut self) {
         self.attribute_list.remove(URI);
         self.uri = None;
         self.output_line_is_dirty = true;
     }
+    /// Sets the `LANGUAGE` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_language(&mut self, language: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(LANGUAGE);
         self.language = Some(language.into());
         self.output_line_is_dirty = true;
     }
+    /// Unsets the `LANGUAGE` attribute (sets it to `None`).
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_language(&mut self) {
         self.attribute_list.remove(LANGUAGE);
         self.language = None;
         self.output_line_is_dirty = true;
     }
+    /// Sets the `ASSOC-LANGUAGE` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_assoc_language(&mut self, assoc_language: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(ASSOC_LANGUAGE);
         self.assoc_language = Some(assoc_language.into());
         self.output_line_is_dirty = true;
     }
+    /// Unsets the `ASSOC-LANGUAGE` attribute (sets it to `None`).
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_assoc_language(&mut self) {
         self.attribute_list.remove(ASSOC_LANGUAGE);
         self.assoc_language = None;
         self.output_line_is_dirty = true;
     }
+    /// Sets the `STABLE-RENDITION-ID` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_stable_rendition_id(&mut self, stable_rendition_id: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(STABLE_RENDITION_ID);
         self.stable_rendition_id = Some(stable_rendition_id.into());
         self.output_line_is_dirty = true;
     }
+    /// Unsets the `STABLE-RENDITION-ID` attribute (sets it to `None`).
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_stable_rendition_id(&mut self) {
         self.attribute_list.remove(STABLE_RENDITION_ID);
         self.stable_rendition_id = None;
         self.output_line_is_dirty = true;
     }
+    /// Sets the `DEFAULT` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_default(&mut self, default: bool) {
         self.attribute_list.remove(DEFAULT);
         self.default = Some(default);
         self.output_line_is_dirty = true;
     }
+    /// Sets the `AUTOSELECT` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_autoselect(&mut self, autoselect: bool) {
         self.attribute_list.remove(AUTOSELECT);
         self.autoselect = Some(autoselect);
         self.output_line_is_dirty = true;
     }
+    /// Sets the `FORCED` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_forced(&mut self, forced: bool) {
         self.attribute_list.remove(FORCED);
         self.forced = Some(forced);
         self.output_line_is_dirty = true;
     }
+    /// Sets the `INSTREAM-ID` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_instream_id(&mut self, instream_id: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(INSTREAM_ID);
         self.instream_id = Some(instream_id.into());
         self.output_line_is_dirty = true;
     }
+    /// Unsets the `INSTREAM-ID` attribute (sets it to `None`).
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_instream_id(&mut self) {
         self.attribute_list.remove(INSTREAM_ID);
         self.instream_id = None;
         self.output_line_is_dirty = true;
     }
+    /// Sets the `BIT-DEPTH` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_bit_depth(&mut self, bit_depth: u64) {
         self.attribute_list.remove(BIT_DEPTH);
         self.bit_depth = Some(bit_depth);
         self.output_line_is_dirty = true;
     }
+    /// Unsets the `BIT-DEPTH` attribute (sets it to `None`).
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_bit_depth(&mut self) {
         self.attribute_list.remove(BIT_DEPTH);
         self.bit_depth = None;
         self.output_line_is_dirty = true;
     }
+    /// Sets the `SAMPLE-RATE` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_sample_rate(&mut self, sample_rate: u64) {
         self.attribute_list.remove(SAMPLE_RATE);
         self.sample_rate = Some(sample_rate);
         self.output_line_is_dirty = true;
     }
+    /// Unsets the `SAMPLE-RATE` attribute (sets it to `None`).
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_sample_rate(&mut self) {
         self.attribute_list.remove(SAMPLE_RATE);
         self.sample_rate = None;
         self.output_line_is_dirty = true;
     }
+    /// Sets the `CHARACTERISTICS` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_characteristics(&mut self, characteristics: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(CHARACTERISTICS);
         self.characteristics = Some(characteristics.into());
         self.output_line_is_dirty = true;
     }
+    /// Unsets the `CHARACTERISTICS` attribute (sets it to `None`).
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_characteristics(&mut self) {
         self.attribute_list.remove(CHARACTERISTICS);
         self.characteristics = None;
         self.output_line_is_dirty = true;
     }
+    /// Sets the `CHANNELS` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_channels(&mut self, channels: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(CHANNELS);
         self.channels = Some(channels.into());
         self.output_line_is_dirty = true;
     }
+    /// Unsets the `CHANNELS` attribute (sets it to `None`).
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_channels(&mut self) {
         self.attribute_list.remove(CHANNELS);
         self.channels = None;

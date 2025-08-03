@@ -9,6 +9,9 @@ use crate::{
 };
 use std::{borrow::Cow, collections::HashMap, fmt::Display};
 
+/// Corresponds to the `#EXT-X-KEY:METHOD` attribute.
+///
+/// See [`Key`] for a link to the HLS documentation for this attribute.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Method {
     /// Media Segments are not encrypted.
@@ -72,15 +75,34 @@ const AES_128: &str = "AES-128";
 const SAMPLE_AES: &str = "SAMPLE-AES";
 const SAMPLE_AES_CTR: &str = "SAMPLE-AES-CTR";
 
+/// The attribute list for the tag (`#EXT-X-KEY:<attribute-list>`).
+///
+/// See [`Key`] for a link to the HLS documentation for this attribute.
 #[derive(Debug, PartialEq, Clone)]
 pub struct KeyAttributeList<'a> {
+    /// Corresponds to the `METHOD` attribute.
+    ///
+    /// See [`Key`] for a link to the HLS documentation for this attribute.
     pub method: Cow<'a, str>,
+    /// Corresponds to the `URI` attribute.
+    ///
+    /// See [`Key`] for a link to the HLS documentation for this attribute.
     pub uri: Option<Cow<'a, str>>,
+    /// Corresponds to the `IV` attribute.
+    ///
+    /// See [`Key`] for a link to the HLS documentation for this attribute.
     pub iv: Option<Cow<'a, str>>,
+    /// Corresponds to the `KEYFORMAT` attribute.
+    ///
+    /// See [`Key`] for a link to the HLS documentation for this attribute.
     pub keyformat: Option<Cow<'a, str>>,
+    /// Corresponds to the `KEYFORMATVERSIONS` attribute.
+    ///
+    /// See [`Key`] for a link to the HLS documentation for this attribute.
     pub keyformatversions: Option<Cow<'a, str>>,
 }
 
+/// A builder for convenience in constructing a [`Key`].
 #[derive(Debug, PartialEq, Clone)]
 pub struct KeyBuilder<'a> {
     method: Cow<'a, str>,
@@ -90,6 +112,7 @@ pub struct KeyBuilder<'a> {
     keyformatversions: Option<Cow<'a, str>>,
 }
 impl<'a> KeyBuilder<'a> {
+    /// Create a new builder.
     pub fn new(method: impl Into<Cow<'a, str>>) -> Self {
         Self {
             method: method.into(),
@@ -100,6 +123,7 @@ impl<'a> KeyBuilder<'a> {
         }
     }
 
+    /// Finish building and construct the `Key`.
     pub fn finish(self) -> Key<'a> {
         Key::new(KeyAttributeList {
             method: self.method,
@@ -110,27 +134,33 @@ impl<'a> KeyBuilder<'a> {
         })
     }
 
+    /// Add the proivded `uri` to the attributes built into `Key`.
     pub fn with_uri(mut self, uri: impl Into<Cow<'a, str>>) -> Self {
         self.uri = Some(uri.into());
         self
     }
 
+    /// Add the proivded `iv` to the attributes built into `Key`.
     pub fn with_iv(mut self, iv: impl Into<Cow<'a, str>>) -> Self {
         self.iv = Some(iv.into());
         self
     }
 
+    /// Add the proivded `keyformat` to the attributes built into `Key`.
     pub fn with_keyformat(mut self, keyformat: impl Into<Cow<'a, str>>) -> Self {
         self.keyformat = Some(keyformat.into());
         self
     }
 
+    /// Add the proivded `keyformatversions` to the attributes built into `Key`.
     pub fn with_keyformatversions(mut self, keyformatversions: impl Into<Cow<'a, str>>) -> Self {
         self.keyformatversions = Some(keyformatversions.into());
         self
     }
 }
 
+/// Corresponds to the `#EXT-X-KEY` tag.
+///
 /// <https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.4.4>
 #[derive(Debug, Clone)]
 pub struct Key<'a> {
@@ -180,6 +210,7 @@ impl<'a> TryFrom<ParsedTag<'a>> for Key<'a> {
 }
 
 impl<'a> Key<'a> {
+    /// Constructs a new `Key` tag.
     pub fn new(attribute_list: KeyAttributeList<'a>) -> Self {
         let output_line = Cow::Owned(calculate_line(&attribute_list));
         let KeyAttributeList {
@@ -201,14 +232,31 @@ impl<'a> Key<'a> {
         }
     }
 
+    /// Starts a builder for producing `Self`.
+    ///
+    /// For example, we could construct a `Key` as such:
+    /// ```
+    /// # use m3u8::tag::hls::{Key, Method};
+    /// let key = Key::builder(Method::SampleAes)
+    ///     .with_uri("skd://1234")
+    ///     .with_keyformat("com.apple.streamingkeydelivery")
+    ///     .with_keyformatversions("1")
+    ///     .finish();
+    /// ```
     pub fn builder(method: impl Into<Cow<'a, str>>) -> KeyBuilder<'a> {
         KeyBuilder::new(method)
     }
 
+    /// Corresponds to the `METHOD` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn method(&self) -> EnumeratedString<Method> {
         EnumeratedString::from(self.method.as_ref())
     }
 
+    /// Corresponds to the `URI` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn uri(&self) -> Option<&str> {
         if let Some(uri) = &self.uri {
             Some(uri)
@@ -220,6 +268,9 @@ impl<'a> Key<'a> {
         }
     }
 
+    /// Corresponds to the `IV` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn iv(&self) -> Option<&str> {
         if let Some(iv) = &self.iv {
             Some(iv)
@@ -231,6 +282,9 @@ impl<'a> Key<'a> {
         }
     }
 
+    /// Corresponds to the `KEYFORMAT` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn keyformat(&self) -> &str {
         if let Some(keyformat) = &self.keyformat {
             keyformat
@@ -242,6 +296,9 @@ impl<'a> Key<'a> {
         }
     }
 
+    /// Corresponds to the `KEYFORMATVERSIONS` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn keyformatversions(&self) -> Option<&str> {
         if let Some(keyformatversions) = &self.keyformatversions {
             Some(keyformatversions)
@@ -255,54 +312,81 @@ impl<'a> Key<'a> {
         }
     }
 
+    /// Sets the `METHOD` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_method(&mut self, method: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(METHOD);
         self.method = method.into();
         self.output_line_is_dirty = true;
     }
 
+    /// Sets the `URI` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_uri(&mut self, uri: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(URI);
         self.uri = Some(uri.into());
         self.output_line_is_dirty = true;
     }
 
+    /// Unsets the `URI` attribute (sets it to `None`).
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_uri(&mut self) {
         self.attribute_list.remove(URI);
         self.uri = None;
         self.output_line_is_dirty = true;
     }
 
+    /// Sets the `IV` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_iv(&mut self, iv: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(IV);
         self.iv = Some(iv.into());
         self.output_line_is_dirty = true;
     }
 
+    /// Unsets the `IV` attribute (sets it to `None`).
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_iv(&mut self) {
         self.attribute_list.remove(IV);
         self.iv = None;
         self.output_line_is_dirty = true;
     }
 
+    /// Sets the `KEYFORMAT` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_keyformat(&mut self, keyformat: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(KEYFORMAT);
         self.keyformat = Some(keyformat.into());
         self.output_line_is_dirty = true;
     }
 
+    /// Unsets the `KEYFORMAT` attribute (sets it to `None`).
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_keyformat(&mut self) {
         self.attribute_list.remove(KEYFORMAT);
         self.keyformat = None;
         self.output_line_is_dirty = true;
     }
 
+    /// Sets the `KEYFORMATVERSIONS` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_keyformatversions(&mut self, keyformatversions: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(KEYFORMATVERSIONS);
         self.keyformatversions = Some(keyformatversions.into());
         self.output_line_is_dirty = true;
     }
 
+    /// Unsets the `KEYFORMATVERSIONS` attribute (sets it to `None`).
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_keyformatversions(&mut self) {
         self.attribute_list.remove(KEYFORMATVERSIONS);
         self.keyformatversions = None;
