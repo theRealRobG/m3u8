@@ -1031,6 +1031,18 @@ impl<'a> Media<'a> {
     /// Corresponds to the `INSTREAM-ID` attribute.
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
+    ///
+    /// Note that the convenience [`crate::tag::hls::GetKnown`] trait exists to make accessing the
+    /// known case easier:
+    /// ```
+    /// # use m3u8::tag::hls::{Media, MediaType, InstreamId, Cea608InstreamId};
+    /// use m3u8::tag::hls::GetKnown;
+    ///
+    /// let tag = Media::builder(MediaType::ClosedCaptions, "name", "id")
+    ///     .with_instream_id(InstreamId::Cea608(Cea608InstreamId::Cc1))
+    ///     .finish();
+    /// assert_eq!(Some(InstreamId::Cea608(Cea608InstreamId::Cc1)), tag.instream_id().known());
+    /// ```
     pub fn instream_id(&self) -> Option<EnumeratedString<InstreamId>> {
         if let Some(instream_id) = &self.instream_id {
             Some(EnumeratedString::from(instream_id.as_ref()))

@@ -489,6 +489,18 @@ impl<'a> IFrameStreamInf<'a> {
     /// Corresponds to the `HDCP-LEVEL` attribute.
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
+    ///
+    /// Note that the convenience [`crate::tag::hls::GetKnown`] trait exists to make accessing the
+    /// known case easier:
+    /// ```
+    /// # use m3u8::tag::hls::{IFrameStreamInf, HdcpLevel};
+    /// use m3u8::tag::hls::GetKnown;
+    ///
+    /// let tag = IFrameStreamInf::builder("uri", 10000000)
+    ///     .with_hdcp_level(HdcpLevel::Type0)
+    ///     .finish();
+    /// assert_eq!(Some(HdcpLevel::Type0), tag.hdcp_level().known());
+    /// ```
     pub fn hdcp_level(&self) -> Option<EnumeratedString<HdcpLevel>> {
         if let Some(hdcp_level) = &self.hdcp_level {
             Some(EnumeratedString::from(hdcp_level.as_ref()))
@@ -517,6 +529,18 @@ impl<'a> IFrameStreamInf<'a> {
     /// Corresponds to the `VIDEO-RANGE` attribute.
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
+    ///
+    /// Note that the convenience [`crate::tag::hls::GetKnown`] trait exists to make accessing the
+    /// known case easier:
+    /// ```
+    /// # use m3u8::tag::hls::{IFrameStreamInf, VideoRange};
+    /// use m3u8::tag::hls::GetKnown;
+    ///
+    /// let tag = IFrameStreamInf::builder("uri", 10000000)
+    ///     .with_video_range(VideoRange::Pq)
+    ///     .finish();
+    /// assert_eq!(Some(VideoRange::Pq), tag.video_range().known());
+    /// ```
     pub fn video_range(&self) -> Option<EnumeratedString<VideoRange>> {
         if let Some(video_range) = &self.video_range {
             Some(EnumeratedString::from(video_range.as_ref()))

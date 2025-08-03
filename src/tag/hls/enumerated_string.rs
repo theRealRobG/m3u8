@@ -25,6 +25,31 @@ pub enum EnumeratedString<'a, T> {
     /// The value is unknown to the library but a reference to the original data is provided.
     Unknown(&'a str),
 }
+/// Used to provide a convenience accessor on `Option<EnumeratedString<T>>` for the `Known(T)` case.
+/// For example:
+/// ```
+/// # use m3u8::tag::hls::{EnumeratedString, VideoRange};
+/// use m3u8::tag::hls::GetKnown;
+///
+/// let some_enumerated_string: Option<EnumeratedString<VideoRange>> = Some(
+///     EnumeratedString::Known(VideoRange::Pq)
+/// );
+/// let some_video_range = some_enumerated_string.known();
+/// assert_eq!(Some(VideoRange::Pq), some_video_range);
+/// ```
+pub trait GetKnown<T> {
+    /// A convenience method for getting the known value. This may be most helpful when chaining on
+    /// an already optional attribute.
+    fn known(self) -> Option<T>;
+}
+impl<T> GetKnown<T> for Option<EnumeratedString<'_, T>> {
+    fn known(self) -> Option<T> {
+        match self {
+            Some(EnumeratedString::Known(t)) => Some(t),
+            Some(EnumeratedString::Unknown(_)) | None => todo!(),
+        }
+    }
+}
 impl<T> EnumeratedString<'_, T> {
     /// A convenience method for getting the known value. This may be most helpful when chaining on
     /// an already optional attribute.
