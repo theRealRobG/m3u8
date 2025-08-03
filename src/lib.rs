@@ -10,12 +10,12 @@
 //!
 //! quick-m3u8 aims to be a flexible and highly performant [M3U8] reader and writer. The API is
 //! event-driven (like SAX for XML) rather than serializing into a complete object model (like DOM
-//! for XML). The syntax (and name) is inspired by [quick-xml]. The [`crate::Reader`] attempts to be
-//! almost zero-copy while still supporting mutation of the parsed data by utilizing
-//! [`std::borrow::Cow`] (Copy On Write) as much as possible. The library provides flexibility via
-//! support for custom tag registration ([`crate::tag::known::CustomTag`]), which gives the user the
-//! ability to support parsing of tags not part of the main HLS specification, or overwrite parsing
-//! behavior of tags provided by the library.
+//! for XML). The syntax (and name) is inspired by [quick-xml]. The [`Reader`] attempts to be almost
+//! zero-copy while still supporting mutation of the parsed data by utilizing [`std::borrow::Cow`]
+//! (Copy On Write) as much as possible. The library provides flexibility via support for custom tag
+//! registration ([`tag::known::CustomTag`]), which gives the user the ability to support parsing of
+//! tags not part of the main HLS specification, or overwrite parsing behavior of tags provided by
+//! the library.
 //!
 //! When parsing M3U8 data quick-m3u8 aims to be very lenient when it comes to validation. The
 //! philosophy is that the library does not want to get in the way of extracting meaningful
@@ -37,13 +37,13 @@
 //!   with `#` is considered to be a URI line).
 //! * Enumerated strings (within [attribute-lists]) are not validated to have no whitespace.
 //! * A tag with a known name that fails the `TryFrom<ParsedTag>` conversion does not fail the line
-//!   and instead is presented as [`crate::tag::unknown::Tag`].
+//!   and instead is presented as [`tag::unknown::Tag`].
 //!
 //! With that being said, the library does validate proper UTF-8 conversion from `&[u8]` input,
-//! enumerated strings are wrapped in a convenience type ([`crate::tag::hls::EnumeratedString`])
-//! that exposes strongly typed enumerations when the value is valid, and the `TryFrom<ParsedTag>`
-//! implementation for all of the HLS tags supported by quick-m3u8 ensure that the required
-//! attributes are present.
+//! enumerated strings and enumerated string lists are wrapped in convenience types
+//! ([`tag::hls::EnumeratedString`], [`tag::hls::EnumeratedStringList`]) that expose strongly typed
+//! enumerations when the value is valid, and the `TryFrom<ParsedTag>` implementation for all of the
+//! HLS tags supported by quick-m3u8 ensure that the required attributes are present for each tag.
 //!
 //! # Usage
 //!
@@ -51,8 +51,8 @@
 //!
 //! ## Reading
 //!
-//! The main entry point for using the library is the [`crate::Reader`]. This provides an interface
-//! for reading lines from an input data source. For example, consider the [Simple Media Playlist]:
+//! The main entry point for using the library is the [`Reader`]. This provides an interface for
+//! reading lines from an input data source. For example, consider the [Simple Media Playlist]:
 //! ```
 //! const EXAMPLE_MANIFEST: &str = r#"#EXTM3U
 //! #EXT-X-TARGETDURATION:10
@@ -110,21 +110,20 @@
 //! > Each line is a URI, is blank, or starts with the character '#'. Lines that start with the
 //! > character '#' are either comments or tags. Tags begin with #EXT.
 //!
-//! Each case of the [`crate::line::HlsLine`] is documented thoroughly; however, it's worth
-//! mentioning that in addition to what the HLS specification defines, the library also allows for
-//! `UnknownTag` (which is a tag, based on the `#EXT` prefix, but not one that we know about), and
-//! also allows `CustomTag`. The [`crate::tag::known::CustomTag`] is a means for the user of the
-//! library to define support for their own custom tag specification in addition to what is provided
-//! via the HLS specification. The documentation for `CustomTag` provides more details on how that
-//! is achieved.
+//! Each case of the [`HlsLine`] is documented thoroughly; however, it's worth mentioning that in
+//! addition to what the HLS specification defines, the library also allows for `UnknownTag` (which
+//! is a tag, based on the `#EXT` prefix, but not one that we know about), and also allows
+//! `CustomTag`. The [`tag::known::CustomTag`] is a means for the user of the library to define
+//! support for their own custom tag specification in addition to what is provided via the HLS
+//! specification. The documentation for `CustomTag` provides more details on how that is achieved.
 //!
 //! The `Reader` also takes a configuration that allows the user to select what HLS tags the reader
-//! should parse. [`crate::config::ParsingOptions`] provides more details, but in short, better
-//! performance can be squeezed out by only parsing the tags that you need.
+//! should parse. [`config::ParsingOptions`] provides more details, but in short, better performance
+//! can be squeezed out by only parsing the tags that you need.
 //!
 //! ## Writing
 //!
-//! The other component to quick-m3u8 is [`crate::Writer`]. This allows the user to write to a given
+//! The other component to quick-m3u8 is [`Writer`]. This allows the user to write to a given
 //! [`std::io::Write`] the parsed (or constructed) HLS lines. It should be noted that when writing,
 //! if no mutation of a tag has occurred, then the original reference slice of the line will be
 //! used. This allows us to avoid unnecessary allocations.

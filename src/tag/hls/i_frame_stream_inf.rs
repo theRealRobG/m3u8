@@ -212,8 +212,8 @@ impl<'a> IFrameStreamInfBuilder<'a> {
 
     /// Add the provided `req_video_layout` to the attributes built into `IFrameStreamInf`.
     ///
-    /// Note that [`crate::tag::hls::VideoLayout`] implements `Into<Cow<str>>` and therefore can be
-    /// used directly here. For example:
+    /// Note that [`VideoLayout`] implements `Into<Cow<str>>` and therefore can be used directly
+    /// here. For example:
     /// ```
     /// # use m3u8::tag::hls::{
     /// # IFrameStreamInfBuilder, VideoLayout, EnumeratedStringList, VideoChannelSpecifier,

@@ -345,7 +345,7 @@ macro_rules! impl_reader {
     ($type:ty, $parse_fn:ident, $from_fn_ident:ident, $from_custom_fn_ident:ident, $error_type:ident) => {
         impl<'a> Reader<&'a $type, NoCustomTag> {
             /// Creates a reader without custom tag parsing support (in this case, the generic
-            /// `Custom` type is [`crate::tag::known::NoCustomTag`]).
+            /// `Custom` type is [`NoCustomTag`]).
             pub fn $from_fn_ident(data: &'a $type, options: ParsingOptions) -> Self {
                 Self {
                     inner: data,

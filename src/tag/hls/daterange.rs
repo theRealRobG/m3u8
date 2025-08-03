@@ -456,9 +456,9 @@ impl<'a> Daterange<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     ///
-    /// This attribute provides an [`crate::tag::hls::EnumeratedStringList`] wrapper around [`Cue`].
-    /// The documentation on `EnumeratedStringList` provides more information around the concept.
-    /// Below shows an example usage:
+    /// This attribute provides an [`EnumeratedStringList`] wrapper around [`Cue`]. The
+    /// documentation on `EnumeratedStringList` provides more information around the concept. Below
+    /// shows an example usage:
     /// ```
     /// # use m3u8::{Reader, HlsLine, config::ParsingOptions, tag::known, tag::hls::{self, Cue}};
     /// let daterange =

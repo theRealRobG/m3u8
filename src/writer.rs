@@ -9,15 +9,14 @@ use std::{
 
 /// A writer of HLS lines.
 ///
-/// This structure wraps a [`std::io::Write`] with methods that make writing parsed (or user
-/// constructed) HLS lines easier. The `Writer` handles inserting new lines where necessary and
-/// formatting for tags. An important note to make, is that with every tag implementation within
-/// [`crate::tag::hls`], the reference to the original input data is used directly when writing.
-/// This means that we avoid unnecessary allocations unless the data has been mutated. The same is
-/// true of [`crate::tag::known::Tag::Custom`] tags (as described in
-/// [`crate::tag::known::CustomTagAccess`]). Where necessary, the inner [`std::io::Write`] can be
-/// accessed in any type of ownership semantics (owned via [`Self::into_inner`], mutable borrow via
-/// [`Self::get_mut`], borrow via [`Self::get_ref`]).
+/// This structure wraps a [`Write`] with methods that make writing parsed (or user constructed) HLS
+/// lines easier. The `Writer` handles inserting new lines where necessary and formatting for tags.
+/// An important note to make, is that with every tag implementation within [`crate::tag::hls`], the
+/// reference to the original input data is used directly when writing. This means that we avoid
+/// unnecessary allocations unless the data has been mutated. The same is true of
+/// [`crate::tag::known::Tag::Custom`] tags (described in [`crate::tag::known::CustomTagAccess`]).
+/// Where necessary, the inner [`Write`] can be accessed in any type of ownership semantics (owned
+/// via [`Self::into_inner`], mutable borrow via [`Self::get_mut`], borrow via [`Self::get_ref`]).
 ///
 /// ## Mutate data as proxy
 ///

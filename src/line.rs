@@ -24,10 +24,10 @@ use std::{borrow::Cow, cmp::PartialEq, fmt::Debug};
 /// > character '#' are either comments or tags. Tags begin with #EXT.
 ///
 /// This data structure follows that guidance but also adds [`HlsLine::UnknownTag`] and
-/// [`crate::tag::known::Tag::Custom`]. These cases are described in more detail within their own
-/// documentation, but in short, the first allows us to capture tags that are not yet known to the
-/// library (providing at least a split between name and value), while the second allows a user of
-/// the library to define their own custom tag specification that can be then parsed into a strongly
+/// [`known::Tag::Custom`]. These cases are described in more detail within their own documentation,
+/// but in short, the first allows us to capture tags that are not yet known to the library
+/// (providing at least a split between name and value), while the second allows a user of the
+/// library to define their own custom tag specification that can be then parsed into a strongly
 /// typed structure within a `HlsLine::KnownTag` by the library.
 ///
 /// [Section 4.1. Definition of a Playlist]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.1
@@ -41,12 +41,12 @@ where
     /// the `draft-pantos-hls` Internet-Draft, or via a custom tag registration provided by the user
     /// of the library.
     ///
-    /// See [`crate::tag::known::Tag`] for more information.
+    /// See [`known::Tag`] for more information.
     KnownTag(known::Tag<'a, Custom>),
     /// A tag, as defined by the `#EXT` prefix, but not one that is known to the library, or that is
-    /// deliberately ignored via [`crate::config::ParsingOptions`].
+    /// deliberately ignored via [`ParsingOptions`].
     ///
-    /// See [`crate::tag::unknown::Tag`] for more information.
+    /// See [`unknown::Tag`] for more information.
     UnknownTag(unknown::Tag<'a>),
     /// A comment line. These are lines that begin with `#` and are followed by a string of UTF-8
     /// characters (though not BOM or UTF-8 control characters). The line is terminated by either a
@@ -163,19 +163,19 @@ where
 
 impl<'a> HlsLine<'a> {
     /// Convenience constructor for [`HlsLine::Comment`]. This will construct the line with the
-    /// generic `Custom` in [`HlsLine::KnownTag`] being [`crate::tag::known::NoCustomTag`].
+    /// generic `Custom` in [`HlsLine::KnownTag`] being [`known::NoCustomTag`].
     pub fn comment(comment: impl Into<Cow<'a, str>>) -> Self {
         Self::Comment(comment.into())
     }
 
     /// Convenience constructor for [`HlsLine::Uri`]. This will construct the line with the generic
-    /// `Custom` in [`HlsLine::KnownTag`] being [`crate::tag::known::NoCustomTag`].
+    /// `Custom` in [`HlsLine::KnownTag`] being [`known::NoCustomTag`].
     pub fn uri(uri: impl Into<Cow<'a, str>>) -> Self {
         Self::Uri(uri.into())
     }
 
     /// Convenience constructor for [`HlsLine::Blank`]. This will construct the line with the
-    /// generic `Custom` in [`HlsLine::KnownTag`] being [`crate::tag::known::NoCustomTag`].
+    /// generic `Custom` in [`HlsLine::KnownTag`] being [`known::NoCustomTag`].
     pub fn blank() -> Self {
         Self::Blank
     }
