@@ -58,7 +58,11 @@ pub fn parse_date_time_bytes<'a>(
     };
     let date_month = parse_u8(&input[5..7]).map_err(DateTimeSyntaxError::InvalidMonth)?;
     match input.get(10) {
-        Some(b't') | Some(b'T') => (),
+        // As per the note in https://datatracker.ietf.org/doc/html/rfc3339#section-5.6
+        // > NOTE: ISO 8601 defines date and time separated by "T". Applications using this syntax
+        // > may choose, for the sake of readability, to specify a full-date and full-time separated
+        // by (say) a space character.
+        Some(b't') | Some(b'T') | Some(b' ') => (),
         b => return Err(DateTimeSyntaxError::UnexpectedDayHourSeparator(b.copied())),
     };
     let date_mday = parse_u8(&input[8..10]).map_err(DateTimeSyntaxError::InvalidDay)?;
@@ -258,7 +262,18 @@ parse_num_impl!(parse_u8 -> u8);
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::date_time;
     use pretty_assertions::assert_eq;
+
+    #[test]
+    fn date_time_parse_with_space_for_day_hour_separator_still_works() {
+        assert_eq!(
+            date_time!(2025-08-02 T 20:33:45.123 -05:00),
+            parse_date_time_bytes(b"2025-08-02 20:33:45.123-05:00")
+                .unwrap()
+                .parsed
+        );
+    }
 
     #[test]
     fn split_on_new_line_should_have_no_remaining_when_no_new_line() {
