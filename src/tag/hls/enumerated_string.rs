@@ -3,7 +3,7 @@ use std::{
     borrow::Cow,
     fmt::{Debug, Display},
     marker::PhantomData,
-    str::Split,
+    str::SplitTerminator,
 };
 
 /// Provides a forward compatible wrapper for enumerated string values.
@@ -12,9 +12,17 @@ use std::{
 /// new value is added to HLS and this library has not been updated to support it yet, this enum
 /// also supports an `Unknown` case that contains a custom string. In this way, parsing won't break
 /// as new cases are added to the specification.
+///
+/// Note, that as long as `T` implements `Into<Cow<str>>`, then `EnumeratedString<T>` also
+/// implements `Into<Cow<str>>`. This is a convenience for when setting values on known tags. Also
+/// note that most library implementations of `T` will also implement
+/// `From<T> for EnumeratedString<T>`, which is another convenience for all methods that take some
+/// `impl Into<EnumeratedString<T>>`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum EnumeratedString<'a, T> {
+    /// The value is known to the library and provided by `T`.
     Known(T),
+    /// The value is unknown to the library but a reference to the original data is provided.
     Unknown(&'a str),
 }
 impl<T> EnumeratedString<'_, T> {
@@ -68,6 +76,7 @@ impl<'a, T> EnumeratedString<'a, T>
 where
     T: AsStaticCow,
 {
+    /// Provides the inner data as a [`std::borrow::Cow`].
     pub fn as_cow(&self) -> Cow<'a, str> {
         match self {
             EnumeratedString::Unknown(s) => Cow::Borrowed(s),
@@ -81,6 +90,39 @@ where
 /// [`EnumeratedString`] makes sure that any new enum cases added to the specification will not
 /// break parsing. This type extends this concept to lists and provides support for mixed lists of
 /// known and unknown values.
+///
+/// Enumerated string lists are defined in [4.2. Attribute Lists] as:
+/// > * enumerated-string-list: a quoted-string containing a comma-separated list of
+/// >   enumerated-strings from a set that is explicitly defined by the AttributeName. Each
+/// >   enumerated-string in the list is a string consisting of characters valid in an
+/// >   enumerated-string. The list SHOULD NOT repeat any enumerated-string. To support forward
+/// >   compatibility, clients MUST ignore any unrecognized enumerated-strings in an
+/// >   enumerated-string-list.
+///
+/// The library aims to provide a pseudo-set-like API to working with enumerated-string-lists. You
+/// can check for presence of values with [`Self::contains`], if the list is empty with
+/// [`Self::is_empty`], add items via [`Self::insert`], and remove via [`Self::remove`]. We also
+/// provide an iterator through the members via the [`Self::iter`] method.
+///
+/// To make lists more convenient to use, most methods where they are needed accept
+/// `impl Into<Cow<str>>` as the type, and all library provided `T` allow `EnumeratedStringList<T>`
+/// to be `impl Into<Cow<str>>`. Also, `EnumeratedStringList` has implemented `From` on several
+/// types that are likely to be used when constructing a list, such as `[S; N]` or `Vec<S>` (where
+/// `S` is `Into<EnumeratedString<T>>`). This allows for less boilerplate, and we can sometimes
+/// avoid ever even seeing the `EnumeratedString` type, such as the below example of constructing a
+/// list of [`crate::tag::hls::Cue`]:
+/// ```
+/// # use m3u8::tag::hls::EnumeratedStringList;
+/// # use m3u8::tag::hls::Cue;
+/// let list = EnumeratedStringList::from([Cue::Pre, Cue::Once]);
+/// assert_eq!(2, list.iter().count());
+/// ```
+///
+/// Another benefit of this approach is that we are not allocating onto the heap here (as we would
+/// if we were using `Vec`), and so this abstraction has little cost over working with the `&str`
+/// directly, but provides many convenience properties.
+///
+/// [4.2. Attribute Lists]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.2
 #[derive(Debug, Clone, PartialEq)]
 pub struct EnumeratedStringList<'a, T> {
     inner: Cow<'a, str>,
@@ -90,6 +132,46 @@ impl<'a, T> EnumeratedStringList<'a, T>
 where
     T: AsStaticCow + Copy + Display,
 {
+    /// Indicates whether a value is contained within the string list. For example:
+    /// ```
+    /// # use m3u8::tag::hls::EnumeratedStringList;
+    /// use m3u8::tag::hls::Cue;
+    ///
+    /// let list = EnumeratedStringList::from([Cue::Pre, Cue::Once]);
+    /// assert!(list.contains(Cue::Pre));
+    /// assert!(list.contains(Cue::Once));
+    /// assert!(!list.contains(Cue::Post));
+    /// assert!(!list.contains("UNKNOWN"));
+    /// ```
+    /// Note that most library types used with `EnumeratedString` support converting between
+    /// `Cow<str>`, themselves, and `EnumeratedString<T>`. Also, there are many methods that take as
+    /// parameter type `impl Into<EnumeratedString<T>>` or `impl Into<Cow<str>>`. These together aim
+    /// to make it convenient (less boilerplate) to use enumerations in many places, as can be seen
+    /// in the example above, where we did not have to write `EnumeratedString::Known(Cue::Pre)`,
+    /// etc. This is also why we were able to use a string slice (`&str`) directly with the
+    /// `"UNKNOWN"` example, since `From<str> for EnumeratedString<T>` where `T: TryFrom<&str>`.
+    ///
+    /// This would be equivalent:
+    /// ```
+    /// # use m3u8::tag::hls::{EnumeratedStringList, EnumeratedString};
+    /// # use m3u8::tag::hls::Cue;
+    /// # let list = EnumeratedStringList::from([Cue::Pre, Cue::Once]);
+    /// assert!(list.contains(EnumeratedString::Known(Cue::Pre)));
+    /// assert!(list.contains(EnumeratedString::Known(Cue::Once)));
+    /// assert!(!list.contains(EnumeratedString::Known(Cue::Post)));
+    /// assert!(!list.contains(EnumeratedString::Unknown("UNKNOWN")));
+    /// ```
+    ///
+    /// And also this:
+    /// ```
+    /// # use m3u8::tag::hls::{EnumeratedStringList, EnumeratedString};
+    /// # use m3u8::tag::hls::Cue;
+    /// # let list = EnumeratedStringList::from([Cue::Pre, Cue::Once]);
+    /// assert!(list.contains("PRE"));
+    /// assert!(list.contains("ONCE"));
+    /// assert!(!list.contains("POST"));
+    /// assert!(!list.contains("UNKNOWN"));
+    /// ```
     pub fn contains(&self, value: impl Into<EnumeratedString<'a, T>>) -> bool {
         let value = value.into();
         let value_str = match value {
@@ -99,10 +181,51 @@ where
         self.inner.split(',').any(|item| item == value_str)
     }
 
+    /// Indicates whether the list is empty (i.e. empty string). For example:
+    /// ```
+    /// # use m3u8::tag::hls::{EnumeratedStringList, Cue};
+    /// let list = EnumeratedStringList::<Cue>::from("");
+    /// assert!(list.is_empty());
+    /// ```
     pub fn is_empty(&self) -> bool {
         self.inner.trim().is_empty()
     }
 
+    /// Inserts an item into the list. Returns true if the insertion was successful.
+    /// ```
+    /// # use m3u8::tag::hls::{EnumeratedStringList, Cue};
+    /// let mut list = EnumeratedStringList::from([Cue::Pre]);
+    /// assert_eq!(1, list.iter().count());
+    /// assert!(list.contains(Cue::Pre));
+    ///
+    /// let insert_succeeded = list.insert(Cue::Once);
+    /// assert_eq!(2, list.iter().count());
+    /// assert!(insert_succeeded);
+    /// assert!(list.contains(Cue::Pre));
+    /// assert!(list.contains(Cue::Once));
+    /// ```
+    /// If an item is already in the list then it does not insert again.
+    /// ```
+    /// # use m3u8::tag::hls::{EnumeratedStringList, Cue};
+    /// let mut list = EnumeratedStringList::from([Cue::Pre]);
+    /// assert_eq!(1, list.iter().count());
+    /// assert!(list.contains(Cue::Pre));
+    ///
+    /// let insert_succeeded = list.insert(Cue::Pre);
+    /// assert_eq!(1, list.iter().count());
+    /// assert!(list.contains(Cue::Pre));
+    /// assert!(!insert_succeeded);
+    /// ```
+    /// Note that since `value` is any `Into<EnumeratedString<T>>`, and the library provides many
+    /// convenience conversions between types, we can also insert unknown values by using `&str`
+    /// directly:
+    /// ```
+    /// # use m3u8::tag::hls::{EnumeratedStringList, Cue};
+    /// let mut list = EnumeratedStringList::from([Cue::Pre]);
+    /// list.insert("UNKNOWN");
+    /// assert_eq!(2, list.iter().count());
+    /// assert!(list.contains("UNKNOWN"));
+    /// ```
     pub fn insert<Item: Into<EnumeratedString<'a, T>>>(&mut self, value: Item) -> bool {
         let value = value.into();
         if self.contains(value) {
@@ -117,6 +240,40 @@ where
         true
     }
 
+    /// Removes an item from the list. Returns true if an item was removed.
+    /// ```
+    /// # use m3u8::tag::hls::{EnumeratedStringList, Cue};
+    /// let mut list = EnumeratedStringList::from([Cue::Pre]);
+    /// assert_eq!(1, list.iter().count());
+    /// assert!(list.contains(Cue::Pre));
+    ///
+    /// let remove_succeeded = list.remove(Cue::Pre);
+    /// assert_eq!(0, list.iter().count());
+    /// assert!(remove_succeeded);
+    /// ```
+    /// If an item is not in the list then it does not remove anything.
+    /// ```
+    /// # use m3u8::tag::hls::{EnumeratedStringList, Cue};
+    /// let mut list = EnumeratedStringList::from([Cue::Pre]);
+    /// assert_eq!(1, list.iter().count());
+    /// assert!(list.contains(Cue::Pre));
+    ///
+    /// let remove_succeeded = list.remove(Cue::Once);
+    /// assert_eq!(1, list.iter().count());
+    /// assert!(list.contains(Cue::Pre));
+    /// assert!(!remove_succeeded);
+    /// ```
+    /// Note that since `value` is any `Into<EnumeratedString<T>>`, and the library provides many
+    /// convenience conversions between types, we can also insert unknown values by using `&str`
+    /// directly:
+    /// ```
+    /// # use m3u8::tag::hls::{EnumeratedStringList, Cue};
+    /// let mut list = EnumeratedStringList::from(["PRE", "UNKNOWN"]);
+    /// assert_eq!(2, list.iter().count());
+    /// list.remove("UNKNOWN");
+    /// assert_eq!(1, list.iter().count());
+    /// assert!(list.contains(Cue::Pre));
+    /// ```
     pub fn remove<Item: Into<EnumeratedString<'a, T>>>(&mut self, value: Item) -> bool {
         let value = value.into();
         if !self.contains(value) {
@@ -151,10 +308,28 @@ where
         true
     }
 
+    /// This overrides the default `to_owned` provided as part of `#[derive(Clone)]`.
+    ///
+    /// The reason this exists is to provide better lifetime semantics by completely breaking ties
+    /// to the reference data. This is done by converting the inner into an owned String.
+    ///
+    /// This method is important as otherwise it won't be possible to take a value from a tag,
+    /// mutate the list, and then set it back onto the tag. Providing this method makes that
+    /// possible. For example:
+    /// ```
+    /// # use m3u8::{date_time, tag::hls::{Daterange, Cue, EnumeratedStringList}};
+    /// let mut daterange = Daterange::builder("id", date_time!(2025-08-03 T 00:49:12.000 -05:00))
+    ///     .with_cue(EnumeratedStringList::from([Cue::Pre]))
+    ///     .finish();
+    /// let mut cue = daterange.cue().expect("should be defined");
+    /// cue.insert(Cue::Once);
+    /// daterange.set_cue(cue.to_owned());
+    /// ```
     pub fn to_owned<'b>(&self) -> EnumeratedStringList<'b, T> {
         EnumeratedStringList::from(self.to_string())
     }
 }
+
 impl<T> Display for EnumeratedStringList<'_, T>
 where
     T: Display,
@@ -220,20 +395,23 @@ impl<'a, T> EnumeratedStringList<'a, T>
 where
     T: TryFrom<&'a str, Error = UnrecognizedEnumerationError<'a>>,
 {
+    /// Creates an [`std::iter::Iterator`] of the [`EnumeratedString`] contents.
     pub fn iter(&'a self) -> EnumeratedStringListIter<'a, T> {
         EnumeratedStringListIter {
-            inner: self.inner.split(','),
+            inner: self.inner.split_terminator(','),
             t: PhantomData::<T>,
         }
     }
 }
 
+/// An [`std::iter::Iterator`] implementation to allow for iterating through items of an
+/// [`EnumeratedStringList`].
 #[derive(Debug, Clone)]
 pub struct EnumeratedStringListIter<'a, T>
 where
     T: TryFrom<&'a str, Error = UnrecognizedEnumerationError<'a>>,
 {
-    inner: Split<'a, char>,
+    inner: SplitTerminator<'a, char>,
     t: PhantomData<T>,
 }
 impl<'a, T> Iterator for EnumeratedStringListIter<'a, T>
@@ -388,7 +566,16 @@ mod tests {
     }
 
     #[test]
-    fn enumerated_string_iter_insert_adds_new_value_and_returns_true_if_not_already_present() {
+    fn enumerated_string_iter_has_count_0_when_list_is_empty() {
+        let list = EnumeratedStringList {
+            inner: Cow::Borrowed(""),
+            t: PhantomData::<TestEnum>,
+        };
+        assert_eq!(0, list.iter().count());
+    }
+
+    #[test]
+    fn enumerated_string_list_insert_adds_new_value_and_returns_true_if_not_already_present() {
         let mut list = EnumeratedStringList {
             inner: Cow::Borrowed("ONE,TWO"),
             t: PhantomData::<TestEnum>,
@@ -405,7 +592,7 @@ mod tests {
     }
 
     #[test]
-    fn enumerated_string_iter_insert_doew_not_add_new_value_and_returns_false_if_already_present() {
+    fn enumerated_string_list_insert_doew_not_add_new_value_and_returns_false_if_already_present() {
         let mut list = EnumeratedStringList {
             inner: Cow::Borrowed("ONE,TWO"),
             t: PhantomData::<TestEnum>,
@@ -416,7 +603,7 @@ mod tests {
     }
 
     #[test]
-    fn enumerated_string_iter_remove_removes_value_and_returns_true_if_present() {
+    fn enumerated_string_list_remove_removes_value_and_returns_true_if_present() {
         // Run the test a few times with comma in different places
         let mut list = EnumeratedStringList {
             inner: Cow::Borrowed("ONE,TWO"),
@@ -448,7 +635,7 @@ mod tests {
     }
 
     #[test]
-    fn enumerated_string_iter_remove_does_not_remove_value_and_returns_false_if_not_present() {
+    fn enumerated_string_list_remove_does_not_remove_value_and_returns_false_if_not_present() {
         let mut list = EnumeratedStringList {
             inner: Cow::Borrowed("ONE,TWO"),
             t: PhantomData::<TestEnum>,
