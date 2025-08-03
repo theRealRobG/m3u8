@@ -156,7 +156,7 @@ impl<'a> ParsedAttributeValue<'a> {
     /// Helper method to extract either `DecimalInteger` or `SignedDecimalFloatingPoint` as `f64`.
     ///
     /// We consider both enum cases because at time of parsing we do not yet know the context of the
-    /// attribuet to understand whether the value MUST be a positive integer or whether it MAY be
+    /// attribute to understand whether the value MUST be a positive integer or whether it MAY be
     /// any decimal float. This therefore makes extraction of `f64` values easier.
     ///
     /// For example, consider if we had the tag `#EXT-X-START:TIME-OFFSET=6`. When parsing, we would

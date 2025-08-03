@@ -8,18 +8,29 @@ use crate::{
 };
 use std::{borrow::Cow, collections::HashMap};
 
+/// The attribute list for the tag (`#EXT-X-CONTENT-STEERING:<attribute-list>`).
+///
+/// See [`ContentSteering`] for a link to the HLS documentation for these attributes.
 #[derive(Debug, PartialEq, Clone)]
 pub struct ContentSteeringAttributeList<'a> {
+    /// Corresponds to the `SERVER-URI` attribute.
+    ///
+    /// See [`ContentSteering`] for a link to the HLS documentation for this attribute.
     pub server_uri: Cow<'a, str>,
+    /// Corresponds to the `PATHWAY-ID` attribute.
+    ///
+    /// See [`ContentSteering`] for a link to the HLS documentation for this attribute.
     pub pathway_id: Option<Cow<'a, str>>,
 }
 
+/// A builder for convenience in constructing a [`ContentSteering`].
 #[derive(Debug, PartialEq, Clone)]
 pub struct ContentSteeringBuilder<'a> {
     server_uri: Cow<'a, str>,
     pathway_id: Option<Cow<'a, str>>,
 }
 impl<'a> ContentSteeringBuilder<'a> {
+    /// Create a new builder.
     pub fn new(server_uri: impl Into<Cow<'a, str>>) -> Self {
         Self {
             server_uri: server_uri.into(),
@@ -27,11 +38,13 @@ impl<'a> ContentSteeringBuilder<'a> {
         }
     }
 
+    /// Add the provided `pathway_id` to the attributes that are built into the `ContentSteering`.
     pub fn with_pathway_id(mut self, pathway_id: impl Into<Cow<'a, str>>) -> Self {
         self.pathway_id = Some(pathway_id.into());
         self
     }
 
+    /// Finish building and construct the `ContentSteering`.
     pub fn finish(self) -> ContentSteering<'a> {
         ContentSteering::new(ContentSteeringAttributeList {
             server_uri: self.server_uri,
@@ -40,6 +53,8 @@ impl<'a> ContentSteeringBuilder<'a> {
     }
 }
 
+/// Corresponds to the #EXT-X-CONTENT-STEERING tag.
+///
 /// <https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.6.6>
 #[derive(Debug, Clone)]
 pub struct ContentSteering<'a> {
@@ -80,6 +95,7 @@ impl<'a> TryFrom<ParsedTag<'a>> for ContentSteering<'a> {
 }
 
 impl<'a> ContentSteering<'a> {
+    /// Constructs a new `ContentSteering` tag.
     pub fn new(attribute_list: ContentSteeringAttributeList<'a>) -> Self {
         let output_line = Cow::Owned(calculate_line(&attribute_list));
         let ContentSteeringAttributeList {
@@ -95,14 +111,29 @@ impl<'a> ContentSteering<'a> {
         }
     }
 
+    /// Starts a builder for producing `Self`.
+    ///
+    /// For example, we could construct a `ContentSteering` as such:
+    /// ```
+    /// # use m3u8::tag::hls::ContentSteering;
+    /// let content_steering = ContentSteering::builder("https://example.com/steering.json")
+    ///     .with_pathway_id("1234")
+    ///     .finish();
+    /// ```
     pub fn builder(server_uri: impl Into<Cow<'a, str>>) -> ContentSteeringBuilder<'a> {
         ContentSteeringBuilder::new(server_uri)
     }
 
+    /// Corresponds to the `SERVER-URI` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn server_uri(&self) -> &str {
         &self.server_uri
     }
 
+    /// Corresponds to the `PATHWAY-ID` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn pathway_id(&self) -> Option<&str> {
         if let Some(pathway_id) = &self.pathway_id {
             Some(pathway_id)
@@ -114,18 +145,27 @@ impl<'a> ContentSteering<'a> {
         }
     }
 
+    /// Sets the `SERVER-URI` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_server_uri(&mut self, server_uri: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(SERVER_URI);
         self.server_uri = server_uri.into();
         self.output_line_is_dirty = true;
     }
 
+    /// Sets the `PATHWAY-ID` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_pathway_id(&mut self, pathway_id: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(PATHWAY_ID);
         self.pathway_id = Some(pathway_id.into());
         self.output_line_is_dirty = true;
     }
 
+    /// Unsets the `PATHWAY-ID` attribute (set it to `None`).
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_pathway_id(&mut self) {
         self.attribute_list.remove(PATHWAY_ID);
         self.pathway_id = None;

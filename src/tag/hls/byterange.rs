@@ -8,6 +8,8 @@ use crate::{
 };
 use std::borrow::Cow;
 
+/// Corresponds to the #EXT-X-BYTERANGE tag.
+///
 /// <https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.4.2>
 #[derive(Debug, Clone)]
 pub struct Byterange<'a> {
@@ -45,6 +47,7 @@ impl<'a> TryFrom<ParsedTag<'a>> for Byterange<'a> {
 }
 
 impl<'a> Byterange<'a> {
+    /// Construct a new `Byterange` tag.
     pub fn new(length: u64, offset: Option<u64>) -> Self {
         Self {
             length,
@@ -54,24 +57,39 @@ impl<'a> Byterange<'a> {
         }
     }
 
+    /// Corresponds to the length component of the tag value (`n` in `#EXT-X-BYTERANGE:<n>[@<o>]`).
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn length(&self) -> u64 {
         self.length
     }
 
+    /// Corresponds to the offset component of the tag value (`o` in `#EXT-X-BYTERANGE:<n>[@<o>]`).
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn offset(&self) -> Option<u64> {
         self.offset
     }
 
+    /// Sets the length component value.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_length(&mut self, length: u64) {
         self.length = length;
         self.output_line_is_dirty = true;
     }
 
+    /// Sets the offset component value.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_offset(&mut self, offset: u64) {
         self.offset = Some(offset);
         self.output_line_is_dirty = true;
     }
 
+    /// Unsets the offset component value (set it to `None`).
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_offset(&mut self) {
         self.offset = None;
         self.output_line_is_dirty = true;

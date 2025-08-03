@@ -8,6 +8,8 @@ use crate::{
 };
 use std::borrow::Cow;
 
+/// Corresponds to the #EXT-X-BITRATE tag.
+///
 /// <https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.4.8>
 #[derive(Debug, Clone)]
 pub struct Bitrate<'a> {
@@ -41,6 +43,7 @@ impl<'a> TryFrom<ParsedTag<'a>> for Bitrate<'a> {
 }
 
 impl<'a> Bitrate<'a> {
+    /// Construct a new `Bitrate` tag.
     pub fn new(bitrate: u64) -> Self {
         Self {
             bitrate,
@@ -49,10 +52,16 @@ impl<'a> Bitrate<'a> {
         }
     }
 
+    /// Corresponds to the value of the tag (`#EXT-X-BITRATE:<rate>`).
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn bitrate(&self) -> u64 {
         self.bitrate
     }
 
+    /// Sets the value of the tag.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_bitrate(&mut self, bitrate: u64) {
         self.bitrate = bitrate;
         self.output_line_is_dirty = true;

@@ -14,6 +14,9 @@ use std::{
     fmt::Display,
 };
 
+/// Corresponds to the `#EXT-X-DATERANGE:CUE` attribute.
+///
+/// See [`Daterange`] for a link to the HLS documentation for this attribute.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Cue {
     /// Indicates that an action is to be triggered before playback of the primary asset begins,
@@ -65,22 +68,62 @@ const PRE: &str = "PRE";
 const POST: &str = "POST";
 const ONCE: &str = "ONCE";
 
+/// The attribute list for the tag (`#EXT-X-DATERANGE:<attribute-list>`).
+///
+/// See [`Daterange`] for a link to the HLS documentation for this attribute.
 #[derive(Debug, PartialEq, Clone)]
 pub struct DaterangeAttributeList<'a> {
+    /// Corresponds to the `ID` attribute.
+    ///
+    /// See [`Daterange`] for a link to the HLS documentation for this attribute.
     pub id: Cow<'a, str>,
+    /// Corresponds to the `START-DATE` attribute.
+    ///
+    /// See [`Daterange`] for a link to the HLS documentation for this attribute.
     pub start_date: DateTime,
+    /// Corresponds to the `CLASS` attribute.
+    ///
+    /// See [`Daterange`] for a link to the HLS documentation for this attribute.
     pub class: Option<Cow<'a, str>>,
+    /// Corresponds to the `CUE` attribute.
+    ///
+    /// See [`Daterange`] for a link to the HLS documentation for this attribute.
     pub cue: Option<Cow<'a, str>>,
+    /// Corresponds to the `END-DATE` attribute.
+    ///
+    /// See [`Daterange`] for a link to the HLS documentation for this attribute.
     pub end_date: Option<DateTime>,
+    /// Corresponds to the `DURATION` attribute.
+    ///
+    /// See [`Daterange`] for a link to the HLS documentation for this attribute.
     pub duration: Option<f64>,
+    /// Corresponds to the `PLANNED-DURATION` attribute.
+    ///
+    /// See [`Daterange`] for a link to the HLS documentation for this attribute.
     pub planned_duration: Option<f64>,
+    /// Corresponds to `X-<extension-attribute>` attributes.
+    ///
+    /// See [`Daterange`] for a link to the HLS documentation for this attribute.
     pub extension_attributes: HashMap<Cow<'a, str>, ExtensionAttributeValue<'a>>,
+    /// Corresponds to the `END-ON-NEXT` attribute.
+    ///
+    /// See [`Daterange`] for a link to the HLS documentation for this attribute.
     pub end_on_next: bool,
+    /// Corresponds to the `SCTE35-CMD` attribute.
+    ///
+    /// See [`Daterange`] for a link to the HLS documentation for this attribute.
     pub scte35_cmd: Option<Cow<'a, str>>,
+    /// Corresponds to the `SCTE35-OUT` attribute.
+    ///
+    /// See [`Daterange`] for a link to the HLS documentation for this attribute.
     pub scte35_out: Option<Cow<'a, str>>,
+    /// Corresponds to the `SCTE35-IN` attribute.
+    ///
+    /// See [`Daterange`] for a link to the HLS documentation for this attribute.
     pub scte35_in: Option<Cow<'a, str>>,
 }
 
+/// A builder for convenience in constructing a [`Daterange`].
 #[derive(Debug, PartialEq, Clone)]
 pub struct DaterangeBuilder<'a> {
     id: Cow<'a, str>,
@@ -97,6 +140,7 @@ pub struct DaterangeBuilder<'a> {
     scte35_in: Option<Cow<'a, str>>,
 }
 impl<'a> DaterangeBuilder<'a> {
+    /// Create a new builder.
     pub fn new(id: impl Into<Cow<'a, str>>, start_date: DateTime) -> Self {
         Self {
             id: id.into(),
@@ -114,6 +158,7 @@ impl<'a> DaterangeBuilder<'a> {
         }
     }
 
+    /// Finish building and construct the `Daterange`.
     pub fn finish(self) -> Daterange<'a> {
         Daterange::new(DaterangeAttributeList {
             id: self.id,
@@ -131,31 +176,71 @@ impl<'a> DaterangeBuilder<'a> {
         })
     }
 
+    /// Add the provided `class` to the attributes built into `Daterange`.
     pub fn with_class(mut self, class: impl Into<Cow<'a, str>>) -> Self {
         self.class = Some(class.into());
         self
     }
 
+    /// Add the provided `cue` to the attributes built into `Daterange`.
     pub fn with_cue(mut self, cue: impl Into<Cow<'a, str>>) -> Self {
         self.cue = Some(cue.into());
         self
     }
 
+    /// Add the provided `end_date` to the attributes built into `Daterange`.
     pub fn with_end_date(mut self, end_date: DateTime) -> Self {
         self.end_date = Some(end_date);
         self
     }
 
+    /// Add the provided `duration` to the attributes built into `Daterange`.
     pub fn with_duration(mut self, duration: f64) -> Self {
         self.duration = Some(duration);
         self
     }
 
+    /// Add the provided `planned_duration` to the attributes built into `Daterange`.
     pub fn with_planned_duration(mut self, planned_duration: f64) -> Self {
         self.planned_duration = Some(planned_duration);
         self
     }
 
+    /// Add the proivded extension attribute to the attributes built into `Daterange`.
+    ///
+    /// The attribute name SHOULD be prefixed with `X-`. The library does not validate that this is
+    /// the case and unexpected results may occur if this is not followed.
+    ///
+    /// This sets one attribute at a time. For example:
+    /// ```
+    /// # use m3u8::tag::hls::{Daterange, ExtensionAttributeValue};
+    /// # use m3u8::tag::known::IntoInnerTag;
+    /// # use m3u8::date_time;
+    /// let daterange = Daterange::builder("id", date_time!(2025-08-02 T 21:03:00.000 -05:00))
+    ///     .with_extension_attribute(
+    ///         "X-MESSAGE",
+    ///         ExtensionAttributeValue::QuotedString("Hello, World!".into()),
+    ///     )
+    ///     .with_extension_attribute(
+    ///         "X-ANSWER",
+    ///         ExtensionAttributeValue::SignedDecimalFloatingPoint(42.0),
+    ///     )
+    ///     .finish();
+    ///
+    /// // The order of output of attributes may be mixed so we have to assert that it could be
+    /// // either order:
+    /// let expected_output_option_1 = concat!(
+    ///     "#EXT-X-DATERANGE:ID=\"id\",START-DATE=\"2025-08-02T21:03:00.000-05:00\",",
+    ///     "X-MESSAGE=\"Hello, World!\",X-ANSWER=42"
+    /// ).as_bytes();
+    /// let expected_output_option_2 = concat!(
+    ///     "#EXT-X-DATERANGE:ID=\"id\",START-DATE=\"2025-08-02T21:03:00.000-05:00\",",
+    ///     "X-ANSWER=42,X-MESSAGE=\"Hello, World!\""
+    /// ).as_bytes();
+    /// let inner = daterange.into_inner();
+    /// let bytes = inner.value();
+    /// assert!(bytes == expected_output_option_1 || bytes == expected_output_option_2);
+    /// ```
     pub fn with_extension_attribute(
         mut self,
         extension_attribute_name: impl Into<Cow<'a, str>>,
@@ -166,6 +251,10 @@ impl<'a> DaterangeBuilder<'a> {
         self
     }
 
+    /// Add the provided extension attributes to the attributes built into `Daterange`.
+    ///
+    /// The attribute names SHOULD be prefixed with `X-`. The library does not validate that this is
+    /// the case and unexpected results may occur if this is not followed.
     pub fn with_extension_attributes(
         mut self,
         extension_attributes: HashMap<Cow<'a, str>, ExtensionAttributeValue<'a>>,
@@ -174,27 +263,33 @@ impl<'a> DaterangeBuilder<'a> {
         self
     }
 
+    /// Add `END-ON-NEXT=YES` to the attributes that are built into `Daterange`.
     pub fn with_end_on_next(mut self) -> Self {
         self.end_on_next = true;
         self
     }
 
+    /// Add the provided `scte35_cmd` to the attributes that are built into the `Daterange`.
     pub fn with_scte35_cmd(mut self, scte35_cmd: impl Into<Cow<'a, str>>) -> Self {
         self.scte35_cmd = Some(scte35_cmd.into());
         self
     }
 
+    /// Add the provided `scte35_out` to the attributes that are built into the `Daterange`.
     pub fn with_scte35_out(mut self, scte35_out: impl Into<Cow<'a, str>>) -> Self {
         self.scte35_out = Some(scte35_out.into());
         self
     }
 
+    /// Add the provided `scte35_in` to the attributes that are built into the `Daterange`.
     pub fn with_scte35_in(mut self, scte35_in: impl Into<Cow<'a, str>>) -> Self {
         self.scte35_in = Some(scte35_in.into());
         self
     }
 }
 
+/// Corresponds to the #EXT-X-DATERANGE tag.
+///
 /// <https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.5.1>
 #[derive(Debug, Clone)]
 pub struct Daterange<'a> {
@@ -271,6 +366,7 @@ impl<'a> TryFrom<ParsedTag<'a>> for Daterange<'a> {
 }
 
 impl<'a> Daterange<'a> {
+    /// Constructs a new `Daterange` tag.
     pub fn new(attribute_list: DaterangeAttributeList<'a>) -> Self {
         let output_line = Cow::Owned(calculate_line(&attribute_list));
         let DaterangeAttributeList {
@@ -306,16 +402,38 @@ impl<'a> Daterange<'a> {
         }
     }
 
+    /// Starts a builder for producing `Self`.
+    ///
+    /// For example, we could construct a `Daterange` as such:
+    /// ```
+    /// # use m3u8::tag::hls::{Daterange, ExtensionAttributeValue, Cue};
+    /// # use m3u8::date_time;
+    /// let daterange = Daterange::builder("id", date_time!(2025-08-02 T 21:22:33.123))
+    ///     .with_duration(120.0)
+    ///     .with_cue(Cue::Once)
+    ///     .with_class("com.example.ad.id")
+    ///     .with_extension_attribute(
+    ///         "X-AD-ID",
+    ///         ExtensionAttributeValue::QuotedString("1234".into())
+    ///     )
+    ///     .finish();
+    /// ```
     pub fn builder(id: impl Into<Cow<'a, str>>, start_date: DateTime) -> DaterangeBuilder<'a> {
         DaterangeBuilder::new(id, start_date)
     }
 
     // === GETTERS ===
 
+    /// Corresponds to the `ID` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn id(&self) -> &str {
         &self.id
     }
 
+    /// Corresponds to the `CLASS` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn class(&self) -> Option<&str> {
         if let Some(class) = &self.class {
             Some(class)
@@ -327,10 +445,35 @@ impl<'a> Daterange<'a> {
         }
     }
 
+    /// Corresponds to the `START-DATE` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn start_date(&self) -> DateTime {
         self.start_date
     }
 
+    /// Corresponds to the `CUE` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
+    ///
+    /// This attribute provides an [`crate::tag::hls::EnumeratedStringList`] wrapper around [`Cue`].
+    /// The documentation on `EnumeratedStringList` provides more information around the concept.
+    /// Below shows an example usage:
+    /// ```
+    /// # use m3u8::{Reader, HlsLine, config::ParsingOptions, tag::known, tag::hls::{self, Cue}};
+    /// let daterange =
+    ///     r#"#EXT-X-DATERANGE:ID="id",START-DATE="2025-08-02T21:31:00Z",CUE="PRE,ONCE""#;
+    /// let mut reader = Reader::from_str(daterange, ParsingOptions::default());
+    /// match reader.read_line() {
+    ///     Ok(Some(HlsLine::KnownTag(known::Tag::Hls(hls::Tag::Daterange(tag))))) => {
+    ///         let cue = tag.cue().expect("should have cue defined");
+    ///         assert!(cue.contains(Cue::Pre));
+    ///         assert!(cue.contains(Cue::Once));
+    ///         assert!(!cue.contains(Cue::Post));
+    ///     }
+    ///     r => panic!("unexpected result {r:?}")
+    /// }
+    /// ```
     pub fn cue(&self) -> Option<EnumeratedStringList<Cue>> {
         if let Some(cue) = &self.cue {
             Some(EnumeratedStringList::from(cue.as_ref()))
@@ -344,6 +487,9 @@ impl<'a> Daterange<'a> {
         }
     }
 
+    /// Corresponds to the `END-DATE` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn end_date(&self) -> Option<DateTime> {
         if let Some(end_date) = self.end_date {
             Some(end_date)
@@ -355,6 +501,9 @@ impl<'a> Daterange<'a> {
         }
     }
 
+    /// Corresponds to the `DURATION` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn duration(&self) -> Option<f64> {
         if let Some(duration) = self.duration {
             Some(duration)
@@ -366,6 +515,9 @@ impl<'a> Daterange<'a> {
         }
     }
 
+    /// Corresponds to the `PLANNED-DURATION` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn planned_duration(&self) -> Option<f64> {
         if let Some(planned_duration) = self.planned_duration {
             Some(planned_duration)
@@ -377,6 +529,34 @@ impl<'a> Daterange<'a> {
         }
     }
 
+    /// Corresponds to the `X-<extension-attribute>` attributes.
+    ///
+    /// NOTE: prior to draft 18 these were known as `X-<client-attribute>`.
+    ///
+    /// This method collects all the attributes prefixed with `X-` and provides them in a `HashMap`.
+    /// For example:
+    /// ```
+    /// # use m3u8::{
+    /// # Reader, HlsLine, config::ParsingOptions, tag::known,
+    /// # tag::hls::{self, ExtensionAttributeValue}
+    /// # };
+    /// # use std::collections::HashMap;
+    /// let daterange =
+    ///     r#"#EXT-X-DATERANGE:ID="id",START-DATE="2025-08-02T21:31:00Z",X-EX-A="A",X-EX-B=42"#;
+    /// let mut reader = Reader::from_str(daterange, ParsingOptions::default());
+    /// match reader.read_line() {
+    ///     Ok(Some(HlsLine::KnownTag(known::Tag::Hls(hls::Tag::Daterange(tag))))) => {
+    ///         assert_eq!(
+    ///             HashMap::from([
+    ///                 ("X-EX-A", ExtensionAttributeValue::QuotedString("A".into())),
+    ///                 ("X-EX-B", ExtensionAttributeValue::SignedDecimalFloatingPoint(42.0)),
+    ///             ]),
+    ///             tag.extension_attributes()
+    ///         );
+    ///     }
+    ///     r => panic!("unexpected result {r:?}")
+    /// }
+    /// ```
     pub fn extension_attributes(&self) -> HashMap<&str, ExtensionAttributeValue> {
         let mut map = HashMap::new();
         for (key, value) in &self.attribute_list {
@@ -392,6 +572,35 @@ impl<'a> Daterange<'a> {
         map
     }
 
+    /// Corresponds to one of the `X-<extension-attribute>` attributes (keyed by `name`).
+    ///
+    /// NOTE: prior to draft 18 these were known as `X-<client-attribute>`.
+    ///
+    /// This method attempts to get the attribute value for the provided `name`. The `X-` prefix
+    /// must be included. For example:
+    /// ```
+    /// # use m3u8::{
+    /// # Reader, HlsLine, config::ParsingOptions, tag::known,
+    /// # tag::hls::{self, ExtensionAttributeValue}
+    /// # };
+    /// # use std::collections::HashMap;
+    /// let daterange =
+    ///     r#"#EXT-X-DATERANGE:ID="id",START-DATE="2025-08-02T21:31:00Z",X-EX-A="A",X-EX-B=42"#;
+    /// let mut reader = Reader::from_str(daterange, ParsingOptions::default());
+    /// match reader.read_line() {
+    ///     Ok(Some(HlsLine::KnownTag(known::Tag::Hls(hls::Tag::Daterange(tag))))) => {
+    ///         assert_eq!(
+    ///             Some(ExtensionAttributeValue::QuotedString("A".into())),
+    ///             tag.extension_attribute("X-EX-A"),
+    ///         );
+    ///         assert_eq!(
+    ///             Some(ExtensionAttributeValue::SignedDecimalFloatingPoint(42.0)),
+    ///             tag.extension_attribute("X-EX-B"),
+    ///         );
+    ///     }
+    ///     r => panic!("unexpected result {r:?}")
+    /// }
+    /// ```
     pub fn extension_attribute<'b>(&'a self, name: &'b str) -> Option<ExtensionAttributeValue<'a>> {
         if let Some(a) = self.extension_attributes.get(name) {
             Some(ExtensionAttributeValue::from(a))
@@ -402,6 +611,30 @@ impl<'a> Daterange<'a> {
         }
     }
 
+    /// Corresponds to the keys of the `X-<extension-attribute>` attributes.
+    ///
+    /// NOTE: prior to draft 18 these were known as `X-<client-attribute>`.
+    ///
+    /// This method provides the extension attribute keys that exist in the tag. For example:
+    /// ```
+    /// # use m3u8::{
+    /// # Reader, HlsLine, config::ParsingOptions, tag::known,
+    /// # tag::hls,
+    /// # };
+    /// # use std::collections::HashSet;
+    /// let daterange =
+    ///     r#"#EXT-X-DATERANGE:ID="id",START-DATE="2025-08-02T21:31:00Z",X-EX-A="A",X-EX-B=42"#;
+    /// let mut reader = Reader::from_str(daterange, ParsingOptions::default());
+    /// match reader.read_line() {
+    ///     Ok(Some(HlsLine::KnownTag(known::Tag::Hls(hls::Tag::Daterange(tag))))) => {
+    ///         assert_eq!(
+    ///             HashSet::from(["X-EX-A", "X-EX-B"]),
+    ///             tag.extension_attribute_keys(),
+    ///         );
+    ///     }
+    ///     r => panic!("unexpected result {r:?}")
+    /// }
+    /// ```
     pub fn extension_attribute_keys(&self) -> HashSet<&str> {
         let mut set = HashSet::new();
         for key in self.extension_attributes().keys() {
@@ -410,6 +643,9 @@ impl<'a> Daterange<'a> {
         set
     }
 
+    /// Corresponds to the `END-ON-NEXT` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn end_on_next(&self) -> bool {
         if let Some(end_on_next) = self.end_on_next {
             end_on_next
@@ -429,6 +665,17 @@ impl<'a> Daterange<'a> {
     // strings (containing the hexadecimal sequence), so I'll allow this parser to be
     // lenient on that requirement and accept both.
 
+    /// Corresponds to the `SCTE35-CMD` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
+    ///
+    /// Note, the specification indicates that the SCTE35-(CMD|OUT|IN) attributes are represented as
+    /// hexadecimal sequences. This implies that they should be parsed as UnquotedString (given that
+    /// section "4.2. Attribute Lists" indicates that a "hexadecimal-sequence [is] an unquoted
+    /// string of characters"); however, in practice, I've found that some packagers have put this
+    /// information in quoted strings (containing the hexadecimal sequence), so we've allowed this
+    /// parser to be lenient on that requirement and accept both. The implication is that
+    /// `#EXT-X-DATERANGE:SCTE35-CMD=0x123` is equivalent to `#EXT-X-DATERANGE:SCTE35-CMD="0x123"`.
     pub fn scte35_cmd(&self) -> Option<&str> {
         if let Some(scte35_cmd) = &self.scte35_cmd {
             Some(scte35_cmd)
@@ -441,6 +688,17 @@ impl<'a> Daterange<'a> {
         }
     }
 
+    /// Corresponds to the `SCTE35-OUT` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
+    ///
+    /// Note, the specification indicates that the SCTE35-(CMD|OUT|IN) attributes are represented as
+    /// hexadecimal sequences. This implies that they should be parsed as UnquotedString (given that
+    /// section "4.2. Attribute Lists" indicates that a "hexadecimal-sequence [is] an unquoted
+    /// string of characters"); however, in practice, I've found that some packagers have put this
+    /// information in quoted strings (containing the hexadecimal sequence), so we've allowed this
+    /// parser to be lenient on that requirement and accept both. The implication is that
+    /// `#EXT-X-DATERANGE:SCTE35-OUT=0x123` is equivalent to `#EXT-X-DATERANGE:SCTE35-OUT="0x123"`.
     pub fn scte35_out(&self) -> Option<&str> {
         if let Some(scte35_out) = &self.scte35_out {
             Some(scte35_out)
@@ -453,6 +711,17 @@ impl<'a> Daterange<'a> {
         }
     }
 
+    /// Corresponds to the `SCTE35-IN` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
+    ///
+    /// Note, the specification indicates that the SCTE35-(CMD|OUT|IN) attributes are represented as
+    /// hexadecimal sequences. This implies that they should be parsed as UnquotedString (given that
+    /// section "4.2. Attribute Lists" indicates that a "hexadecimal-sequence [is] an unquoted
+    /// string of characters"); however, in practice, I've found that some packagers have put this
+    /// information in quoted strings (containing the hexadecimal sequence), so we've allowed this
+    /// parser to be lenient on that requirement and accept both. The implication is that
+    /// `#EXT-X-DATERANGE:SCTE35-IN=0x123` is equivalent to `#EXT-X-DATERANGE:SCTE35-IN="0x123"`.
     pub fn scte35_in(&self) -> Option<&str> {
         if let Some(scte35_in) = &self.scte35_in {
             Some(scte35_in)
@@ -467,78 +736,145 @@ impl<'a> Daterange<'a> {
 
     // === SETTERS ===
 
+    /// Sets the `ID` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_id(&mut self, id: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(ID);
         self.id = id.into();
         self.output_line_is_dirty = true;
     }
 
+    /// Sets the `CLASS` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_class(&mut self, class: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(CLASS);
         self.class = Some(class.into());
         self.output_line_is_dirty = true;
     }
 
+    /// Unsets the `CLASS` attribute (set it to `None`).
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_class(&mut self) {
         self.attribute_list.remove(CLASS);
         self.class = None;
         self.output_line_is_dirty = true;
     }
 
+    /// Sets the `START-DATE` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_start_date(&mut self, start_date: DateTime) {
         self.attribute_list.remove(START_DATE);
         self.start_date = start_date;
         self.output_line_is_dirty = true;
     }
 
+    /// Sets the `CUE` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
+    ///
+    /// Note, that [`Cue`] implements `Into<Cow<str>>` and therefore can be used directly to set the
+    /// value. Similarly, an array of `Cue` can be used. For example:
+    /// ```
+    /// # use m3u8::{
+    /// # Reader, HlsLine, config::ParsingOptions, tag::known,
+    /// # tag::hls::{self, Cue, EnumeratedStringList, EnumeratedString}
+    /// # };
+    /// let daterange =
+    ///     r#"#EXT-X-DATERANGE:ID="id",START-DATE="2025-08-02T21:31:00Z",CUE="PRE,ONCE""#;
+    /// let mut reader = Reader::from_str(daterange, ParsingOptions::default());
+    /// match reader.read_line() {
+    ///     Ok(Some(HlsLine::KnownTag(known::Tag::Hls(hls::Tag::Daterange(mut tag))))) => {
+    ///         let mut cue = tag.cue().expect("should have cue defined");
+    ///         cue.remove(Cue::Pre);
+    ///         tag.set_cue(cue.to_owned());
+    ///         assert_eq!("ONCE", tag.cue().expect("must be defined").as_ref());
+    ///         
+    ///         tag.set_cue(Cue::Pre);
+    ///         assert_eq!("PRE", tag.cue().expect("must be defined").as_ref());
+    ///         
+    ///         tag.set_cue(EnumeratedStringList::from([Cue::Once, Cue::Post]));
+    ///         assert_eq!("ONCE,POST", tag.cue().expect("must be defined").as_ref());
+    ///     }
+    ///     r => panic!("unexpected result {r:?}")
+    /// }
+    /// ```
     pub fn set_cue(&mut self, cue: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(CUE);
         self.cue = Some(cue.into());
         self.output_line_is_dirty = true;
     }
 
+    /// Unsets the `CUE` attribute (set it to `None`).
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_cue(&mut self) {
         self.attribute_list.remove(CUE);
         self.cue = None;
         self.output_line_is_dirty = true;
     }
 
+    /// Sets the `END-DATE` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_end_date(&mut self, end_date: DateTime) {
         self.attribute_list.remove(END_DATE);
         self.end_date = Some(end_date);
         self.output_line_is_dirty = true;
     }
 
+    /// Unsets the `END-DATE` attribute (sets it to `None`).
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_end_date(&mut self) {
         self.attribute_list.remove(END_DATE);
         self.end_date = None;
         self.output_line_is_dirty = true;
     }
 
+    /// Sets the `DURATION` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_duration(&mut self, duration: f64) {
         self.attribute_list.remove(DURATION);
         self.duration = Some(duration);
         self.output_line_is_dirty = true;
     }
 
+    /// Unsets the `DURATION` attribute (sets it to `None`).
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_duration(&mut self) {
         self.attribute_list.remove(DURATION);
         self.duration = None;
         self.output_line_is_dirty = true;
     }
 
+    /// Sets the `PLANNED-DURATION` attribute.
     pub fn set_planned_duration(&mut self, planned_duration: f64) {
         self.attribute_list.remove(PLANNED_DURATION);
         self.planned_duration = Some(planned_duration);
         self.output_line_is_dirty = true;
     }
 
+    /// Unsets the `PLANNED-DURATION` attribute (sets it to `None`).
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_planned_duration(&mut self) {
         self.attribute_list.remove(PLANNED_DURATION);
         self.planned_duration = None;
         self.output_line_is_dirty = true;
     }
 
+    /// Sets an extension attribute (`X-<extension-attribute>`).
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
+    ///
+    /// Note that this silently fails if the name provided does not begin with `"X-"`. This is
+    /// likely to change in the future as per https://github.com/theRealRobG/m3u8/issues/1.
     pub fn set_extension_attribute(
         &mut self,
         name: impl Into<Cow<'a, str>>,
@@ -553,6 +889,12 @@ impl<'a> Daterange<'a> {
         self.output_line_is_dirty = true;
     }
 
+    /// Unsets an extension attribute (`X-<extension-attribute>`) (removes it from the `HashMap`).
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
+    ///
+    /// Note that this silently fails if the name provided does not begin with `"X-"`. This is
+    /// likely to change in the future as per https://github.com/theRealRobG/m3u8/issues/1.
     pub fn unset_extension_attribute(&mut self, name: impl Into<Cow<'a, str>>) {
         let name = name.into();
         if !name.starts_with("X-") {
@@ -563,42 +905,61 @@ impl<'a> Daterange<'a> {
         self.output_line_is_dirty = true;
     }
 
+    /// Sets the `END-ON-NEXT` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_end_on_next(&mut self, end_on_next: bool) {
         self.attribute_list.remove(END_ON_NEXT);
         self.end_on_next = Some(end_on_next);
         self.output_line_is_dirty = true;
     }
 
+    /// Sets the `SCTE35-CMD` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_scte35_cmd(&mut self, scte35_cmd: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(SCTE35_CMD);
         self.scte35_cmd = Some(scte35_cmd.into());
         self.output_line_is_dirty = true;
     }
 
+    /// Unsets the `SCTE35-CMD` attribute (sets it to `None`).
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_scte35_cmd(&mut self) {
         self.attribute_list.remove(SCTE35_CMD);
         self.scte35_cmd = None;
         self.output_line_is_dirty = true;
     }
 
+    /// Sets the `SCTE35-OUT` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_scte35_out(&mut self, scte35_out: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(SCTE35_OUT);
         self.scte35_out = Some(scte35_out.into());
         self.output_line_is_dirty = true;
     }
 
+    /// Unsets the `SCTE35-OUT` attribute (sets it to `None`).
     pub fn unset_scte35_out(&mut self) {
         self.attribute_list.remove(SCTE35_OUT);
         self.scte35_out = None;
         self.output_line_is_dirty = true;
     }
 
+    /// Sets the `SCTE35-IN` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_scte35_in(&mut self, scte35_in: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(SCTE35_IN);
         self.scte35_in = Some(scte35_in.into());
         self.output_line_is_dirty = true;
     }
 
+    /// Unsets the `SCTE35-IN` attribute (sets it to `None`).
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_scte35_in(&mut self) {
         self.attribute_list.remove(SCTE35_IN);
         self.scte35_in = None;
@@ -632,23 +993,60 @@ impl<'a> Daterange<'a> {
 
 into_inner_tag!(Daterange);
 
+/// Provides the value for an extension attribute (`X-<extension-attribute>` as defined in the
+/// EXT-X-DATERANGE tag specification).
 #[derive(Debug, PartialEq, Clone)]
 pub enum ExtensionAttributeValue<'a> {
+    /// A quoted string value.
     QuotedString(Cow<'a, str>),
+    /// A hexadecimal sequence value (an unquoted string of characters, prefixed by `0x`, all of
+    /// which are valid hex characters). Note that the library does not validate that the parsed
+    /// input is valid hex.
     HexadecimalSequence(Cow<'a, str>),
+    /// A signed decimal floating point value.
     SignedDecimalFloatingPoint(f64),
 }
 impl<'a> ExtensionAttributeValue<'a> {
+    /// Create a new [`Self::QuotedString`] case.
     pub fn quoted_string(quoted_string: impl Into<Cow<'a, str>>) -> Self {
         Self::QuotedString(quoted_string.into())
     }
 
+    /// Create a new [`Self::HexadecimalSequence`] case.
     pub fn hexadecimal_sequence(hexadecimal_sequence: impl Into<Cow<'a, str>>) -> Self {
         Self::HexadecimalSequence(hexadecimal_sequence.into())
     }
 
+    /// Create a new [`Self::SignedDecimalFloatingPoint`] case.
     pub fn signed_decimal_floating_point(signed_decimal_floating_point: f64) -> Self {
         Self::SignedDecimalFloatingPoint(signed_decimal_floating_point)
+    }
+}
+
+#[cfg(test)]
+mod ribtests {
+    use super::*;
+    use crate::{
+        HlsLine, Reader,
+        config::ParsingOptions,
+        tag::{hls, known},
+    };
+    use pretty_assertions::assert_eq;
+
+    #[test]
+    fn some_test_name() {
+        let daterange =
+            r#"#EXT-X-DATERANGE:ID="id",START-DATE="2025-08-02T21:31:00Z",CUE="PRE,ONCE""#;
+        let mut reader = Reader::from_str(daterange, ParsingOptions::default());
+        match reader.read_line() {
+            Ok(Some(HlsLine::KnownTag(known::Tag::Hls(hls::Tag::Daterange(mut tag))))) => {
+                let mut cue = tag.cue().expect("should have cue defined");
+                cue.remove(Cue::Pre);
+                tag.set_cue(cue.to_owned());
+                assert_eq!("ONCE", tag.cue().expect("must be defined").as_ref());
+            }
+            r => panic!("unexpected result {r:?}"),
+        }
     }
 }
 
