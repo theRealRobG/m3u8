@@ -13,17 +13,11 @@ use std::{
 /// also supports an `Unknown` case that contains a custom string. In this way, parsing won't break
 /// as new cases are added to the specification.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum EnumeratedString<'a, T>
-where
-    T: Clone + Copy + PartialEq + Debug + Display,
-{
+pub enum EnumeratedString<'a, T> {
     Known(T),
     Unknown(&'a str),
 }
-impl<T> EnumeratedString<'_, T>
-where
-    T: Clone + Copy + PartialEq + Debug + Display,
-{
+impl<T> EnumeratedString<'_, T> {
     /// A convenience method for getting the known value. This may be most helpful when chaining on
     /// an already optional attribute.
     pub fn known(&self) -> Option<&T> {
@@ -36,7 +30,7 @@ where
 // Display is needed for writing mutated values to output
 impl<T> Display for EnumeratedString<'_, T>
 where
-    T: Clone + Copy + PartialEq + Debug + Display,
+    T: Display,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -48,12 +42,7 @@ where
 // Convenience From implementation for where T has implemented TryFrom
 impl<'a, T> From<&'a str> for EnumeratedString<'a, T>
 where
-    T: TryFrom<&'a str, Error = UnrecognizedEnumerationError<'a>>
-        + Clone
-        + Copy
-        + PartialEq
-        + Debug
-        + Display,
+    T: TryFrom<&'a str, Error = UnrecognizedEnumerationError<'a>>,
 {
     fn from(value: &'a str) -> Self {
         match T::try_from(value) {
@@ -65,7 +54,7 @@ where
 // Convenience Into implementation for where Cow has From T
 impl<'a, T> From<EnumeratedString<'a, T>> for Cow<'a, str>
 where
-    T: Into<Cow<'a, str>> + Clone + Copy + PartialEq + Debug + Display,
+    T: Into<Cow<'a, str>>,
 {
     fn from(value: EnumeratedString<'a, T>) -> Self {
         match value {
@@ -77,7 +66,7 @@ where
 // If T is AsStaticCow then EnumeratedString can have an as_cow method
 impl<'a, T> EnumeratedString<'a, T>
 where
-    T: Clone + Copy + PartialEq + Debug + Display + AsStaticCow,
+    T: AsStaticCow,
 {
     pub fn as_cow(&self) -> Cow<'a, str> {
         match self {
@@ -93,16 +82,13 @@ where
 /// break parsing. This type extends this concept to lists and provides support for mixed lists of
 /// known and unknown values.
 #[derive(Debug, Clone, PartialEq)]
-pub struct EnumeratedStringList<'a, T>
-where
-    T: AsStaticCow + Clone + Copy + PartialEq + Debug + Display,
-{
+pub struct EnumeratedStringList<'a, T> {
     inner: Cow<'a, str>,
     t: PhantomData<T>,
 }
 impl<'a, T> EnumeratedStringList<'a, T>
 where
-    T: AsStaticCow + Clone + Copy + PartialEq + Debug + Display,
+    T: AsStaticCow + Copy + Display,
 {
     pub fn contains(&self, value: impl Into<EnumeratedString<'a, T>>) -> bool {
         let value = value.into();
@@ -171,24 +157,18 @@ where
 }
 impl<T> Display for EnumeratedStringList<'_, T>
 where
-    T: AsStaticCow + Clone + Copy + PartialEq + Debug + Display,
+    T: Display,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.inner)
     }
 }
-impl<'a, T> AsRef<str> for EnumeratedStringList<'a, T>
-where
-    T: AsStaticCow + Clone + Copy + PartialEq + Debug + Display,
-{
+impl<'a, T> AsRef<str> for EnumeratedStringList<'a, T> {
     fn as_ref(&self) -> &str {
         &self.inner
     }
 }
-impl<'a, T> From<String> for EnumeratedStringList<'a, T>
-where
-    T: AsStaticCow + Clone + Copy + PartialEq + Debug + Display,
-{
+impl<'a, T> From<String> for EnumeratedStringList<'a, T> {
     fn from(value: String) -> Self {
         Self {
             inner: Cow::Owned(value),
@@ -196,10 +176,7 @@ where
         }
     }
 }
-impl<'a, T> From<&'a str> for EnumeratedStringList<'a, T>
-where
-    T: AsStaticCow + Clone + Copy + PartialEq + Debug + Display,
-{
+impl<'a, T> From<&'a str> for EnumeratedStringList<'a, T> {
     fn from(value: &'a str) -> Self {
         Self {
             inner: Cow::Borrowed(value),
@@ -207,17 +184,14 @@ where
         }
     }
 }
-impl<'a, T> From<EnumeratedStringList<'a, T>> for Cow<'a, str>
-where
-    T: AsStaticCow + Clone + Copy + PartialEq + Debug + Display,
-{
+impl<'a, T> From<EnumeratedStringList<'a, T>> for Cow<'a, str> {
     fn from(value: EnumeratedStringList<'a, T>) -> Self {
         value.inner
     }
 }
 impl<'a, T, S, const N: usize> From<[S; N]> for EnumeratedStringList<'a, T>
 where
-    T: AsStaticCow + Clone + Copy + PartialEq + Debug + Display,
+    T: AsStaticCow + Copy + Display,
     S: Into<EnumeratedString<'a, T>>,
 {
     fn from(value: [S; N]) -> Self {
@@ -230,7 +204,7 @@ where
 }
 impl<'a, T, S> From<Vec<S>> for EnumeratedStringList<'a, T>
 where
-    T: AsStaticCow + Clone + Copy + PartialEq + Debug + Display,
+    T: AsStaticCow + Copy + Display,
     S: Into<EnumeratedString<'a, T>>,
 {
     fn from(value: Vec<S>) -> Self {
@@ -244,13 +218,7 @@ where
 
 impl<'a, T> EnumeratedStringList<'a, T>
 where
-    T: TryFrom<&'a str, Error = UnrecognizedEnumerationError<'a>>
-        + AsStaticCow
-        + Clone
-        + Copy
-        + PartialEq
-        + Debug
-        + Display,
+    T: TryFrom<&'a str, Error = UnrecognizedEnumerationError<'a>>,
 {
     pub fn iter(&'a self) -> EnumeratedStringListIter<'a, T> {
         EnumeratedStringListIter {
@@ -263,26 +231,14 @@ where
 #[derive(Debug, Clone)]
 pub struct EnumeratedStringListIter<'a, T>
 where
-    T: TryFrom<&'a str, Error = UnrecognizedEnumerationError<'a>>
-        + AsStaticCow
-        + Clone
-        + Copy
-        + PartialEq
-        + Debug
-        + Display,
+    T: TryFrom<&'a str, Error = UnrecognizedEnumerationError<'a>>,
 {
     inner: Split<'a, char>,
     t: PhantomData<T>,
 }
 impl<'a, T> Iterator for EnumeratedStringListIter<'a, T>
 where
-    T: TryFrom<&'a str, Error = UnrecognizedEnumerationError<'a>>
-        + AsStaticCow
-        + Clone
-        + Copy
-        + PartialEq
-        + Debug
-        + Display,
+    T: TryFrom<&'a str, Error = UnrecognizedEnumerationError<'a>>,
 {
     type Item = EnumeratedString<'a, T>;
 
