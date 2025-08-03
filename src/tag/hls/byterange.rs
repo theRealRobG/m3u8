@@ -8,7 +8,7 @@ use crate::{
 };
 use std::borrow::Cow;
 
-/// Corresponds to the #EXT-X-BYTERANGE tag.
+/// Corresponds to the `#EXT-X-BYTERANGE` tag.
 ///
 /// <https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.4.2>
 #[derive(Debug, Clone)]

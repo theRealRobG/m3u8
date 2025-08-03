@@ -288,7 +288,7 @@ impl<'a> DaterangeBuilder<'a> {
     }
 }
 
-/// Corresponds to the #EXT-X-DATERANGE tag.
+/// Corresponds to the `#EXT-X-DATERANGE` tag.
 ///
 /// <https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.5.1>
 #[derive(Debug, Clone)]

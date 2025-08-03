@@ -3,7 +3,7 @@ use crate::{
     tag::{hls::into_inner_tag, known::ParsedTag},
 };
 
-/// Corresponds to the #EXT-X-I-FRAMES-ONLY tag.
+/// Corresponds to the `#EXT-X-I-FRAMES-ONLY` tag.
 ///
 /// <https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.3.6>
 #[derive(Debug, PartialEq, Clone, Copy)]

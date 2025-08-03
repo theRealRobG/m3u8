@@ -8,7 +8,7 @@ use crate::{
 };
 use std::borrow::Cow;
 
-/// Corresponds to the #EXT-X-DEFINE tag where `NAME` and `VALUE` are used.
+/// Corresponds to the `#EXT-X-DEFINE` tag where `NAME` and `VALUE` are used.
 ///
 /// See [`Define`] for a link to the HLS documentation for this attribute.
 #[derive(Debug, Clone)]
@@ -81,7 +81,7 @@ impl<'a> Name<'a> {
 
 into_inner_tag!(Name);
 
-/// Corresponds to the #EXT-X-DEFINE tag where `IMPORT` is used.
+/// Corresponds to the `#EXT-X-DEFINE` tag where `IMPORT` is used.
 ///
 /// See [`Define`] for a link to the HLS documentation for this attribute.
 #[derive(Debug, Clone)]
@@ -136,7 +136,7 @@ impl<'a> Import<'a> {
 
 into_inner_tag!(Import);
 
-/// Corresponds to the #EXT-X-DEFINE tag where `QUERYPARAM` is used.
+/// Corresponds to the `#EXT-X-DEFINE` tag where `QUERYPARAM` is used.
 ///
 /// See [`Define`] for a link to the HLS documentation for this attribute.
 #[derive(Debug, Clone)]
@@ -191,7 +191,7 @@ impl<'a> Queryparam<'a> {
 
 into_inner_tag!(Queryparam);
 
-/// Corresponds to the #EXT-X-DEFINE tag.
+/// Corresponds to the `#EXT-X-DEFINE` tag.
 ///
 /// <https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.2.3>
 #[derive(Debug, PartialEq, Clone)]
