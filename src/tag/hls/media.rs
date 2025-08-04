@@ -380,7 +380,7 @@ impl<'a> ValidChannels<'a> {
     /// Since `&str` implements `Into<EnumeratedStringList>` we can also use string slice directly,
     /// but care should be taken to follow the correct format:
     /// ```
-    /// # use m3u8::tag::hls::{EnumeratedStringList, ValidChannels};
+    /// # use m3u8::tag::hls::ValidChannels;
     /// let channels = ValidChannels::new(16, "JOC", "BINAURAL");
     /// ```
     pub fn new(
@@ -735,10 +735,10 @@ impl<'a> MediaBuilder<'a> {
     /// used directly here. For example:
     /// ```
     /// # use m3u8::tag::hls::{
-    /// # Media, ValidChannels, MediaType, EnumeratedStringList, AudioCodingIdentifier,
+    /// # MediaBuilder, ValidChannels, MediaType, EnumeratedStringList, AudioCodingIdentifier,
     /// # ChannelSpecialUsageIdentifier
     /// # };
-    /// let builder = Media::new(MediaType::Audio, "ENGLISH", "SPECIAL-GROUP")
+    /// let builder = MediaBuilder::new(MediaType::Audio, "ENGLISH", "SPECIAL-GROUP")
     ///     .with_channels(ValidChannels::new(
     ///         16,
     ///         EnumeratedStringList::from([AudioCodingIdentifier::JointObjectCoding]),
@@ -748,8 +748,8 @@ impl<'a> MediaBuilder<'a> {
     /// Alternatively, a string slice can be used, but care should be taken to follow the correct
     /// syntax defined for `CHANNELS`.
     /// ```
-    /// # use m3u8::tag::hls::{ Media, MediaType };
-    /// let builder = Media::new(MediaType::Audio, "ENGLISH", "SPECIAL-GROUP")
+    /// # use m3u8::tag::hls::{ MediaBuilder, MediaType };
+    /// let builder = MediaBuilder::new(MediaType::Audio, "ENGLISH", "SPECIAL-GROUP")
     ///     .with_channels("16/JOC/BINAURAL");
     /// ```
     pub fn with_channels(mut self, channels: impl Into<Cow<'a, str>>) -> Self {
@@ -1320,6 +1320,69 @@ impl<'a> Media<'a> {
     /// Sets the `CHANNELS` attribute.
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
+    ///
+    /// Given that `ValidChannels` implements `Into<Cow<str>>` it is possible to work with
+    /// `ValidChannels` directly here. For example:
+    /// ```
+    /// # use m3u8::tag::hls::{Media, EnumeratedStringList, AudioCodingIdentifier, ValidChannels,
+    /// # GetValid};
+    /// # let mut media = Media::builder("u", "n", "g").finish();
+    /// media.set_channels(ValidChannels::new(
+    ///     12,
+    ///     EnumeratedStringList::from([AudioCodingIdentifier::JointObjectCoding]),
+    ///     "",
+    /// ));
+    /// assert_eq!(
+    ///     "12/JOC",
+    ///     media.channels().valid().expect("must be defined").as_ref()
+    /// );
+    /// ```
+    /// It is also possible to set with a `&str` directly, but care should be taken to ensure the
+    /// correct syntax is followed:
+    /// ```
+    /// # use m3u8::tag::hls::{Media, EnumeratedStringList, AudioCodingIdentifier, ValidChannels,
+    /// # ChannelSpecialUsageIdentifier, GetValid};
+    /// # let mut media = Media::builder("u", "n", "g").finish();
+    /// media.set_channels("16/3OA/IMMERSIVE,BED-4,DOF-6");
+    /// let channels = media.channels().valid().expect("should be defined");
+    /// assert_eq!(16, channels.count());
+    /// assert_eq!(1, channels.spatial_audio().iter().count());
+    /// assert!(channels.spatial_audio().contains(AudioCodingIdentifier::OrderOfAmbisonics(3)));
+    /// assert_eq!(3, channels.special_usage().iter().count());
+    /// assert!(channels.special_usage().contains(ChannelSpecialUsageIdentifier::Immersive));
+    /// assert!(channels.special_usage().contains(ChannelSpecialUsageIdentifier::Bed(4)));
+    /// assert!(
+    ///     channels.special_usage().contains(ChannelSpecialUsageIdentifier::DegreesOfFreedom(6))
+    /// );
+    /// ```
+    /// The [`EnumeratedStringList`] provides some pseudo-set-like operations to help with mutating
+    /// an existing value. Note, `to_owned` will need to be used on each of the string lists if
+    /// setting back on the tag:
+    /// ```
+    /// # use m3u8::{Reader, HlsLine, config::ParsingOptions, tag::{known, hls}};
+    /// # use m3u8::tag::hls::{Media, AudioCodingIdentifier, ChannelSpecialUsageIdentifier,
+    /// # ValidChannels, GetValid};
+    /// let tag = r#"#EXT-X-MEDIA:TYPE=AUDIO,NAME="a",GROUP-ID="a",CHANNELS="6/-/DOWNMIX,BED-4""#;
+    /// let mut reader = Reader::from_str(tag, ParsingOptions::default());
+    /// match reader.read_line() {
+    ///     Ok(Some(HlsLine::KnownTag(known::Tag::Hls(hls::Tag::Media(mut media))))) => {
+    ///         let channels = media.channels().valid().expect("should be defined");
+    ///         let mut spatial = channels.spatial_audio();
+    ///         spatial.insert(AudioCodingIdentifier::JointObjectCoding);
+    ///         let mut special = channels.special_usage();
+    ///         special.remove(ChannelSpecialUsageIdentifier::Bed(4));
+    ///         media.set_channels(ValidChannels::new(
+    ///             6,
+    ///             spatial.to_owned(),
+    ///             special.to_owned()
+    ///         ));
+    ///         
+    ///         let new_channels = media.channels().valid().expect("should be defined");
+    ///         assert_eq!("6/JOC/DOWNMIX", new_channels.as_ref());
+    ///     }
+    ///     r => panic!("unexpected result {r:?}"),
+    /// }
+    /// ```
     pub fn set_channels(&mut self, channels: impl Into<Cow<'a, str>>) {
         self.attribute_list.remove(CHANNELS);
         self.channels = Some(channels.into());
