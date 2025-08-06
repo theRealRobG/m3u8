@@ -1,3 +1,8 @@
+//! Types and methods related to associated values of [`Tag`].
+//!
+//! The definitions in this module provide the constructs necessary for both parsing to strongly
+//! typed tags as well as writing when using [`crate::Writer`].
+
 use crate::{
     error::ValidationError,
     tag::{
@@ -8,12 +13,31 @@ use crate::{
 };
 use std::{borrow::Cow, cmp::PartialEq, fmt::Debug};
 
+/// Represents a HLS tag that is known to the library.
+///
+/// Known tags are split into two cases, those which are defined by the library, and those that are
+/// custom defined by the user. The library makes an effort to reflect in types what is specified
+/// via the latest `draft-pantos-hls-rfc8216` specification. The HLS specification also allows for
+/// unknown tags which are intended to be ignored by clients; however, using that, special custom
+/// implementations can be built up. Some notable examples are the `#EXT-X-SCTE35` tag defined in
+/// [SCTE 35 standard] (which has been superceded by the SCTE35 attributes on `#EXT-X-DATERANGE`),
+/// the `#EXT-X-IMAGE-STREAM-INF` tag (and associated tags) defined via [Roku Developers], the
+/// `#EXT-X-PREFETCH` tag defined by [LHLS], and there are many more. We find that this flexibility
+/// is a useful trait of HLS and so aim to support it here. For use cases where there is no need for
+/// any custom tag parsing, the [`NoCustomTag`] implementation of [`CustomTag`] exists, and is the
+/// default implementation of the generic `Custom` parameter in this enum.
+///
+/// [SCTE 35 standard]: https://account.scte.org/standards/library/catalog/scte-35-digital-program-insertion-cueing-message/
+/// [Roku Developers]: https://developer.roku.com/docs/developer-program/media-playback/trick-mode/hls-and-dash.md#image-media-playlists-for-hls
+/// [LHLS]: https://video-dev.github.io/hlsjs-rfcs/docs/0001-lhls
 #[derive(Debug, PartialEq, Clone)]
 #[allow(clippy::large_enum_variant)]
 pub enum Tag<'a, Custom = NoCustomTag>
 where
     Custom: CustomTag<'a>,
 {
+    // =============================================================================================
+    //
     // Clippy suggests that the `Tag` within the `Hls` case should be put in a Box, based on
     // https://rust-lang.github.io/rust-clippy/master/index.html#large_enum_variant
     //   > The largest variant contains at least 272 bytes; Boxing the large field
@@ -34,24 +58,484 @@ where
     // I believe that the vast majority of cases where the parser is being used we will be using
     // instances of the `Hls` variant, and therefore, I am not putting the `Tag` in a `Box` and so
     // ignoring the Clippy warning.
+    //
+    // =============================================================================================
+    /// Indicates that the tag found was one of the 32 known tags defined in the HLS specification
+    /// that are supported here in this library _(and that were not ignored by
+    /// [`crate::config::ParsingOptions`])_. See [`hls::Tag`] for a more complete documentation of
+    /// all of the known tag types.
     Hls(hls::Tag<'a>),
+    /// Indicates that the tag found was one matching the [`CustomTag`] definition that the user of
+    /// the library has defined. The tag is wrapped in a [`CustomTagAccess`] struct (see that struct
+    /// documentation for reasoning on why the wrapping exists) and can be borrowed via the
+    /// [`CustomTagAccess::as_ref`] method or mutably borrowed via the [`CustomTagAccess::as_mut`]
+    /// method. Refer to [`CustomTag`] for more information on how to define a custom tag.
     Custom(CustomTagAccess<'a, Custom>),
 }
 
+/// The inner data of a parsed tag.
+///
+/// This struct is primarily useful for the [`crate::Writer`], but can be used outside of writing,
+/// if the user needs to have custom access on the byte-slice content of the tag. The slice the
+/// inner data holds may come from a data source provided during parsing, or may be an owned
+/// `Vec<u8>` if the tag was mutated or constructed using a builder method for the tag. When the
+/// inner data is a byte slice of parsed data, it may be a slice of the rest of the playlist from
+/// where the tag was found; however, the [`Self::value`] method ensures that only the relevant
+/// bytes for this line are provided.
 pub struct TagInner<'a> {
     pub(crate) output_line: Cow<'a, [u8]>,
 }
 impl<'a> TagInner<'a> {
+    /// Provides the value of the inner data.
+    ///
+    /// The method ensures that only data from this line is provided as the value (even if the slice
+    /// of borrowed data extends past the line until the end of the playlist).
     pub fn value(&self) -> &[u8] {
         split_on_new_line(&self.output_line).parsed
     }
 }
 
+/// The ability to convert self into a [`TagInner`].
 pub trait IntoInnerTag<'a> {
+    /// Consume `self` and provide [`TagInner`].
     fn into_inner(self) -> TagInner<'a>;
 }
 
 /// Trait to define a custom tag implementation.
+///
+/// The trait comes in two parts:
+/// 1. [`CustomTag::is_known_name`] which allows the library to know whether a tag line (line
+///    prefixed with `#EXT`) should be considered a possible instance of this implementation.
+/// 2. `TryFrom<ParsedTag>` which is where the parsing into the custom tag instance is attempted.
+///
+/// The [`ParsedTag`] struct provides generic information about what the library has been able to
+/// parse from the tag line already (note that the parsing into `ParsedTag` only happens if
+/// `is_known_name` returned true for the line). The concept here is that the user of the library
+/// does not have to re-implement the whole of the line parsing algorithm for their custom tag, but
+/// the data provided is still quite generic, and will have to be translated into the type that they
+/// have defined.
+///
+/// ## Single tag example
+///
+/// Suppose we have a proprietary extension of HLS where we have added the following tag:
+/// ```text
+/// EXT-X-JOKE
+///
+///    The EXT-X-JOKE tag allows a server to provide a joke to the client.
+///    It is OPTIONAL. Its format is:
+///
+///    #EXT-X-JOKE:<attribute-list>
+///
+///    The following attributes are defined:
+///
+///       TYPE
+///
+///       The value is an enumerated-string; valid strings are DAD, PUN,
+///       BAR, STORY, and KNOCK-KNOCK. This attribute is REQUIRED.
+///
+///       JOKE
+///
+///       The value is a quoted-string that includes the contents of the
+///       joke. The value MUST be hilarious. Clients SHOULD reject the joke
+///       if it does not ellicit at least a smile. If the TYPE is DAD, then
+///       the client SHOULD groan on completion of the joke. This attribute
+///       is REQUIRED.
+/// ```
+/// We may choose to model this tag as such (adding the derive attributes for convenience):
+/// ```
+/// #[derive(Debug, PartialEq, Clone)]
+/// struct JokeTag<'a> {
+///     joke_type: JokeType,
+///     joke: &'a str,
+/// }
+///
+/// #[derive(Debug, PartialEq, Clone)]
+/// enum JokeType {
+///     Dad,
+///     Pun,
+///     Bar,
+///     Story,
+///     KnockKnock,
+/// }
+/// ```
+/// The first step we must take is to implement the parsing logic for this tag. To do that we must
+/// implement the `TryFrom<ParsedTag>` requirement. We may do this as follows:
+/// ```
+/// # use m3u8::{
+/// #     tag::{
+/// #         known::{ParsedTag},
+/// #         value::{
+/// #             SemiParsedTagValue, ParsedAttributeValue
+/// #         }
+/// #     },
+/// #     error::{ValidationError, ValidationErrorValueKind}
+/// # };
+/// #
+/// # #[derive(Debug, PartialEq, Clone)]
+/// # struct JokeTag<'a> {
+/// #     joke_type: JokeType,
+/// #     joke: &'a str,
+/// # }
+/// #
+/// # #[derive(Debug, PartialEq, Clone)]
+/// # enum JokeType {
+/// #     Dad,
+/// #     Pun,
+/// #     Bar,
+/// #     Story,
+/// #     KnockKnock,
+/// # }
+/// impl<'a> TryFrom<ParsedTag<'a>> for JokeTag<'a> {
+///     type Error = ValidationError;
+///
+///     fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
+///         // Ensure that the value of the tag corresponds to `<attribute-list>`
+///         let SemiParsedTagValue::AttributeList(list) = tag.value else {
+///             return Err(ValidationError::UnexpectedValueType(
+///                 ValidationErrorValueKind::from(&tag.value),
+///             ));
+///         };
+///         // Ensure that the `JOKE` attribute exists and is of the correct type.
+///         let Some(ParsedAttributeValue::QuotedString(joke)) = list.get("JOKE") else {
+///             return Err(ValidationError::MissingRequiredAttribute("JOKE"));
+///         };
+///         // Ensure that the `TYPE` attribute exists and is of the correct type. Note the
+///         // difference that this type is `UnquotedString` instead of `QuotedString`, signifying
+///         // the use of the HLS defined `enumerated-string` attribute value type.
+///         let Some(ParsedAttributeValue::UnquotedString(joke_type_str)) = list.get("TYPE") else {
+///             return Err(ValidationError::MissingRequiredAttribute("TYPE"));
+///         };
+///         // Translate the enumerated string value into the enum cases we support, otherwise,
+///         // return an error.
+///         let Some(joke_type) = (match *joke_type_str {
+///             "DAD" => Some(JokeType::Dad),
+///             "PUN" => Some(JokeType::Pun),
+///             "BAR" => Some(JokeType::Bar),
+///             "STORY" => Some(JokeType::Story),
+///             "KNOCK-KNOCK" => Some(JokeType::KnockKnock),
+///             _ => None,
+///         }) else {
+///             return Err(ValidationError::InvalidEnumeratedString);
+///         };
+///         // Now we have our joke.
+///         Ok(Self { joke_type, joke })
+///     }
+/// }
+/// ```
+/// Now we can simply implement the `CustomTag` requirement via the `is_known_name` method. Note
+/// that the tag name is everything after `#EXT` (and before `:`), implying that the `-X-` is
+/// included in the name:
+/// ```
+/// # use m3u8::{
+/// #     tag::{
+/// #         known::{ParsedTag, CustomTag},
+/// #         value::{
+/// #             SemiParsedTagValue, ParsedAttributeValue
+/// #         }
+/// #     },
+/// #     error::{ValidationError, ValidationErrorValueKind}
+/// # };
+/// #
+/// # #[derive(Debug, PartialEq, Clone)]
+/// # struct JokeTag<'a> {
+/// #     joke_type: JokeType,
+/// #     joke: &'a str,
+/// # }
+/// #
+/// # #[derive(Debug, PartialEq, Clone)]
+/// # enum JokeType {
+/// #     Dad,
+/// #     Pun,
+/// #     Bar,
+/// #     Story,
+/// #     KnockKnock,
+/// # }
+/// # impl<'a> TryFrom<ParsedTag<'a>> for JokeTag<'a> {
+/// #     type Error = ValidationError;
+/// #
+/// #     fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
+/// #         // Ensure that the value of the tag corresponds to `<attribute-list>`
+/// #         let SemiParsedTagValue::AttributeList(list) = tag.value else {
+/// #             return Err(ValidationError::UnexpectedValueType(
+/// #                 ValidationErrorValueKind::from(&tag.value),
+/// #             ));
+/// #         };
+/// #         // Ensure that the `JOKE` attribute exists and is of the correct type.
+/// #         let Some(ParsedAttributeValue::QuotedString(joke)) = list.get("JOKE") else {
+/// #             return Err(ValidationError::MissingRequiredAttribute("JOKE"));
+/// #         };
+/// #         // Ensure that the `TYPE` attribute exists and is of the correct type. Note the
+/// #         // difference that this type is `UnquotedString` instead of `QuotedString`, signifying
+/// #         // the use of the HLS defined `enumerated-string` attribute value type.
+/// #         let Some(ParsedAttributeValue::UnquotedString(joke_type_str)) = list.get("TYPE") else {
+/// #             return Err(ValidationError::MissingRequiredAttribute("TYPE"));
+/// #         };
+/// #         // Translate the enumerated string value into the enum cases we support, otherwise,
+/// #         // return an error.
+/// #         let Some(joke_type) = (match *joke_type_str {
+/// #             "DAD" => Some(JokeType::Dad),
+/// #             "PUN" => Some(JokeType::Pun),
+/// #             "BAR" => Some(JokeType::Bar),
+/// #             "STORY" => Some(JokeType::Story),
+/// #             "KNOCK-KNOCK" => Some(JokeType::KnockKnock),
+/// #             _ => None,
+/// #         }) else {
+/// #             return Err(ValidationError::InvalidEnumeratedString);
+/// #         };
+/// #         // Now we have our joke.
+/// #         Ok(Self { joke_type, joke })
+/// #     }
+/// # }
+/// impl<'a> CustomTag<'a> for JokeTag<'a> {
+///     fn is_known_name(name: &str) -> bool {
+///         name == "-X-JOKE"
+///     }
+/// }
+/// ```
+/// At this stage we are ready to use our tag, for example, as part of a [`crate::Reader`]. Below we
+/// include an example playlist string and show parsing of the joke working. Note that we define our
+/// custom tag with the reader using [`std::marker::PhantomData`] and the
+/// [`crate::Reader::with_custom_from_str`] method.
+/// ```
+/// # use m3u8::{
+/// #     Reader, HlsLine,
+/// #     config::ParsingOptions,
+/// #     tag::{
+/// #         known::{ParsedTag, CustomTag, Tag},
+/// #         value::{
+/// #             SemiParsedTagValue, ParsedAttributeValue
+/// #         },
+/// #         hls::{Version, Targetduration, M3u}
+/// #     },
+/// #     error::{ValidationError, ValidationErrorValueKind}
+/// # };
+/// # use std::marker::PhantomData;
+/// #
+/// # #[derive(Debug, PartialEq, Clone)]
+/// # struct JokeTag<'a> {
+/// #     joke_type: JokeType,
+/// #     joke: &'a str,
+/// # }
+/// #
+/// # #[derive(Debug, PartialEq, Clone)]
+/// # enum JokeType {
+/// #     Dad,
+/// #     Pun,
+/// #     Bar,
+/// #     Story,
+/// #     KnockKnock,
+/// # }
+/// # impl<'a> TryFrom<ParsedTag<'a>> for JokeTag<'a> {
+/// #     type Error = ValidationError;
+/// #
+/// #     fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
+/// #         // Ensure that the value of the tag corresponds to `<attribute-list>`
+/// #         let SemiParsedTagValue::AttributeList(list) = tag.value else {
+/// #             return Err(ValidationError::UnexpectedValueType(
+/// #                 ValidationErrorValueKind::from(&tag.value),
+/// #             ));
+/// #         };
+/// #         // Ensure that the `JOKE` attribute exists and is of the correct type.
+/// #         let Some(ParsedAttributeValue::QuotedString(joke)) = list.get("JOKE") else {
+/// #             return Err(ValidationError::MissingRequiredAttribute("JOKE"));
+/// #         };
+/// #         // Ensure that the `TYPE` attribute exists and is of the correct type. Note the
+/// #         // difference that this type is `UnquotedString` instead of `QuotedString`, signifying
+/// #         // the use of the HLS defined `enumerated-string` attribute value type.
+/// #         let Some(ParsedAttributeValue::UnquotedString(joke_type_str)) = list.get("TYPE") else {
+/// #             return Err(ValidationError::MissingRequiredAttribute("TYPE"));
+/// #         };
+/// #         // Translate the enumerated string value into the enum cases we support, otherwise,
+/// #         // return an error.
+/// #         let Some(joke_type) = (match *joke_type_str {
+/// #             "DAD" => Some(JokeType::Dad),
+/// #             "PUN" => Some(JokeType::Pun),
+/// #             "BAR" => Some(JokeType::Bar),
+/// #             "STORY" => Some(JokeType::Story),
+/// #             "KNOCK-KNOCK" => Some(JokeType::KnockKnock),
+/// #             _ => None,
+/// #         }) else {
+/// #             return Err(ValidationError::InvalidEnumeratedString);
+/// #         };
+/// #         // Now we have our joke.
+/// #         Ok(Self { joke_type, joke })
+/// #     }
+/// # }
+/// # impl<'a> CustomTag<'a> for JokeTag<'a> {
+/// #     fn is_known_name(name: &str) -> bool {
+/// #         name == "-X-JOKE"
+/// #     }
+/// # }
+/// const EXAMPLE: &str = r#"#EXTM3U
+/// #EXT-X-TARGETDURATION:10
+/// #EXT-X-VERSION:3
+/// #EXT-X-JOKE:TYPE=DAD,JOKE="Why did the bicycle fall over? Because it was two-tired!"
+/// #EXTINF:9.009
+/// segment.0.ts
+/// "#;
+///
+/// let mut reader = Reader::with_custom_from_str(
+///     EXAMPLE,
+///     ParsingOptions::default(),
+///     PhantomData::<JokeTag>,
+/// );
+/// // First 3 tags as expected
+/// assert_eq!(reader.read_line(), Ok(Some(HlsLine::from(M3u))));
+/// assert_eq!(reader.read_line(), Ok(Some(HlsLine::from(Targetduration::new(10)))));
+/// assert_eq!(reader.read_line(), Ok(Some(HlsLine::from(Version::new(3)))));
+/// // And the big reveal
+/// match reader.read_line() {
+///     Ok(Some(HlsLine::KnownTag(Tag::Custom(tag)))) => {
+///         assert_eq!(
+///             &JokeTag {
+///                 joke_type: JokeType::Dad,
+///                 joke: "Why did the bicycle fall over? Because it was two-tired!",
+///             },
+///             tag.as_ref()
+///         );
+///     }
+///     r => panic!("unexpected result {r:?}"),
+/// }
+/// ```
+///
+/// ## Multiple tag example
+///
+/// The same concepts extend to defining multiple custom tags. For example, in 2018 (before the
+/// standardization of LL-HLS), the good people at JWPlayer and hls.js proposed a new extension of
+/// HLS to support low latency streaming. This proposal was captured in [hlsjs-rfcs-0001]. It added
+/// two tags: `#EXT-X-PREFETCH:<URI>` and `#EXT-X-PREFETCH-DISCONTINUITY`. Below we make an attempt
+/// to implement these as custom tags. We don't break for commentary as most of this was explained
+/// in the example above. This example was chosen as the defined tag values are not `attribute-list`
+/// and so we can demonstrate different tag parsing techniques.
+/// ```
+/// # use m3u8::{HlsLine, Reader, config::ParsingOptions, tag::known::Tag, tag::hls::{M3u, Version,
+/// # Targetduration, MediaSequence, DiscontinuitySequence, Inf, ProgramDateTime}, date_time,
+/// # tag::known::{ParsedTag, CustomTag}, error::{ValidationError, ValidationErrorValueKind},
+/// # tag::value::SemiParsedTagValue};
+/// # use std::marker::PhantomData;
+/// #[derive(Debug, PartialEq, Clone)]
+/// enum LHlsTag<'a> {
+///     Discontinuity,
+///     Prefetch(&'a str),
+/// }
+///
+/// impl<'a> LHlsTag<'a> {
+///     fn try_from_discontinuity(value: SemiParsedTagValue) -> Result<Self, ValidationError> {
+///         match value {
+///             SemiParsedTagValue::Empty => Ok(Self::Discontinuity),
+///             value => Err(ValidationError::UnexpectedValueType(
+///                 ValidationErrorValueKind::from(&value),
+///             )),
+///         }
+///     }
+///
+///     fn try_from_prefetch(value: SemiParsedTagValue<'a>) -> Result<Self, ValidationError> {
+///         // Note that not all value types are parsed up front within `SemiParsedTagValue`. The
+///         // attribute list is, as is the (float, title) tuple used in `EXTINF`, but most other
+///         // types of value are not (this is a convenience/performance tradeoff). We can still
+///         // access the unparsed data and it comes with some helper methods for getting to useful
+///         // data types; however, in this case, we just need the whole value tranlated into UTF-8,
+///         // and so we need to do that ourselves.
+///         let SemiParsedTagValue::Unparsed(unparsed) = value else {
+///             return Err(ValidationError::UnexpectedValueType(
+///                 ValidationErrorValueKind::from(&value),
+///             ));
+///         };
+///         let Ok(uri) = std::str::from_utf8(unparsed.0) else {
+///             return Err(ValidationError::MissingRequiredAttribute("<URI>"));
+///         };
+///         Ok(Self::Prefetch(uri))
+///     }
+/// }
+///
+/// impl<'a> TryFrom<ParsedTag<'a>> for LHlsTag<'a> {
+///     type Error = ValidationError;
+///
+///     fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
+///         match tag.name {
+///             "-X-PREFETCH-DISCONTINUITY" => Self::try_from_discontinuity(tag.value),
+///             "-X-PREFETCH" => Self::try_from_prefetch(tag.value),
+///             _ => Err(ValidationError::UnexpectedTagName),
+///         }
+///     }
+/// }
+///
+/// impl<'a> CustomTag<'a> for LHlsTag<'a> {
+///     fn is_known_name(name: &str) -> bool {
+///         name == "-X-PREFETCH" || name == "-X-PREFETCH-DISCONTINUITY"
+///     }
+/// }
+/// // This example is taken from the "Examples" section under the "Discontinuities" example.
+/// const EXAMPLE: &str = r#"#EXTM3U
+/// #EXT-X-VERSION:3
+/// #EXT-X-TARGETDURATION:2
+/// #EXT-X-MEDIA-SEQUENCE:0
+/// #EXT-X-DISCONTINUITY-SEQUENCE:0
+///
+/// #EXT-X-PROGRAM-DATE-TIME:2018-09-05T20:59:06.531Z
+/// #EXTINF:2.000
+/// https://foo.com/bar/0.ts
+/// #EXT-X-PROGRAM-DATE-TIME:2018-09-05T20:59:08.531Z
+/// #EXTINF:2.000
+/// https://foo.com/bar/1.ts
+///
+/// #EXT-X-PREFETCH-DISCONTINUITY
+/// #EXT-X-PREFETCH:https://foo.com/bar/5.ts
+/// #EXT-X-PREFETCH:https://foo.com/bar/6.ts"#;
+///
+/// let mut reader = Reader::with_custom_from_str(
+///     EXAMPLE,
+///     ParsingOptions::default(),
+///     PhantomData::<LHlsTag>,
+/// );
+///
+/// assert_eq!(reader.read_line(), Ok(Some(HlsLine::from(M3u))));
+/// assert_eq!(reader.read_line(), Ok(Some(HlsLine::from(Version::new(3)))));
+/// assert_eq!(reader.read_line(), Ok(Some(HlsLine::from(Targetduration::new(2)))));
+/// assert_eq!(reader.read_line(), Ok(Some(HlsLine::from(MediaSequence::new(0)))));
+/// assert_eq!(reader.read_line(), Ok(Some(HlsLine::from(DiscontinuitySequence::new(0)))));
+/// assert_eq!(reader.read_line(), Ok(Some(HlsLine::Blank)));
+/// assert_eq!(
+///     reader.read_line(),
+///     Ok(Some(HlsLine::from(ProgramDateTime::new(
+///         date_time!(2018-09-05 T 20:59:06.531)
+///     ))))
+/// );
+/// assert_eq!(reader.read_line(), Ok(Some(HlsLine::from(Inf::new(2.0, "")))));
+/// assert_eq!(reader.read_line(), Ok(Some(HlsLine::Uri("https://foo.com/bar/0.ts".into()))));
+/// assert_eq!(
+///     reader.read_line(),
+///     Ok(Some(HlsLine::from(ProgramDateTime::new(
+///         date_time!(2018-09-05 T 20:59:08.531)
+///     ))))
+/// );
+/// assert_eq!(reader.read_line(), Ok(Some(HlsLine::from(Inf::new(2.0, "")))));
+/// assert_eq!(reader.read_line(), Ok(Some(HlsLine::Uri("https://foo.com/bar/1.ts".into()))));
+/// assert_eq!(reader.read_line(), Ok(Some(HlsLine::Blank)));
+///
+/// match reader.read_line() {
+///     Ok(Some(HlsLine::KnownTag(Tag::Custom(tag)))) => {
+///         assert_eq!(&LHlsTag::Discontinuity, tag.as_ref());
+///     }
+///     r => panic!("unexpected result {r:?}"),
+/// }
+/// match reader.read_line() {
+///     Ok(Some(HlsLine::KnownTag(Tag::Custom(tag)))) => {
+///         assert_eq!(&LHlsTag::Prefetch("https://foo.com/bar/5.ts"), tag.as_ref());
+///     }
+///     r => panic!("unexpected result {r:?}"),
+/// }
+/// match reader.read_line() {
+///     Ok(Some(HlsLine::KnownTag(Tag::Custom(tag)))) => {
+///         assert_eq!(&LHlsTag::Prefetch("https://foo.com/bar/6.ts"), tag.as_ref());
+///     }
+///     r => panic!("unexpected result {r:?}"),
+/// }
+///
+/// assert_eq!(reader.read_line(), Ok(None)); // end of example
+/// ```
+///
+/// [hlsjs-rfcs-0001]: https://video-dev.github.io/hlsjs-rfcs/docs/0001-lhls
 pub trait CustomTag<'a>:
     TryFrom<ParsedTag<'a>, Error = ValidationError> + Debug + PartialEq
 {
@@ -62,6 +546,336 @@ pub trait CustomTag<'a>:
     fn is_known_name(name: &str) -> bool;
 }
 /// A custom tag implementation that allows for writing using [`crate::Writer`].
+///
+/// If there is no intention to write the parsed data then this trait does not need to be
+/// implemented for the [`CustomTag`]. We can extend the examples from [`CustomTag`] to also
+/// implement this trait so that we can demonstrate writing the data to an output.
+///
+/// ## Single tag example
+///
+/// Recall that the single tag example was for the custom defined `#EXT-X-JOKE` tag. Here we show
+/// how we may change the joke (e.g. if we are acting as a proxy) before writing to output. Note, in
+/// a real implementation we would make the stored property a [`std::borrow::Cow`] and not require
+/// the user to provide a string slice reference with the same lifetime as the parsed data, but this
+/// is just extending an existing example for information purposes.
+/// ```
+/// # use m3u8::{
+/// #     Reader, HlsLine, Writer,
+/// #     config::ParsingOptions,
+/// #     tag::{
+/// #         known::{ParsedTag, CustomTag, Tag, WritableTag, WritableCustomTag},
+/// #         value::{
+/// #             SemiParsedTagValue, ParsedAttributeValue, MutableParsedAttributeValue,
+/// #             MutableSemiParsedTagValue,
+/// #         },
+/// #         hls::{Version, Targetduration, M3u}
+/// #     },
+/// #     error::{ValidationError, ValidationErrorValueKind}
+/// # };
+/// # use std::{marker::PhantomData, borrow::Cow, collections::HashMap};
+/// #
+/// # #[derive(Debug, PartialEq, Clone)]
+/// # struct JokeTag<'a> {
+/// #     joke_type: JokeType,
+/// #     joke: &'a str,
+/// # }
+/// #
+/// # #[derive(Debug, PartialEq, Clone)]
+/// # enum JokeType {
+/// #     Dad,
+/// #     Pun,
+/// #     Bar,
+/// #     Story,
+/// #     KnockKnock,
+/// # }
+/// # impl<'a> TryFrom<ParsedTag<'a>> for JokeTag<'a> {
+/// #     type Error = ValidationError;
+/// #
+/// #     fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
+/// #         // Ensure that the value of the tag corresponds to `<attribute-list>`
+/// #         let SemiParsedTagValue::AttributeList(list) = tag.value else {
+/// #             return Err(ValidationError::UnexpectedValueType(
+/// #                 ValidationErrorValueKind::from(&tag.value),
+/// #             ));
+/// #         };
+/// #         // Ensure that the `JOKE` attribute exists and is of the correct type.
+/// #         let Some(ParsedAttributeValue::QuotedString(joke)) = list.get("JOKE") else {
+/// #             return Err(ValidationError::MissingRequiredAttribute("JOKE"));
+/// #         };
+/// #         // Ensure that the `TYPE` attribute exists and is of the correct type. Note the
+/// #         // difference that this type is `UnquotedString` instead of `QuotedString`, signifying
+/// #         // the use of the HLS defined `enumerated-string` attribute value type.
+/// #         let Some(ParsedAttributeValue::UnquotedString(joke_type_str)) = list.get("TYPE") else {
+/// #             return Err(ValidationError::MissingRequiredAttribute("TYPE"));
+/// #         };
+/// #         // Translate the enumerated string value into the enum cases we support, otherwise,
+/// #         // return an error.
+/// #         let Some(joke_type) = (match *joke_type_str {
+/// #             "DAD" => Some(JokeType::Dad),
+/// #             "PUN" => Some(JokeType::Pun),
+/// #             "BAR" => Some(JokeType::Bar),
+/// #             "STORY" => Some(JokeType::Story),
+/// #             "KNOCK-KNOCK" => Some(JokeType::KnockKnock),
+/// #             _ => None,
+/// #         }) else {
+/// #             return Err(ValidationError::InvalidEnumeratedString);
+/// #         };
+/// #         // Now we have our joke.
+/// #         Ok(Self { joke_type, joke })
+/// #     }
+/// # }
+/// # impl<'a> CustomTag<'a> for JokeTag<'a> {
+/// #     fn is_known_name(name: &str) -> bool {
+/// #         name == "-X-JOKE"
+/// #     }
+/// # }
+/// impl JokeType {
+///     fn as_str(self) -> &'static str {
+///         match self {
+///             JokeType::Dad => "DAD",
+///             JokeType::Pun => "PUN",
+///             JokeType::Bar => "BAR",
+///             JokeType::Story => "STORY",
+///             JokeType::KnockKnock => "KNOCK-KNOCK",
+///         }
+///     }
+/// }
+/// impl<'a> JokeTag<'a> {
+///     fn set_joke(&mut self, joke: &'static str) {
+///         self.joke = joke;
+///     }
+/// }
+/// impl<'a> WritableCustomTag<'a> for JokeTag<'a> {
+///     fn into_writable_tag(self) -> WritableTag<'a> {
+///         WritableTag::new(
+///             "-X-JOKE",
+///             MutableSemiParsedTagValue::AttributeList(HashMap::from([
+///                 (
+///                     Cow::Borrowed("TYPE"),
+///                     MutableParsedAttributeValue::UnquotedString(self.joke_type.as_str().into()),
+///                 ),
+///                 (
+///                     Cow::Borrowed("JOKE"),
+///                     MutableParsedAttributeValue::QuotedString(self.joke.into()),
+///                 ),
+///             ])),
+///         )
+///     }
+/// }
+/// # const EXAMPLE: &str = r#"#EXTM3U
+/// # #EXT-X-TARGETDURATION:10
+/// # #EXT-X-VERSION:3
+/// # #EXT-X-JOKE:TYPE=DAD,JOKE="Why did the bicycle fall over? Because it was two-tired!"
+/// # #EXTINF:9.009
+/// # segment.0.ts
+/// # "#;
+/// #
+/// # let mut reader = Reader::with_custom_from_str(
+/// #     EXAMPLE,
+/// #     ParsingOptions::default(),
+/// #     PhantomData::<JokeTag>,
+/// # );
+/// let mut writer = Writer::new(Vec::new());
+/// // First 3 tags as expected
+/// let Some(m3u) = reader.read_line()? else { return Ok(()) };
+/// writer.write_custom_line(m3u)?;
+/// let Some(targetduration) = reader.read_line()? else { return Ok(()) };
+/// writer.write_custom_line(targetduration)?;
+/// let Some(version) = reader.read_line()? else { return Ok(()) };
+/// writer.write_custom_line(version)?;
+/// // And the big reveal
+/// match reader.read_line() {
+///     Ok(Some(HlsLine::KnownTag(Tag::Custom(mut tag)))) => {
+///         tag.as_mut().set_joke("What happens when a frog's car breaks down? It gets toad!");
+///         writer.write_custom_line(HlsLine::from(tag))?;
+///     }
+///     r => panic!("unexpected result {r:?}"),
+/// }
+///
+/// // Because the HashMap we return does not guarantee order of the attributes, we validate that
+/// // the result is one of the expected outcomes.
+/// const EXPECTED_1: &str = r#"#EXTM3U
+/// #EXT-X-TARGETDURATION:10
+/// #EXT-X-VERSION:3
+/// #EXT-X-JOKE:TYPE=DAD,JOKE="What happens when a frog's car breaks down? It gets toad!"
+/// "#;
+/// const EXPECTED_2: &str = r#"#EXTM3U
+/// #EXT-X-TARGETDURATION:10
+/// #EXT-X-VERSION:3
+/// #EXT-X-JOKE:JOKE="What happens when a frog's car breaks down? It gets toad!",TYPE=DAD
+/// "#;
+/// let inner_bytes = writer.into_inner();
+/// let actual = std::str::from_utf8(&inner_bytes)?;
+/// assert!(actual == EXPECTED_1 || actual == EXPECTED_2);
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+///
+/// ## Multiple tag example
+///
+/// Recall that the multiple tag example was for the [LHLS] extension to the specification. Here we
+/// show how we may change the prefetch URL (e.g. if we are acting as a proxy) before writing to
+/// output.
+/// ```
+/// # use m3u8::{HlsLine, Reader, config::ParsingOptions, tag::known::Tag, tag::hls::{M3u, Version,
+/// # Targetduration, MediaSequence, DiscontinuitySequence, Inf, ProgramDateTime}, date_time,
+/// # tag::known::{ParsedTag, CustomTag}, error::{ValidationError, ValidationErrorValueKind},
+/// # tag::value::SemiParsedTagValue, tag::known::{WritableCustomTag, WritableTag},
+/// # tag::value::{MutableSemiParsedTagValue, MutableUnparsedTagValue}, Writer};
+/// # use std::{marker::PhantomData, io::Write};
+/// #[derive(Debug, PartialEq, Clone)]
+/// # enum LHlsTag<'a> {
+/// #     Discontinuity,
+/// #     Prefetch(&'a str),
+/// # }
+/// #
+/// # impl<'a> LHlsTag<'a> {
+/// #     fn try_from_discontinuity(value: SemiParsedTagValue) -> Result<Self, ValidationError> {
+/// #         match value {
+/// #             SemiParsedTagValue::Empty => Ok(Self::Discontinuity),
+/// #             value => Err(ValidationError::UnexpectedValueType(
+/// #                 ValidationErrorValueKind::from(&value),
+/// #             )),
+/// #         }
+/// #     }
+/// #
+/// #     fn try_from_prefetch(value: SemiParsedTagValue<'a>) -> Result<Self, ValidationError> {
+/// #         // Note that not all value types are parsed up front within `SemiParsedTagValue`. The
+/// #         // attribute list is, as is the (float, title) tuple used in `EXTINF`, but most other
+/// #         // types of value are not (this is a convenience/performance tradeoff). We can still
+/// #         // access the unparsed data and it comes with some helper methods for getting to useful
+/// #         // data types; however, in this case, we just need the whole value tranlated into UTF-8,
+/// #         // and so we need to do that ourselves.
+/// #         let SemiParsedTagValue::Unparsed(unparsed) = value else {
+/// #             return Err(ValidationError::UnexpectedValueType(
+/// #                 ValidationErrorValueKind::from(&value),
+/// #             ));
+/// #         };
+/// #         let Ok(uri) = std::str::from_utf8(unparsed.0) else {
+/// #             return Err(ValidationError::MissingRequiredAttribute("<URI>"));
+/// #         };
+/// #         Ok(Self::Prefetch(uri))
+/// #     }
+/// # }
+/// #
+/// # impl<'a> TryFrom<ParsedTag<'a>> for LHlsTag<'a> {
+/// #     type Error = ValidationError;
+/// #
+/// #     fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
+/// #         match tag.name {
+/// #             "-X-PREFETCH-DISCONTINUITY" => Self::try_from_discontinuity(tag.value),
+/// #             "-X-PREFETCH" => Self::try_from_prefetch(tag.value),
+/// #             _ => Err(ValidationError::UnexpectedTagName),
+/// #         }
+/// #     }
+/// # }
+/// #
+/// # impl<'a> CustomTag<'a> for LHlsTag<'a> {
+/// #     fn is_known_name(name: &str) -> bool {
+/// #         name == "-X-PREFETCH" || name == "-X-PREFETCH-DISCONTINUITY"
+/// #     }
+/// # }
+/// impl<'a> WritableCustomTag<'a> for LHlsTag<'a> {
+///     fn into_writable_tag(self) -> WritableTag<'a> {
+///         match self {
+///             Self::Discontinuity => WritableTag::new(
+///                 "-X-PREFETCH-DISCONTINUITY",
+///                 MutableSemiParsedTagValue::Empty
+///             ),
+///             Self::Prefetch(uri) => WritableTag::new(
+///                 "-X-PREFETCH",
+///                 MutableSemiParsedTagValue::Unparsed(
+///                     MutableUnparsedTagValue(uri.as_bytes().into())
+///                 )
+///             )
+///         }
+///     }
+/// }
+/// # // This example is taken from the "Examples" section under the "Discontinuities" example.
+/// # const EXAMPLE: &str = r#"#EXTM3U
+/// # #EXT-X-VERSION:3
+/// # #EXT-X-TARGETDURATION:2
+/// # #EXT-X-MEDIA-SEQUENCE:0
+/// # #EXT-X-DISCONTINUITY-SEQUENCE:0
+/// #
+/// # #EXT-X-PROGRAM-DATE-TIME:2018-09-05T20:59:06.531Z
+/// # #EXTINF:2.000
+/// # https://foo.com/bar/0.ts
+/// # #EXT-X-PROGRAM-DATE-TIME:2018-09-05T20:59:08.531Z
+/// # #EXTINF:2.000
+/// # https://foo.com/bar/1.ts
+/// #
+/// # #EXT-X-PREFETCH-DISCONTINUITY
+/// # #EXT-X-PREFETCH:https://foo.com/bar/5.ts
+/// # #EXT-X-PREFETCH:https://foo.com/bar/6.ts"#;
+/// #
+/// # let mut reader = Reader::with_custom_from_str(
+/// #     EXAMPLE,
+/// #     ParsingOptions::default(),
+/// #     PhantomData::<LHlsTag>,
+/// # );
+///
+/// let mut writer = Writer::new(Vec::new());
+/// let mut last_segment_index = 0;
+/// loop {
+///     match reader.read_line() {
+///         Ok(Some(HlsLine::KnownTag(Tag::Custom(tag)))) => {
+///             match tag.as_ref() {
+///                 LHlsTag::Discontinuity => {
+///                     writer.write_custom_line(HlsLine::from(tag))?;
+///                 }
+///                 LHlsTag::Prefetch(uri) => {
+///                     // For demo purposes we make the URI segment numbers sequential.
+///                     if let Some(last_component) = uri.split('/').last() {
+///                         let new_uri = uri.replace(
+///                             last_component,
+///                             format!("{}.ts", last_segment_index + 1).as_str()
+///                         );
+///                         writer.write_custom_tag(LHlsTag::Prefetch(new_uri.as_str()))?;
+///                     } else {
+///                         writer.write_custom_line(HlsLine::from(tag))?;
+///                     }
+///                 }
+///             };
+///         }
+///         Ok(Some(HlsLine::Uri(uri))) => {
+///             last_segment_index = uri
+///                 .split('/')
+///                 .last()
+///                 .and_then(|file| file.split('.').next())
+///                 .and_then(|n| n.parse::<u32>().ok())
+///                 .unwrap_or_default();
+///             writer.write_line(HlsLine::Uri(uri))?;
+///         }
+///         Ok(Some(line)) => {
+///             writer.write_custom_line(line)?;
+///         }
+///         Ok(None) => break,
+///         Err(e) => {
+///             writer.get_mut().write_all(e.errored_line.as_bytes())?;
+///         }
+///     }
+/// }
+/// const EXPECTED: &str = r#"#EXTM3U
+/// #EXT-X-VERSION:3
+/// #EXT-X-TARGETDURATION:2
+/// #EXT-X-MEDIA-SEQUENCE:0
+/// #EXT-X-DISCONTINUITY-SEQUENCE:0
+///
+/// #EXT-X-PROGRAM-DATE-TIME:2018-09-05T20:59:06.531Z
+/// #EXTINF:2.000
+/// https://foo.com/bar/0.ts
+/// #EXT-X-PROGRAM-DATE-TIME:2018-09-05T20:59:08.531Z
+/// #EXTINF:2.000
+/// https://foo.com/bar/1.ts
+///
+/// #EXT-X-PREFETCH-DISCONTINUITY
+/// #EXT-X-PREFETCH:https://foo.com/bar/2.ts
+/// #EXT-X-PREFETCH:https://foo.com/bar/3.ts
+/// "#;
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+///
+/// [LHLS]: https://video-dev.github.io/hlsjs-rfcs/docs/0001-lhls
 pub trait WritableCustomTag<'a>: CustomTag<'a> {
     /// Takes ownership of the custom tag and provides a value that is used for writing.
     ///
@@ -71,6 +885,13 @@ pub trait WritableCustomTag<'a>: CustomTag<'a> {
     fn into_writable_tag(self) -> WritableTag<'a>;
 }
 
+/// Wrapper around a [`CustomTag`] implementation for access control.
+///
+/// The wrapper allows the library to selectively decide when it will call the
+/// [`WritableCustomTag::into_writable_tag`] method. When there has been no mutable reference borrow
+/// of the custom tag ([`Self::as_mut`]) then the [`Self::into_inner`] implementation will use the
+/// original parsed byte-slice directly (rather than allocate any new strings to construct a new
+/// line).
 #[derive(Debug, PartialEq, Clone)]
 pub struct CustomTagAccess<'a, Custom>
 where
@@ -178,19 +999,104 @@ pub(crate) fn calculate_output<'a, Custom: WritableCustomTag<'a>>(custom_tag: Cu
     }
 }
 
+/// Generic information about a known tag that has been parsed.
+///
+/// This struct is used as an interim type to then construct the strongly typed tag instance,
+/// whether it is a [`hls::Tag`], or a user defined [`CustomTag`] implementation. This allows the
+/// library to do some amount of heavy lifting that would be common amongst any tag implementation,
+/// but still leaves the piecing together of parsed information to the implementation of the tag
+/// type.
 #[derive(Debug, PartialEq)]
 pub struct ParsedTag<'a> {
+    /// The name of the tag that was parsed from the input data.
+    ///
+    /// This includes everything after the `#EXT` prefix and before the `:` or new line. For
+    /// example, `#EXTM3U` has name `M3U`, `#EXT-X-VERSION:3` has name `-X-VERSION`, etc.
     pub name: &'a str,
+    /// A value that the library was able to parse out of the line data.
+    ///
+    /// This value should be used to further parse the gathered information into a more strongly
+    /// typed tag definition. See [`SemiParsedTagValue`] for more information on what possible
+    /// values exist.
     pub value: SemiParsedTagValue<'a>,
+    /// The original input data (e.g. the playlist).
+    ///
+    /// This will always start at the beginning of the line where the tag was found; however, the
+    /// end of the byte-slice may extend until the end of the playlist (so well beyond the end of
+    /// the line). Internally the library ensures that when writing the data, the line is cut to the
+    /// appropriate end point where the new line (either `CRLF` or `LF`) is found.
     pub original_input: &'a [u8],
 }
 
+/// A writable version of [`ParsedTag`].
+///
+/// This is provided so that custom tag implementations may provide an output that does not depend
+/// on having parsed data to derive the write output from. This helps with mutability as well as
+/// allowing for custom tags to be constructed from scratch (without being parsed from source data).
 #[derive(Debug, PartialEq)]
 pub struct WritableTag<'a> {
+    /// The name of the tag.
+    ///
+    /// This must include everything after the `#EXT` prefix and before the `:` or new line. For
+    /// example, `#EXTM3U` has name `M3U`, `#EXT-X-VERSION:3` has name `-X-VERSION`, etc.
     pub name: Cow<'a, str>,
+    /// The value of the tag.
+    ///
+    /// The [`MutableSemiParsedTagValue`] mirrors the [`SemiParsedTagValue`] but provides data types
+    /// that allow for owned data (rather than just borrowed references from parsed input data). See
+    /// the enum documentation for more information on what values can be defined.
     pub value: MutableSemiParsedTagValue<'a>,
 }
 impl<'a> WritableTag<'a> {
+    /// Create a new tag.
+    ///
+    /// ## Examples
+    /// ### Empty
+    /// ```
+    /// # use m3u8::tag::known::WritableTag;
+    /// # use m3u8::tag::value::MutableSemiParsedTagValue;
+    /// WritableTag::new("-X-EXAMPLE", MutableSemiParsedTagValue::Empty);
+    /// ```
+    /// produces a tag that would write as `#EXT-X-EXAMPLE`.
+    /// ### Float with title
+    /// ```
+    /// # use m3u8::tag::known::WritableTag;
+    /// # use m3u8::tag::value::MutableSemiParsedTagValue;
+    /// let explicit = WritableTag::new(
+    ///     "-X-EXAMPLE",
+    ///     MutableSemiParsedTagValue::DecimalFloatingPointWithOptionalTitle(3.14, "pi".into()),
+    /// );
+    /// // Or, with convenience `From<(f64, impl Into<Cow<str>>)>`
+    /// let terse = WritableTag::new("-X-EXAMPLE", (3.14, "pi"));
+    /// assert_eq!(explicit, terse);
+    /// ```
+    /// produces a tag that would write as `#EXT-X-EXAMPLE:3.14,pi`.
+    /// ### Attribute list
+    /// ```
+    /// # use m3u8::tag::known::WritableTag;
+    /// # use m3u8::tag::value::{MutableSemiParsedTagValue, MutableParsedAttributeValue};
+    /// # use std::collections::HashMap;
+    /// let explicit = WritableTag::new(
+    ///     "-X-EXAMPLE",
+    ///     MutableSemiParsedTagValue::AttributeList(HashMap::from([
+    ///         ("VALUE".into(), MutableParsedAttributeValue::DecimalInteger(42)),
+    ///     ])),
+    /// );
+    /// // Or, with convenience `From<[(K, V); N]>`
+    /// let terse = WritableTag::new("-X-EXAMPLE", [("VALUE", 42)]);
+    /// assert_eq!(explicit, terse);
+    /// ```
+    /// produces a tag that would write as `#EXT-X-EXAMPLE:VALUE=42`.
+    /// ### Unparsed
+    /// ```
+    /// # use m3u8::tag::known::WritableTag;
+    /// # use m3u8::tag::value::{MutableSemiParsedTagValue, MutableUnparsedTagValue};
+    /// WritableTag::new(
+    ///     "-X-EXAMPLE",
+    ///     MutableSemiParsedTagValue::Unparsed(MutableUnparsedTagValue(b"42".into())),
+    /// );
+    /// ```
+    /// produces a tag that would write as `#EXT-X-EXAMPLE:42`.
     pub fn new(
         name: impl Into<Cow<'a, str>>,
         value: impl Into<MutableSemiParsedTagValue<'a>>,
@@ -202,6 +1108,13 @@ impl<'a> WritableTag<'a> {
     }
 }
 
+/// Implementation of [`CustomTag`] for convenience default `HlsLine::Custom` implementation.
+///
+/// Given that `HlsLine` takes a generic parameter, if this struct did not exist, then the user
+/// would always have to define some custom tag implementation to use the library. This would add
+/// unintended complexity. Therefore, this struct comes with the library, and provides the default
+/// implementation of `CustomTag`. This implementation ensures that it is never parsed from source
+/// data, because [`Self::is_known_name`] always returns false.
 #[derive(Debug, PartialEq, Clone)]
 pub struct NoCustomTag;
 impl TryFrom<ParsedTag<'_>> for NoCustomTag {
