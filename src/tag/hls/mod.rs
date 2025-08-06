@@ -532,6 +532,7 @@ impl TagName {
 ///       Multivariant Playlist tags MUST NOT appear in a Media Playlist; clients MUST fail to parse
 ///       any Playlist that contains both a Multivariant Playlist tag and either a Media Playlist
 ///       tag or a Media Segment tag.
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum TagType {
     /// <https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.1>
     Basic,

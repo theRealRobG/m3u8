@@ -82,6 +82,7 @@ where
 /// inner data is a byte slice of parsed data, it may be a slice of the rest of the playlist from
 /// where the tag was found; however, the [`Self::value`] method ensures that only the relevant
 /// bytes for this line are provided.
+#[derive(Debug)]
 pub struct TagInner<'a> {
     pub(crate) output_line: Cow<'a, [u8]>,
 }
@@ -1115,7 +1116,7 @@ impl<'a> WritableTag<'a> {
 /// unintended complexity. Therefore, this struct comes with the library, and provides the default
 /// implementation of `CustomTag`. This implementation ensures that it is never parsed from source
 /// data, because [`Self::is_known_name`] always returns false.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub struct NoCustomTag;
 impl TryFrom<ParsedTag<'_>> for NoCustomTag {
     type Error = ValidationError;

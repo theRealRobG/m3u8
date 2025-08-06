@@ -1,4 +1,8 @@
-#![warn(missing_docs)]
+#![warn(
+    missing_docs,
+    missing_copy_implementations,
+    missing_debug_implementations
+)]
 #![doc(
     html_favicon_url = "https://raw.githubusercontent.com/theRealRobG/m3u8/refs/heads/main/quick-m3u8-logo.ico"
 )]

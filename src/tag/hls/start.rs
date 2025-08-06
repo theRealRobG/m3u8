@@ -11,7 +11,7 @@ use std::{borrow::Cow, collections::HashMap};
 /// The attribute list for the tag (`#EXT-X-START:<attribute-list>`).
 ///
 /// See [`Start`] for a link to the HLS documentation for this attribute.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub struct StartAttributeList {
     /// Corresponds to the `TIME-OFFSET` attribute.
     ///
@@ -24,7 +24,7 @@ pub struct StartAttributeList {
 }
 
 /// A builder for convenience in constructing a [`Start`].
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub struct StartBuilder {
     time_offset: f64,
     precise: bool,

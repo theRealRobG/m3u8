@@ -79,7 +79,7 @@ impl ParsingOptions {
 }
 
 /// A builder type to provide convenience for constructing [`ParsingOptions`].
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct ParsingOptionsBuilder {
     hls_tag_names_to_parse: HashSet<TagName>,
 }

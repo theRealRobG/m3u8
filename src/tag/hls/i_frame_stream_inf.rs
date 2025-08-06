@@ -14,6 +14,7 @@ use std::{borrow::Cow, collections::HashMap};
 /// The attribute list for the tag (`#EXT-X-I-FRAME-STREAM-INF:<attribute-list>`)
 ///
 /// See [`IFrameStreamInf`] for a link to the HLS documentation for this attribute.
+#[derive(Debug, Clone)]
 pub struct IFrameStreamInfAttributeList<'a> {
     /// Corresponds to the `URI` attribute.
     ///
@@ -74,6 +75,7 @@ pub struct IFrameStreamInfAttributeList<'a> {
 }
 
 /// A builder for convenience in constructing a [`IFrameStreamInf`].
+#[derive(Debug)]
 pub struct IFrameStreamInfBuilder<'a> {
     uri: Cow<'a, str>,
     bandwidth: u64,

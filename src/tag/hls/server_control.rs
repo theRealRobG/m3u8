@@ -11,7 +11,7 @@ use std::{borrow::Cow, collections::HashMap};
 /// The attribute list for the tag (`#EXT-X-SERVER-CONTROL:<attribute-list>`).
 ///
 /// See [`ServerControl`] for a link to the HLS documentation for this attribute.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub struct ServerControlAttributeList {
     /// Corresponds to the `CAN-SKIP-UNTIL` attribute.
     ///
@@ -36,7 +36,7 @@ pub struct ServerControlAttributeList {
 }
 
 /// A builder for convenience in constructing a [`ServerControl`].
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub struct ServerControlBuilder {
     can_skip_until: Option<f64>,
     can_skip_dateranges: bool,

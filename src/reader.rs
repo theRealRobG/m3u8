@@ -335,6 +335,7 @@ use std::marker::PhantomData;
 ///
 /// # Ok::<(), Box<dyn Error>>(())
 /// ```
+#[derive(Debug)]
 pub struct Reader<R, Custom> {
     inner: R,
     options: ParsingOptions,
