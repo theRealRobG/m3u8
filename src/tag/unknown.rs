@@ -1,3 +1,10 @@
+//! Methods for parsing unknown tag information
+//!
+//! This module also serves as a building block for the parsing of all known tags. Before a tag is
+//! parsed as known, it is first parsed as unknown, and then we attempt to specialize it. Known tags
+//! can also fall back to unknown tags if there is some issue in validating the strong type
+//! requirements of the tag.
+
 use crate::{
     error::{UnknownTagSyntaxError, ValidationError},
     line::{ParsedByteSlice, ParsedLineSlice},
@@ -6,6 +13,57 @@ use crate::{
 use memchr::memchr2;
 use std::fmt::Debug;
 
+/// A tag that is unknown to the library found during parsing input data.
+///
+/// This may be because the tag is truly unknown (i.e., is not one of the 32 supported HLS defined
+/// tags), or because the known tag has been ignored via [`crate::config::ParsingOptions`], or also
+/// if there was an error in parsing the known tag. In the last case, the [`Self::validation_error`]
+/// will provide details on the problem encountered.
+///
+/// For example:
+/// ```
+/// # use m3u8::{Reader, HlsLine, config::ParsingOptionsBuilder, error::ValidationError};
+/// let lines = r#"#EXT-X-QUESTION:VALUE="Do you know who I am?"
+/// #EXT-X-PROGRAM-DATE-TIME:2025-08-05T21:59:42.417-05:00
+/// #EXT-X-STREAM-INF:AVERAGE-BANDWIDTH=10000000"#;
+///
+/// let mut reader = Reader::from_str(
+///     lines,
+///     ParsingOptionsBuilder::new()
+///         .with_parsing_for_stream_inf()
+///         .build()
+/// );
+///
+/// // #EXT-X-QUESTION:VALUE="Do you know who I am?"
+/// let Ok(Some(HlsLine::UnknownTag(tag))) = reader.read_line() else { panic!("unexpected tag") };
+/// assert_eq!("-X-QUESTION", tag.name());
+/// assert_eq!(Some(r#"VALUE="Do you know who I am?""#.as_bytes()), tag.value());
+/// assert_eq!(None, tag.validation_error());
+/// assert_eq!(r#"#EXT-X-QUESTION:VALUE="Do you know who I am?""#.as_bytes(), tag.as_bytes());
+///
+/// // #EXT-X-PROGRAM-DATE-TIME:2025-08-05T21:59:42.417-05:00
+/// let Ok(Some(HlsLine::UnknownTag(tag))) = reader.read_line() else { panic!("unexpected tag") };
+/// assert_eq!("-X-PROGRAM-DATE-TIME", tag.name());
+/// assert_eq!(Some("2025-08-05T21:59:42.417-05:00".as_bytes()), tag.value());
+/// assert_eq!(None, tag.validation_error());
+/// assert_eq!(
+///     "#EXT-X-PROGRAM-DATE-TIME:2025-08-05T21:59:42.417-05:00".as_bytes(),
+///     tag.as_bytes()
+/// );
+///
+/// // #EXT-X-STREAM-INF:AVERAGE-BANDWIDTH=10000000
+/// let Ok(Some(HlsLine::UnknownTag(tag))) = reader.read_line() else { panic!("unexpected tag") };
+/// assert_eq!("-X-STREAM-INF", tag.name());
+/// assert_eq!(Some("AVERAGE-BANDWIDTH=10000000".as_bytes()), tag.value());
+/// assert_eq!(
+///     Some(ValidationError::MissingRequiredAttribute("BANDWIDTH")),
+///     tag.validation_error()
+/// );
+/// assert_eq!(
+///     "#EXT-X-STREAM-INF:AVERAGE-BANDWIDTH=10000000".as_bytes(),
+///     tag.as_bytes()
+/// );
+/// ```
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct Tag<'a> {
     pub(crate) name: &'a str,
@@ -15,23 +73,44 @@ pub struct Tag<'a> {
 }
 
 impl<'a> Tag<'a> {
+    /// The name of the unknown tag.
+    ///
+    /// This includes everything after the `#EXT` prefix and before the `:` or new line. For
+    /// example, `#EXTM3U` has name `M3U`, `#EXT-X-VERSION:3` has name `-X-VERSION`, etc.
     pub fn name(&self) -> &'a str {
         self.name
     }
 
+    /// The value of the unknown tag.
+    ///
+    /// This will be the entire byte-slice after the first `:` in the line. If there is no `:` then
+    /// this will be `None`.
     pub fn value(&self) -> Option<&'a [u8]> {
         self.value
     }
 
+    /// The error that led to this tag being unknown.
+    ///
+    /// This value is only `Some` if the tag is unknown as the result of a problem in parsing a
+    /// known tag.
     pub fn validation_error(&self) -> Option<ValidationError> {
         self.validation_error
     }
 
+    /// The raw bytes of the tag line for output.
+    ///
+    /// This is useful for when the tag needs to be writtern to an output.
     pub fn as_bytes(&self) -> &'a [u8] {
         split_on_new_line(self.original_input).parsed
     }
 }
 
+/// Try to parse some input into a tag.
+///
+/// The parsing will stop at the new line. Failures are described via [`UnknownTagSyntaxError`].
+/// This method is at the root of parsing in this library and what other higher level types are
+/// built on top of. It helps by splitting the input on a new line and providing a name and value
+/// slice for the line we are parsing (assuming it is a tag line).
 pub fn parse(input: &str) -> Result<ParsedLineSlice<Tag>, UnknownTagSyntaxError> {
     let input = input.as_bytes();
     if input.get(3) == Some(&b'T') && &input[..3] == b"#EX" {
