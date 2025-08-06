@@ -440,8 +440,9 @@ where
                         parsed: tag::value::SemiParsedTagValue::Empty,
                         remaining: None,
                     },
-                    Some(remaining) => tag::value::new_parse(remaining)
-                        .map_err(|error| map_err_bytes(error, input))?,
+                    Some(remaining) => {
+                        tag::value::parse(remaining).map_err(|error| map_err_bytes(error, input))?
+                    }
                 };
                 let parsed_tag = ParsedTag {
                     name: tag.parsed.name,

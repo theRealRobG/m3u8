@@ -1,4 +1,7 @@
-use memchr::{memchr, memchr2, memchr3};
+//! Collection of methods and types used to extract meaning from the value component of a tag line.
+//!
+//! The value of a tag (when not empty) is everything after the `:` and before the new line break.
+//! This module provides types of values and methods for parsing into these types from input data.
 
 use crate::{
     date::{self, DateTime},
@@ -9,24 +12,48 @@ use crate::{
     line::ParsedByteSlice,
     utils::{f64_to_u64, parse_u64, split_on_new_line},
 };
+use memchr::{memchr, memchr2, memchr3};
 use std::{borrow::Cow, collections::HashMap, fmt::Display};
 
-// Not exactly the same as `tag-value`, because some of the types must be contextualized by the
-// `tag-name`, but this list covers the possible raw values.
-//
-// Examples:
-//   Empty                                 -> #EXTM3U
-//   TypeEnum                              -> #EXT-X-PLAYLIST-TYPE:<type-enum>
-//   DecimalInteger                        -> #EXT-X-VERSION:<n>
-//   DecimalIntegerRange                   -> #EXT-X-BYTERANGE:<n>[@<o>]
-//   DecimalFloatingPointWithOptionalTitle -> #EXTINF:<duration>,[<title>]
-//   DateTimeMsec                          -> #EXT-X-PROGRAM-DATE-TIME:<date-time-msec>
-//
+/// Describes what the library has been able to parse from the tag value.
+///
+/// The library makes a special attempt to parse decimal floats followed by a title (string slice),
+/// which is the value that the `#EXTINF` tag uses, and also the attribute list type, which is used
+/// by many of the HLS tags. Empty is trivially provided and everything else comes under the
+/// `Unparsed` case, which itself provides helper methods for parsing. This design is a tradeoff
+/// between functionality and performance. Internally, when walking through the value data, the
+/// library only checks for a few tokens other than the end of line characters. If the end of line
+/// is found instead of the searched for tokens (`,` and `=`) then the value is left as unparsed and
+/// passed on to the next round of parsing. It is true that the next round will require to read the
+/// value again; however, the [`UnparsedTagValue`] provides dedicated methods for parsing well
+/// defined value types, which can be paired with the better context provided in the
+/// `TryFrom<ParsedTag>` implementation of the tag to avoid needing to attempt several different
+/// conversion strategies. This may change in the future, as per issue [#2].
+///
+/// [#2]: https://github.com/theRealRobG/m3u8/issues/2
 #[derive(Debug, PartialEq)]
 pub enum SemiParsedTagValue<'a> {
+    /// The tag value was empty.
+    ///
+    /// For example, the `#EXTM3U` tag has an `Empty` value.
     Empty,
+    /// The tag value was a float and a comma separated title.
+    ///
+    /// For example, the `#EXTINF:<duration>,[<title>]` tag has a
+    /// `DecimalFloatingPointWithOptionalTitle` value (e.g. `#EXTINF:3.003,free-form text`).
     DecimalFloatingPointWithOptionalTitle(f64, &'a str),
+    /// The tag value is an attribute list (that is, a comma separated list of key/value pairs, each
+    /// separated by `=`).
+    ///
+    /// For example, the `#EXT-X-MAP:<attribute-list>` tag has an `AttributeList` value (e.g.
+    /// `#EXT-X-MAP:URI="init.mp4"`).
     AttributeList(HashMap<&'a str, ParsedAttributeValue<'a>>),
+    /// The tag value is unparsed; however, it is known not to be any of the other cases.
+    ///
+    /// The `UnparsedTagValue` provides methods for extracting known values out of the tag value.
+    /// For example, the `#EXT-X-TARGETDURATION:<s>` tag has an `Unparsed` value (e.g.
+    /// `#EXT-X-TARGETDURATION:10`, which could be accessed via the
+    /// [`UnparsedTagValue::try_as_decimal_integer`] method).
     Unparsed(UnparsedTagValue<'a>),
 }
 impl<'a, T> From<(f64, T)> for SemiParsedTagValue<'a>
@@ -68,9 +95,15 @@ impl<'a> From<&'a [u8]> for SemiParsedTagValue<'a> {
         Self::Unparsed(UnparsedTagValue(value))
     }
 }
+/// A value that was not parsed in the initial round of parsing but does provide methods for
+/// completing the parsing into a well defined type.
+///
+/// The documentation of [`SemiParsedTagValue`] provides more information on the reason that this
+/// exists.
 #[derive(Debug, PartialEq)]
 pub struct UnparsedTagValue<'a>(pub &'a [u8]);
 impl<'a> UnparsedTagValue<'a> {
+    /// Attempts to read the inner data as a [`HlsPlaylistType`].
     pub fn try_as_hls_playlist_type(&self) -> Result<HlsPlaylistType, ParsePlaylistTypeError> {
         if self.0 == b"VOD" {
             Ok(HlsPlaylistType::Vod)
@@ -81,10 +114,12 @@ impl<'a> UnparsedTagValue<'a> {
         }
     }
 
+    /// Attempts to read the inner data as a decimal integer.
     pub fn try_as_decimal_integer(&self) -> Result<u64, ParseNumberError> {
         parse_u64(self.0)
     }
 
+    /// Attempts to read the inner data as a decimal integer range (`<n>[@<o>]`).
     pub fn try_as_decimal_integer_range(
         &self,
     ) -> Result<(u64, Option<u64>), ParseDecimalIntegerRangeError> {
@@ -102,28 +137,76 @@ impl<'a> UnparsedTagValue<'a> {
         }
     }
 
+    /// Attempts to read the inner data as a float.
     pub fn try_as_float(&self) -> Result<f64, ParseFloatError> {
         fast_float2::parse(self.0).map_err(|_| ParseFloatError)
     }
 
+    /// Attempts to read the inner data as a [`DateTime`].
     pub fn try_as_date_time(&self) -> Result<DateTime, DateTimeSyntaxError> {
         date::parse_bytes(self.0)
     }
 }
 
+/// The HLS playlist type, as defined in [`#EXT-X-PLAYLIST-TYPE`].
+///
+/// [`#EXT-X-PLAYLIST-TYPE`]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.3.5
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum HlsPlaylistType {
+    /// If the `EXT-X-PLAYLIST-TYPE` value is EVENT, Media Segments can only be added to the end of
+    /// the Media Playlist.
     Event,
+    /// If the `EXT-X-PLAYLIST-TYPE` value is Video On Demand (VOD), the Media Playlist cannot
+    /// change.
     Vod,
 }
 
-// Not exactly the same as `attribute-value`, because some of the types must be contextualized by
-// the `attribute-name`, but this list covers the possible raw values.
+/// A parsed attribute list value.
+///
+/// This represents the value of an attribute in an attribute list, as defined in [Section 4.2].
+///
+/// [Section 4.2]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.2
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum ParsedAttributeValue<'a> {
+    /// The parsed value "looks like" a decimal integer.
+    ///
+    /// NOTE: the parser does not have the context to determine whether the tag that contains the
+    /// value should interpret this value as a `SignedDecimalFloatingPoint` or if it should be
+    /// interpreted as is (a `DecimalInteger`). If the value is found without any fractional parts
+    /// (no manitissa) then it is parsed as an integer.
+    ///
+    /// The [`ParsedAttributeValue::as_option_f64`] helps resolve this problem by taking both cases
+    /// into consideration when trying to provide a float value.
+    ///
+    /// From [Section 4.2], this represents:
+    /// * decimal-integer
+    ///
+    /// [Section 4.2]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.2
     DecimalInteger(u64),
+    /// The parsed value is a signed floating point number.
+    ///
+    /// From [Section 4.2], this represents:
+    /// * decimal-floating-point
+    /// * signed-decimal-floating-point
+    ///
+    /// [Section 4.2]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.2
     SignedDecimalFloatingPoint(f64),
+    /// The parsed value is a quoted string.
+    ///
+    /// From [Section 4.2], this represents:
+    /// * quoted-string
+    /// * enumerated-string-list
+    ///
+    /// [Section 4.2]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.2
     QuotedString(&'a str),
+    /// The parsed value is an unquoted string.
+    ///
+    /// From [Section 4.2], this represents:
+    /// * hexadecimal-sequence
+    /// * enumerated-string
+    /// * decimal-resolution
+    ///
+    /// [Section 4.2]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.2
     UnquotedString(&'a str),
 }
 impl From<u64> for ParsedAttributeValue<'_> {
@@ -229,11 +312,31 @@ impl<'a> ParsedAttributeValue<'a> {
     }
 }
 
+/// Provides a mutable version of [`SemiParsedTagValue`].
+///
+/// This is provided so that custom tag implementations may provide an output that does not depend
+/// on having parsed data to derive the write output from. This helps with mutability as well as
+/// allowing for custom tags to be constructed from scratch (without being parsed from source data).
+///
+/// This mirrors the [`SemiParsedTagValue`] but provides data types that allow for owned data
+/// (rather than just borrowed references from parsed input data).
 #[derive(Debug, PartialEq)]
 pub enum MutableSemiParsedTagValue<'a> {
+    /// The value is empty.
+    ///
+    /// See [`SemiParsedTagValue::Empty`] for more information.
     Empty,
+    /// The value is a float with a string title.
+    ///
+    /// See [`SemiParsedTagValue::DecimalFloatingPointWithOptionalTitle`] for more information.
     DecimalFloatingPointWithOptionalTitle(f64, Cow<'a, str>),
+    /// The value is an attribute list.
+    ///
+    /// See [`SemiParsedTagValue::AttributeList`] for more information.
     AttributeList(HashMap<Cow<'a, str>, MutableParsedAttributeValue<'a>>),
+    /// The value is unparsed.
+    ///
+    /// See [`SemiParsedTagValue::Unparsed`] for more information.
     Unparsed(MutableUnparsedTagValue<'a>),
 }
 impl<'a> From<SemiParsedTagValue<'a>> for MutableSemiParsedTagValue<'a> {
@@ -294,6 +397,14 @@ impl<'a> From<Cow<'a, [u8]>> for MutableSemiParsedTagValue<'a> {
     }
 }
 
+/// Provides a mutable version of [`UnparsedTagValue`].
+///
+/// This is provided so that custom tag implementations may provide an output that does not depend
+/// on having parsed data to derive the write output from. This helps with mutability as well as
+/// allowing for custom tags to be constructed from scratch (without being parsed from source data).
+///
+/// This mirrors the [`UnparsedTagValue`] but provides data types that allow for owned data (rather
+/// than just borrowed references from parsed input data).
 #[derive(Debug, PartialEq)]
 pub struct MutableUnparsedTagValue<'a>(pub Cow<'a, [u8]>);
 impl<'a> From<UnparsedTagValue<'a>> for MutableUnparsedTagValue<'a> {
@@ -302,11 +413,31 @@ impl<'a> From<UnparsedTagValue<'a>> for MutableUnparsedTagValue<'a> {
     }
 }
 
+/// Provides a mutable version of [`ParsedAttributeValue`].
+///
+/// This is provided so that custom tag implementations may provide an output that does not depend
+/// on having parsed data to derive the write output from. This helps with mutability as well as
+/// allowing for custom tags to be constructed from scratch (without being parsed from source data).
+///
+/// This mirrors the [`ParsedAttributeValue`] but provides data types that allow for owned data
+/// (rather than just borrowed references from parsed input data).
 #[derive(Debug, PartialEq, Clone)]
 pub enum MutableParsedAttributeValue<'a> {
+    /// A decimal integer.
+    ///
+    /// See [ParsedAttributeValue::DecimalInteger] for more information.
     DecimalInteger(u64),
+    /// A signed float.
+    ///
+    /// See [ParsedAttributeValue::SignedDecimalFloatingPoint] for more information.
     SignedDecimalFloatingPoint(f64),
+    /// A quoted string.
+    ///
+    /// See [ParsedAttributeValue::QuotedString] for more information.
     QuotedString(Cow<'a, str>),
+    /// An unquoted string.
+    ///
+    /// See [ParsedAttributeValue::UnquotedString] for more information.
     UnquotedString(Cow<'a, str>),
 }
 impl<'a> From<ParsedAttributeValue<'a>> for MutableParsedAttributeValue<'a> {
@@ -332,9 +463,12 @@ impl From<f64> for MutableParsedAttributeValue<'_> {
     }
 }
 
+/// A decimal resolution (`<width>x<height>`).
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct DecimalResolution {
+    /// A horizontal pixel dimension (width).
     pub width: u64,
+    /// A vertical pixel dimension (height).
     pub height: u64,
 }
 impl Display for DecimalResolution {
@@ -363,7 +497,130 @@ impl TryFrom<&str> for DecimalResolution {
     }
 }
 
-pub fn new_parse(input: &[u8]) -> Result<ParsedByteSlice<SemiParsedTagValue>, TagValueSyntaxError> {
+#[cfg(test)]
+mod robtests {
+    use pretty_assertions::assert_eq;
+
+    use crate::{
+        HlsLine, Reader,
+        config::ParsingOptions,
+        date, date_time,
+        line::ParsedByteSlice,
+        tag::value::{ParsedAttributeValue, SemiParsedTagValue, parse},
+    };
+
+    #[test]
+    fn some_test_name() -> Result<(), Box<dyn std::error::Error>> {
+        let pseudo_tag = "#USP-X-TIMESTAMP-MAP:MPEGTS=900000,LOCAL=1970-01-01T00:00:00Z";
+        let mut reader = Reader::from_str(pseudo_tag, ParsingOptions::default());
+        match reader.read_line() {
+            Ok(Some(HlsLine::Comment(tag))) => {
+                let mut tag_split = tag.splitn(2, ':');
+                if tag_split.next() != Some("USP-X-TIMESTAMP-MAP") {
+                    return Err(format!("unexpected tag name").into());
+                }
+                let Some(value) = tag_split.next() else {
+                    return Err(format!("unexpected no tag value").into());
+                };
+                let ParsedByteSlice {
+                    parsed,
+                    remaining: _,
+                } = parse(value.as_bytes()).map_err(|e| format!("value parsing failed: {e}"))?;
+                let SemiParsedTagValue::AttributeList(list) = parsed else {
+                    return Err(format!("unexpected tag value type").into());
+                };
+
+                // Prove that we can extract the value of MPEGTS
+                let Some(mpegts) = (match list.get("MPEGTS") {
+                    Some(v) => v.as_option_u64(),
+                    None => None,
+                }) else {
+                    return Err(format!("missing required MPEGTS").into());
+                };
+                assert_eq!(900000, mpegts);
+
+                // Prove that we can extract the value of LOCAL
+                let Some(local) = (match list.get("LOCAL") {
+                    Some(ParsedAttributeValue::UnquotedString(s)) => date::parse(s).ok(),
+                    _ => None,
+                }) else {
+                    return Err(format!("missing required LOCAL").into());
+                };
+                assert_eq!(date_time!(1970-01-01 T 00:00:00.000), local);
+            }
+            r => return Err(format!("unexpected result {r:?}").into()),
+        }
+        Ok::<(), Box<dyn std::error::Error>>(())
+    }
+}
+
+/// Parses the input data as a tag value and provides a [`SemiParsedTagValue`] when successful.
+///
+/// This method is the primary function used to extract tag data from lines. This is what is used
+/// when the [`crate::tag::known::CustomTag::is_known_name`] method returns `true`, and is also used
+/// by all tag implementations offered by the library.
+///
+/// This method is more low level than a user would normally need to have; however, it may have some
+/// use cases. For example, while it is more preferable to define a `CustomTag` implementation, it
+/// is possible to find an `UnknownTag` and then use this method to parse out the value.
+///
+/// Another (perhaps interesting) use case for using this method directly can be to parse
+/// information out of comment tags. For example, it has been noticed that the Unified Streaming
+/// Packager seems to output a custom timestamp comment with its live playlists, that looks like a
+/// tag; however, the library will not parse this as a tag because the syntax is
+/// `#USP-X-TIMESTAMP-MAP:<attribute-list>`, so the lack of `#EXT` prefix means it is seen as a
+/// comment only. Despite this, if we split on the `:`, we can use this method to extract
+/// information about the value.
+/// ```
+/// # use crate::{
+/// #     HlsLine, Reader,
+/// #     config::ParsingOptions,
+/// #     date, date_time,
+/// #     line::ParsedByteSlice,
+/// #     tag::value::{ParsedAttributeValue, SemiParsedTagValue, parse},
+/// # };
+/// let pseudo_tag = "#USP-X-TIMESTAMP-MAP:MPEGTS=900000,LOCAL=1970-01-01T00:00:00Z";
+/// let mut reader = Reader::from_str(pseudo_tag, ParsingOptions::default());
+/// match reader.read_line() {
+///     Ok(Some(HlsLine::Comment(tag))) => {
+///         let mut tag_split = tag.splitn(2, ':');
+///         if tag_split.next() != Some("USP-X-TIMESTAMP-MAP") {
+///             return Err(format!("unexpected tag name").into());
+///         }
+///         let Some(value) = tag_split.next() else {
+///             return Err(format!("unexpected no tag value").into());
+///         };
+///         let ParsedByteSlice {
+///             parsed,
+///             remaining: _,
+///         } = parse(value.as_bytes()).map_err(|e| format!("value parsing failed: {e}"))?;
+///         let SemiParsedTagValue::AttributeList(list) = parsed else {
+///             return Err(format!("unexpected tag value type").into());
+///         };
+///
+///         // Prove that we can extract the value of MPEGTS
+///         let Some(mpegts) = (match list.get("MPEGTS") {
+///             Some(v) => v.as_option_u64(),
+///             None => None,
+///         }) else {
+///             return Err(format!("missing required MPEGTS").into());
+///         };
+///         assert_eq!(900000, mpegts);
+///
+///         // Prove that we can extract the value of LOCAL
+///         let Some(local) = (match list.get("LOCAL") {
+///             Some(ParsedAttributeValue::UnquotedString(s)) => date::parse(s).ok(),
+///             _ => None,
+///         }) else {
+///             return Err(format!("missing required LOCAL").into());
+///         };
+///         assert_eq!(date_time!(1970-01-01 T 00:00:00.000), local);
+///     }
+///     r => return Err(format!("unexpected result {r:?}").into()),
+/// }
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+pub fn parse(input: &[u8]) -> Result<ParsedByteSlice<SemiParsedTagValue>, TagValueSyntaxError> {
     match memchr3(b'\n', b',', b'=', input) {
         Some(n) => {
             let needle = input[n];
@@ -604,13 +861,13 @@ mod tests {
         test_str_and_with_crlf_and_with_lf("EVENT", |str| {
             assert_eq!(
                 Ok(SemiParsedTagValue::Unparsed(UnparsedTagValue(b"EVENT"))),
-                new_parse(str).map(|p| p.parsed)
+                parse(str).map(|p| p.parsed)
             );
         });
         test_str_and_with_crlf_and_with_lf("VOD", |str| {
             assert_eq!(
                 Ok(SemiParsedTagValue::Unparsed(UnparsedTagValue(b"VOD"))),
-                new_parse(str).map(|p| p.parsed)
+                parse(str).map(|p| p.parsed)
             );
         });
     }
@@ -620,7 +877,7 @@ mod tests {
         test_str_and_with_crlf_and_with_lf("42", |str| {
             assert_eq!(
                 Ok(SemiParsedTagValue::Unparsed(UnparsedTagValue(b"42"))),
-                new_parse(str).map(|p| p.parsed)
+                parse(str).map(|p| p.parsed)
             );
         });
     }
@@ -630,7 +887,7 @@ mod tests {
         test_str_and_with_crlf_and_with_lf("42@42", |str| {
             assert_eq!(
                 Ok(SemiParsedTagValue::Unparsed(UnparsedTagValue(b"42@42"))),
-                new_parse(str).map(|p| p.parsed)
+                parse(str).map(|p| p.parsed)
             );
         });
     }
@@ -641,13 +898,13 @@ mod tests {
         test_str_and_with_crlf_and_with_lf("42.0", |str| {
             assert_eq!(
                 Ok(SemiParsedTagValue::Unparsed(UnparsedTagValue(b"42.0"))),
-                new_parse(str).map(|p| p.parsed)
+                parse(str).map(|p| p.parsed)
             );
         });
         test_str_and_with_crlf_and_with_lf("42.42", |str| {
             assert_eq!(
                 Ok(SemiParsedTagValue::Unparsed(UnparsedTagValue(b"42.42"))),
-                new_parse(str).map(|p| p.parsed)
+                parse(str).map(|p| p.parsed)
             );
         });
         test_str_and_with_crlf_and_with_lf("42,", |str| {
@@ -655,7 +912,7 @@ mod tests {
                 Ok(SemiParsedTagValue::DecimalFloatingPointWithOptionalTitle(
                     42.0, ""
                 )),
-                new_parse(str).map(|p| p.parsed)
+                parse(str).map(|p| p.parsed)
             );
         });
         test_str_and_with_crlf_and_with_lf("42,=ATTRIBUTE-VALUE", |str| {
@@ -664,20 +921,20 @@ mod tests {
                     42.0,
                     "=ATTRIBUTE-VALUE"
                 )),
-                new_parse(str).map(|p| p.parsed)
+                parse(str).map(|p| p.parsed)
             );
         });
         // Negative tests
         test_str_and_with_crlf_and_with_lf("-42.0", |str| {
             assert_eq!(
                 Ok(SemiParsedTagValue::Unparsed(UnparsedTagValue(b"-42.0"))),
-                new_parse(str).map(|p| p.parsed)
+                parse(str).map(|p| p.parsed)
             );
         });
         test_str_and_with_crlf_and_with_lf("-42.42", |str| {
             assert_eq!(
                 Ok(SemiParsedTagValue::Unparsed(UnparsedTagValue(b"-42.42"))),
-                new_parse(str).map(|p| p.parsed)
+                parse(str).map(|p| p.parsed)
             );
         });
         test_str_and_with_crlf_and_with_lf("-42,", |str| {
@@ -685,7 +942,7 @@ mod tests {
                 Ok(SemiParsedTagValue::DecimalFloatingPointWithOptionalTitle(
                     -42.0, ""
                 )),
-                new_parse(str).map(|p| p.parsed)
+                parse(str).map(|p| p.parsed)
             );
         });
         test_str_and_with_crlf_and_with_lf("-42,=ATTRIBUTE-VALUE", |str| {
@@ -694,7 +951,7 @@ mod tests {
                     -42.0,
                     "=ATTRIBUTE-VALUE"
                 )),
-                new_parse(str).map(|p| p.parsed)
+                parse(str).map(|p| p.parsed)
             );
         });
     }
@@ -706,7 +963,7 @@ mod tests {
                 Ok(SemiParsedTagValue::Unparsed(UnparsedTagValue(
                     b"2025-06-03T17:56:42.123Z"
                 ))),
-                new_parse(str).map(|p| p.parsed)
+                parse(str).map(|p| p.parsed)
             );
         });
         test_str_and_with_crlf_and_with_lf("2025-06-03T17:56:42.123+01:00", |str| {
@@ -714,7 +971,7 @@ mod tests {
                 Ok(SemiParsedTagValue::Unparsed(UnparsedTagValue(
                     b"2025-06-03T17:56:42.123+01:00"
                 ))),
-                new_parse(str).map(|p| p.parsed)
+                parse(str).map(|p| p.parsed)
             );
         });
         test_str_and_with_crlf_and_with_lf("2025-06-03T17:56:42.123-05:00", |str| {
@@ -722,7 +979,7 @@ mod tests {
                 Ok(SemiParsedTagValue::Unparsed(UnparsedTagValue(
                     b"2025-06-03T17:56:42.123-05:00"
                 ))),
-                new_parse(str).map(|p| p.parsed)
+                parse(str).map(|p| p.parsed)
             );
         });
     }
@@ -742,7 +999,7 @@ mod tests {
                             "NAME",
                             ParsedAttributeValue::DecimalInteger(123)
                         )]))),
-                        new_parse(str).map(|p| p.parsed)
+                        parse(str).map(|p| p.parsed)
                     );
                 });
             }
@@ -755,7 +1012,7 @@ mod tests {
                             ("NAME", ParsedAttributeValue::DecimalInteger(123)),
                             ("NEXT-NAME", ParsedAttributeValue::DecimalInteger(456))
                         ]))),
-                        new_parse(str).map(|p| p.parsed)
+                        parse(str).map(|p| p.parsed)
                     );
                 });
             }
@@ -773,7 +1030,7 @@ mod tests {
                             "NAME",
                             ParsedAttributeValue::SignedDecimalFloatingPoint(42.42)
                         )]))),
-                        new_parse(str).map(|p| p.parsed)
+                        parse(str).map(|p| p.parsed)
                     );
                 });
             }
@@ -786,7 +1043,7 @@ mod tests {
                             "NAME",
                             ParsedAttributeValue::SignedDecimalFloatingPoint(-42.0)
                         )]))),
-                        new_parse(str).map(|p| p.parsed)
+                        parse(str).map(|p| p.parsed)
                     );
                 });
             }
@@ -799,7 +1056,7 @@ mod tests {
                             "NAME",
                             ParsedAttributeValue::SignedDecimalFloatingPoint(-42.42)
                         )]))),
-                        new_parse(str).map(|p| p.parsed)
+                        parse(str).map(|p| p.parsed)
                     );
                 });
             }
@@ -818,7 +1075,7 @@ mod tests {
                                 ParsedAttributeValue::SignedDecimalFloatingPoint(84.84)
                             )
                         ]))),
-                        new_parse(str).map(|p| p.parsed)
+                        parse(str).map(|p| p.parsed)
                     );
                 });
             }
@@ -837,7 +1094,7 @@ mod tests {
                                 ParsedAttributeValue::SignedDecimalFloatingPoint(-42.0)
                             )
                         ]))),
-                        new_parse(str).map(|p| p.parsed)
+                        parse(str).map(|p| p.parsed)
                     );
                 });
             }
@@ -856,7 +1113,7 @@ mod tests {
                                 ParsedAttributeValue::SignedDecimalFloatingPoint(-84.84)
                             )
                         ]))),
-                        new_parse(str).map(|p| p.parsed)
+                        parse(str).map(|p| p.parsed)
                     );
                 });
             }
@@ -874,7 +1131,7 @@ mod tests {
                             "NAME",
                             ParsedAttributeValue::QuotedString("Hello, World!")
                         )]))),
-                        new_parse(str).map(|p| p.parsed)
+                        parse(str).map(|p| p.parsed)
                     );
                 });
             }
@@ -887,7 +1144,7 @@ mod tests {
                             ("NAME", ParsedAttributeValue::QuotedString("Hello,")),
                             ("NEXT-NAME", ParsedAttributeValue::QuotedString("World!"))
                         ]))),
-                        new_parse(str).map(|p| p.parsed)
+                        parse(str).map(|p| p.parsed)
                     );
                 });
             }
@@ -905,7 +1162,7 @@ mod tests {
                             "NAME",
                             ParsedAttributeValue::UnquotedString("PQ")
                         )]))),
-                        new_parse(str).map(|p| p.parsed)
+                        parse(str).map(|p| p.parsed)
                     );
                 });
             }
@@ -918,7 +1175,7 @@ mod tests {
                             ("NAME", ParsedAttributeValue::UnquotedString("PQ")),
                             ("NEXT-NAME", ParsedAttributeValue::UnquotedString("HLG"))
                         ]))),
-                        new_parse(str).map(|p| p.parsed)
+                        parse(str).map(|p| p.parsed)
                     );
                 });
             }
