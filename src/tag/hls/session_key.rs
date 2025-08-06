@@ -10,7 +10,7 @@ use std::{borrow::Cow, collections::HashMap};
 
 /// The attribute list for the tag (`#EXT-X-SESSION-KEY:<attribute-list>`).
 ///
-/// See [`Key`] for a link to the HLS documentation for this attribute.
+/// See [`SessionKey`] for a link to the HLS documentation for this attribute.
 #[derive(Debug, PartialEq, Clone)]
 pub struct SessionKeyAttributeList<'a> {
     /// Corresponds to the `METHOD` attribute.

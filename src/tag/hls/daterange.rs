@@ -671,7 +671,7 @@ impl<'a> Daterange<'a> {
     ///
     /// Note, the specification indicates that the SCTE35-(CMD|OUT|IN) attributes are represented as
     /// hexadecimal sequences. This implies that they should be parsed as UnquotedString (given that
-    /// section "4.2. Attribute Lists" indicates that a "hexadecimal-sequence [is] an unquoted
+    /// section "4.2. Attribute Lists" indicates that a "hexadecimal-sequence \[is\] an unquoted
     /// string of characters"); however, in practice, I've found that some packagers have put this
     /// information in quoted strings (containing the hexadecimal sequence), so we've allowed this
     /// parser to be lenient on that requirement and accept both. The implication is that
@@ -694,7 +694,7 @@ impl<'a> Daterange<'a> {
     ///
     /// Note, the specification indicates that the SCTE35-(CMD|OUT|IN) attributes are represented as
     /// hexadecimal sequences. This implies that they should be parsed as UnquotedString (given that
-    /// section "4.2. Attribute Lists" indicates that a "hexadecimal-sequence [is] an unquoted
+    /// section "4.2. Attribute Lists" indicates that a "hexadecimal-sequence \[is\] an unquoted
     /// string of characters"); however, in practice, I've found that some packagers have put this
     /// information in quoted strings (containing the hexadecimal sequence), so we've allowed this
     /// parser to be lenient on that requirement and accept both. The implication is that
@@ -717,7 +717,7 @@ impl<'a> Daterange<'a> {
     ///
     /// Note, the specification indicates that the SCTE35-(CMD|OUT|IN) attributes are represented as
     /// hexadecimal sequences. This implies that they should be parsed as UnquotedString (given that
-    /// section "4.2. Attribute Lists" indicates that a "hexadecimal-sequence [is] an unquoted
+    /// section "4.2. Attribute Lists" indicates that a "hexadecimal-sequence \[is\] an unquoted
     /// string of characters"); however, in practice, I've found that some packagers have put this
     /// information in quoted strings (containing the hexadecimal sequence), so we've allowed this
     /// parser to be lenient on that requirement and accept both. The implication is that
@@ -874,7 +874,9 @@ impl<'a> Daterange<'a> {
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     ///
     /// Note that this silently fails if the name provided does not begin with `"X-"`. This is
-    /// likely to change in the future as per https://github.com/theRealRobG/m3u8/issues/1.
+    /// likely to change in the future as per issue [#1].
+    ///
+    /// [#1]: https://github.com/theRealRobG/m3u8/issues/1
     pub fn set_extension_attribute(
         &mut self,
         name: impl Into<Cow<'a, str>>,
@@ -894,7 +896,9 @@ impl<'a> Daterange<'a> {
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     ///
     /// Note that this silently fails if the name provided does not begin with `"X-"`. This is
-    /// likely to change in the future as per https://github.com/theRealRobG/m3u8/issues/1.
+    /// likely to change in the future as per issue [#1].
+    ///
+    /// [#1]: https://github.com/theRealRobG/m3u8/issues/1
     pub fn unset_extension_attribute(&mut self, name: impl Into<Cow<'a, str>>) {
         let name = name.into();
         if !name.starts_with("X-") {
