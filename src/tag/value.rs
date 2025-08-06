@@ -572,7 +572,7 @@ mod robtests {
 /// comment only. Despite this, if we split on the `:`, we can use this method to extract
 /// information about the value.
 /// ```
-/// # use crate::{
+/// # use m3u8::{
 /// #     HlsLine, Reader,
 /// #     config::ParsingOptions,
 /// #     date, date_time,
