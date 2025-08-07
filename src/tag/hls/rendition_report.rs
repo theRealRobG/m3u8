@@ -6,56 +6,99 @@ use crate::{
         value::{ParsedAttributeValue, SemiParsedTagValue},
     },
 };
-use std::{borrow::Cow, collections::HashMap};
+use std::{borrow::Cow, collections::HashMap, marker::PhantomData};
 
 /// The attribute list for the tag (`#EXT-X-RENDITION-REPORT:<attribute-list>`).
 ///
 /// See [`RenditionReport`] for a link to the HLS documentation for this attribute.
-#[derive(Debug, PartialEq, Clone)]
-pub struct RenditionReportAttributeList<'a> {
+#[derive(Debug, Clone)]
+struct RenditionReportAttributeList<'a> {
     /// Corresponds to the `URI` attribute.
     ///
     /// See [`RenditionReport`] for a link to the HLS documentation for this attribute.
-    pub uri: Cow<'a, str>,
+    uri: Cow<'a, str>,
     /// Corresponds to the `LAST-MSN` attribute.
     ///
     /// See [`RenditionReport`] for a link to the HLS documentation for this attribute.
-    pub last_msn: u64,
+    last_msn: u64,
     /// Corresponds to the `LAST-PART` attribute.
     ///
     /// See [`RenditionReport`] for a link to the HLS documentation for this attribute.
-    pub last_part: Option<u64>,
-}
-
-/// A builder for convenience in constructing a [`RenditionReport`].
-#[derive(Debug, PartialEq, Clone)]
-pub struct RenditionReportBuilder<'a> {
-    uri: Cow<'a, str>,
-    last_msn: u64,
     last_part: Option<u64>,
 }
-impl<'a> RenditionReportBuilder<'a> {
+
+/// Placeholder struct for [`RenditionReportBuilder`] indicating that `uri` needs to be set.
+#[derive(Debug, Clone, Copy)]
+pub struct RenditionReportUriNeedsToBeSet;
+/// Placeholder struct for [`RenditionReportBuilder`] indicating that `last_msn` needs to be set.
+#[derive(Debug, Clone, Copy)]
+pub struct RenditionReportLastMsnNeedsToBeSet;
+/// Placeholder struct for [`RenditionReportBuilder`] indicating that `uri` has been set.
+#[derive(Debug, Clone, Copy)]
+pub struct RenditionReportUriHasBeenSet;
+/// Placeholder struct for [`RenditionReportBuilder`] indicating that `last_msn` has been set.
+#[derive(Debug, Clone, Copy)]
+pub struct RenditionReportLastMsnHasBeenSet;
+
+/// A builder for convenience in constructing a [`RenditionReport`].
+#[derive(Debug, Clone)]
+pub struct RenditionReportBuilder<'a, UriStatus, LastMsnStatus> {
+    attribute_list: RenditionReportAttributeList<'a>,
+    uri_status: PhantomData<UriStatus>,
+    last_msn_status: PhantomData<LastMsnStatus>,
+}
+impl<'a>
+    RenditionReportBuilder<'a, RenditionReportUriNeedsToBeSet, RenditionReportLastMsnNeedsToBeSet>
+{
     /// Creates a new builder.
-    pub fn new(uri: impl Into<Cow<'a, str>>, last_msn: u64) -> Self {
+    pub fn new() -> Self {
         Self {
-            uri: uri.into(),
-            last_msn,
-            last_part: Default::default(),
+            attribute_list: RenditionReportAttributeList {
+                uri: Cow::Borrowed(""),
+                last_msn: Default::default(),
+                last_part: Default::default(),
+            },
+            uri_status: PhantomData,
+            last_msn_status: PhantomData,
         }
     }
-
+}
+impl<'a>
+    RenditionReportBuilder<'a, RenditionReportUriHasBeenSet, RenditionReportLastMsnHasBeenSet>
+{
     /// Finish building and construct the `RenditionReport`.
     pub fn finish(self) -> RenditionReport<'a> {
-        RenditionReport::new(RenditionReportAttributeList {
-            uri: self.uri,
-            last_msn: self.last_msn,
-            last_part: self.last_part,
-        })
+        RenditionReport::new(self.attribute_list)
     }
-
+}
+impl<'a, UriStatus, LastMsnStatus> RenditionReportBuilder<'a, UriStatus, LastMsnStatus> {
+    /// Add the provided `uri` to the attributes built into `RenditionReport`.
+    pub fn with_uri(
+        mut self,
+        uri: impl Into<Cow<'a, str>>,
+    ) -> RenditionReportBuilder<'a, RenditionReportUriHasBeenSet, LastMsnStatus> {
+        self.attribute_list.uri = uri.into();
+        RenditionReportBuilder {
+            attribute_list: self.attribute_list,
+            uri_status: PhantomData,
+            last_msn_status: PhantomData,
+        }
+    }
+    /// Add the provided `last_msn` to the attributes built into `RenditionReport`.
+    pub fn with_last_msn(
+        mut self,
+        last_msn: u64,
+    ) -> RenditionReportBuilder<'a, UriStatus, RenditionReportLastMsnHasBeenSet> {
+        self.attribute_list.last_msn = last_msn;
+        RenditionReportBuilder {
+            attribute_list: self.attribute_list,
+            uri_status: PhantomData,
+            last_msn_status: PhantomData,
+        }
+    }
     /// Add the provided `last_part` to the attributes built into `RenditionReport`.
     pub fn with_last_part(mut self, last_part: u64) -> Self {
-        self.last_part = Some(last_part);
+        self.attribute_list.last_part = Some(last_part);
         self
     }
 }
@@ -110,7 +153,7 @@ impl<'a> TryFrom<ParsedTag<'a>> for RenditionReport<'a> {
 
 impl<'a> RenditionReport<'a> {
     /// Constructs a new `RenditionReport` tag.
-    pub fn new(attribute_list: RenditionReportAttributeList<'a>) -> Self {
+    fn new(attribute_list: RenditionReportAttributeList<'a>) -> Self {
         let output_line = Cow::Owned(calculate_line(&attribute_list));
         let RenditionReportAttributeList {
             uri,
@@ -132,12 +175,32 @@ impl<'a> RenditionReport<'a> {
     /// For example, we could construct a `RenditionReport` as such:
     /// ```
     /// # use m3u8::tag::hls::RenditionReport;
-    /// let rendition_report = RenditionReport::builder("hi.m3u8", 100)
+    /// let rendition_report = RenditionReport::builder()
+    ///     .with_uri("hi.m3u8")
+    ///     .with_last_msn(100)
     ///     .with_last_part(3)
     ///     .finish();
     /// ```
-    pub fn builder(uri: impl Into<Cow<'a, str>>, last_msn: u64) -> RenditionReportBuilder<'a> {
-        RenditionReportBuilder::new(uri, last_msn)
+    /// Note that the `finish` method is only callable if the builder has set `uri` AND `last_msn`.
+    /// Each of the following fail to compile:
+    /// ```compile_fail
+    /// # use m3u8::tag::hls::RenditionReport;
+    /// let rendition_report = RenditionReport::builder().finish();
+    /// ```
+    /// ```compile_fail
+    /// # use m3u8::tag::hls::RenditionReport;
+    /// let rendition_report = RenditionReport::builder().with_uri("hi.m3u8").finish();
+    /// ```
+    /// ```compile_fail
+    /// # use m3u8::tag::hls::RenditionReport;
+    /// let rendition_report = RenditionReport::builder().with_last_msn(100).finish();
+    /// ```
+    pub fn builder() -> RenditionReportBuilder<
+        'a,
+        RenditionReportUriNeedsToBeSet,
+        RenditionReportLastMsnNeedsToBeSet,
+    > {
+        RenditionReportBuilder::new()
     }
 
     /// Corresponds to the `URI` attribute.
@@ -243,7 +306,9 @@ mod tests {
     fn as_str_with_no_options_should_be_valid() {
         assert_eq!(
             b"#EXT-X-RENDITION-REPORT:URI=\"low.m3u8\",LAST-MSN=100",
-            RenditionReport::builder("low.m3u8", 100)
+            RenditionReport::builder()
+                .with_uri("low.m3u8")
+                .with_last_msn(100)
                 .finish()
                 .into_inner()
                 .value()
@@ -254,7 +319,9 @@ mod tests {
     fn as_str_with_options_should_be_valid() {
         assert_eq!(
             b"#EXT-X-RENDITION-REPORT:URI=\"low.m3u8\",LAST-MSN=100,LAST-PART=2",
-            RenditionReport::builder("low.m3u8", 100)
+            RenditionReport::builder()
+                .with_uri("low.m3u8")
+                .with_last_msn(100)
                 .with_last_part(2)
                 .finish()
                 .into_inner()
@@ -263,7 +330,11 @@ mod tests {
     }
 
     mutation_tests!(
-        RenditionReport::builder("low.m3u8", 100).with_last_part(2).finish(),
+        RenditionReport::builder()
+            .with_uri("low.m3u8")
+            .with_last_msn(100)
+            .with_last_part(2)
+            .finish(),
         (uri, "high.m3u8", @Attr="URI=\"high.m3u8\""),
         (last_msn, 200, @Attr="LAST-MSN=200"),
         (last_part, @Option 3, @Attr="LAST-PART=3")

@@ -7,7 +7,7 @@ use crate::{
     },
     utils::AsStaticCow,
 };
-use std::{borrow::Cow, collections::HashMap, fmt::Display};
+use std::{borrow::Cow, collections::HashMap, fmt::Display, marker::PhantomData};
 
 /// Corresponds to the `#EXT-X-SESSION-DATA:FORMAT` attribute.
 ///
@@ -59,79 +59,170 @@ const RAW: &str = "RAW";
 ///
 /// See [`SessionData`] for a link to the HLS documentation for this attribute.
 #[derive(Debug, PartialEq, Clone)]
-pub struct SessionDataAttributeList<'a> {
+struct SessionDataAttributeList<'a> {
     /// Corresponds to the `DATA-ID` attribute.
     ///
     /// See [`SessionData`] for a link to the HLS documentation for this attribute.
-    pub data_id: Cow<'a, str>,
+    data_id: Cow<'a, str>,
     /// Corresponds to the `VALUE` attribute.
     ///
     /// See [`SessionData`] for a link to the HLS documentation for this attribute.
-    pub value: Option<Cow<'a, str>>,
+    value: Option<Cow<'a, str>>,
     /// Corresponds to the `URI` attribute.
     ///
     /// See [`SessionData`] for a link to the HLS documentation for this attribute.
-    pub uri: Option<Cow<'a, str>>,
+    uri: Option<Cow<'a, str>>,
     /// Corresponds to the `FORMAT` attribute.
     ///
     /// See [`SessionData`] for a link to the HLS documentation for this attribute.
-    pub format: Option<Cow<'a, str>>,
+    format: Option<Cow<'a, str>>,
     /// Corresponds to the `LANGUAGE` attribute.
     ///
     /// See [`SessionData`] for a link to the HLS documentation for this attribute.
-    pub language: Option<Cow<'a, str>>,
+    language: Option<Cow<'a, str>>,
 }
+
+/// Placeholder struct for [`SessionDataBuilder`] indicating that `data_id` needs to be set.
+#[derive(Debug, Clone, Copy)]
+pub struct SessionDataDataIdNeedsToBeSet;
+/// Placeholder struct for [`SessionDataBuilder`] indicating that `data_id` has been set.
+#[derive(Debug, Clone, Copy)]
+pub struct SessionDataDataIdHasBeenSet;
+/// Placeholder struct for [`SessionDataBuilder`] indicating that `value` is not set.
+#[derive(Debug, Clone, Copy)]
+pub struct SessionDataValueIsNotSet;
+/// Placeholder struct for [`SessionDataBuilder`] indicating that `value` has been set.
+#[derive(Debug, Clone, Copy)]
+pub struct SessionDataValueHasBeenSet;
+/// Placeholder struct for [`SessionDataBuilder`] indicating that `uri` is not set.
+#[derive(Debug, Clone, Copy)]
+pub struct SessionDataUriIsNotSet;
+/// Placeholder struct for [`SessionDataBuilder`] indicating that `uri` has been set.
+#[derive(Debug, Clone, Copy)]
+pub struct SessionDataUriHasBeenSet;
 
 /// A builder for convenience in constructing a [`SessionData`].
 #[derive(Debug, PartialEq, Clone)]
-pub struct SessionDataBuilder<'a> {
-    data_id: Cow<'a, str>,
-    value: Option<Cow<'a, str>>,
-    uri: Option<Cow<'a, str>>,
-    format: Option<Cow<'a, str>>,
-    language: Option<Cow<'a, str>>,
+pub struct SessionDataBuilder<'a, DataIdStatus, ValueStatus, UriStatus> {
+    attribute_list: SessionDataAttributeList<'a>,
+    data_id_status: PhantomData<DataIdStatus>,
+    value_status: PhantomData<ValueStatus>,
+    uri_status: PhantomData<UriStatus>,
 }
-impl<'a> SessionDataBuilder<'a> {
+impl<'a>
+    SessionDataBuilder<
+        'a,
+        SessionDataDataIdNeedsToBeSet,
+        SessionDataValueIsNotSet,
+        SessionDataUriIsNotSet,
+    >
+{
     /// Creates a new builder.
-    pub fn new(data_id: impl Into<Cow<'a, str>>) -> Self {
+    pub fn new() -> Self {
         Self {
-            data_id: data_id.into(),
-            value: Default::default(),
-            uri: Default::default(),
-            format: Default::default(),
-            language: Default::default(),
+            attribute_list: SessionDataAttributeList {
+                data_id: Cow::Borrowed(""),
+                value: Default::default(),
+                uri: Default::default(),
+                format: Default::default(),
+                language: Default::default(),
+            },
+            data_id_status: PhantomData,
+            value_status: PhantomData,
+            uri_status: PhantomData,
         }
     }
-
+}
+impl<'a>
+    SessionDataBuilder<
+        'a,
+        SessionDataDataIdHasBeenSet,
+        SessionDataValueHasBeenSet,
+        SessionDataUriIsNotSet,
+    >
+{
     /// Finish building and construct the `SessionData`.
+    ///
+    /// Each EXT-X-SESSION-DATA tag MUST contain either a VALUE or URI attribute, but not both.
     pub fn finish(self) -> SessionData<'a> {
-        SessionData::new(SessionDataAttributeList {
-            data_id: self.data_id,
-            value: self.value,
-            uri: self.uri,
-            format: self.format,
-            language: self.language,
-        })
+        SessionData::new(self.attribute_list)
     }
-
+}
+impl<'a>
+    SessionDataBuilder<
+        'a,
+        SessionDataDataIdHasBeenSet,
+        SessionDataValueIsNotSet,
+        SessionDataUriHasBeenSet,
+    >
+{
+    /// Finish building and construct the `SessionData`.
+    ///
+    /// Each EXT-X-SESSION-DATA tag MUST contain either a VALUE or URI attribute, but not both.
+    pub fn finish(self) -> SessionData<'a> {
+        SessionData::new(self.attribute_list)
+    }
+}
+impl<'a, DataIdStatus, ValueStatus>
+    SessionDataBuilder<'a, DataIdStatus, ValueStatus, SessionDataUriIsNotSet>
+{
     /// Add the provided `value` to the attributes built into `SessionData`.
-    pub fn with_value(mut self, value: impl Into<Cow<'a, str>>) -> Self {
-        self.value = Some(value.into());
-        self
+    pub fn with_value(
+        mut self,
+        value: impl Into<Cow<'a, str>>,
+    ) -> SessionDataBuilder<'a, DataIdStatus, SessionDataValueHasBeenSet, SessionDataUriIsNotSet>
+    {
+        self.attribute_list.value = Some(value.into());
+        SessionDataBuilder {
+            attribute_list: self.attribute_list,
+            data_id_status: PhantomData,
+            value_status: PhantomData,
+            uri_status: PhantomData,
+        }
     }
+}
+impl<'a, DataIdStatus, UriStatus>
+    SessionDataBuilder<'a, DataIdStatus, SessionDataValueIsNotSet, UriStatus>
+{
     /// Add the provided `uri` to the attributes built into `SessionData`.
-    pub fn with_uri(mut self, uri: impl Into<Cow<'a, str>>) -> Self {
-        self.uri = Some(uri.into());
-        self
+    pub fn with_uri(
+        mut self,
+        uri: impl Into<Cow<'a, str>>,
+    ) -> SessionDataBuilder<'a, DataIdStatus, SessionDataValueIsNotSet, SessionDataUriHasBeenSet>
+    {
+        self.attribute_list.uri = Some(uri.into());
+        SessionDataBuilder {
+            attribute_list: self.attribute_list,
+            data_id_status: PhantomData,
+            value_status: PhantomData,
+            uri_status: PhantomData,
+        }
+    }
+}
+impl<'a, DataIdStatus, ValueStatus, UriStatus>
+    SessionDataBuilder<'a, DataIdStatus, ValueStatus, UriStatus>
+{
+    /// Add the provided `data_id` to the attributes built into `SessionData`.
+    pub fn with_data_id(
+        mut self,
+        data_id: impl Into<Cow<'a, str>>,
+    ) -> SessionDataBuilder<'a, SessionDataDataIdHasBeenSet, ValueStatus, UriStatus> {
+        self.attribute_list.data_id = data_id.into();
+        SessionDataBuilder {
+            attribute_list: self.attribute_list,
+            data_id_status: PhantomData,
+            value_status: PhantomData,
+            uri_status: PhantomData,
+        }
     }
     /// Add the provided `format` to the attributes built into `SessionData`.
     pub fn with_format(mut self, format: impl Into<Cow<'a, str>>) -> Self {
-        self.format = Some(format.into());
+        self.attribute_list.format = Some(format.into());
         self
     }
     /// Add the provided `language` to the attributes built into `SessionData`.
     pub fn with_language(mut self, language: impl Into<Cow<'a, str>>) -> Self {
-        self.language = Some(language.into());
+        self.attribute_list.language = Some(language.into());
         self
     }
 }
@@ -188,7 +279,7 @@ impl<'a> TryFrom<ParsedTag<'a>> for SessionData<'a> {
 
 impl<'a> SessionData<'a> {
     /// Constructs a new `SessionData` tag.
-    pub fn new(attribute_list: SessionDataAttributeList<'a>) -> Self {
+    fn new(attribute_list: SessionDataAttributeList<'a>) -> Self {
         let output_line = Cow::Owned(calculate_line(&attribute_list));
         let SessionDataAttributeList {
             data_id,
@@ -214,13 +305,42 @@ impl<'a> SessionData<'a> {
     /// For example, we could construct a `SessionData` as such:
     /// ```
     /// # use m3u8::tag::hls::{SessionData, Format};
-    /// let session_data = SessionData::builder("1234")
+    /// let session_data = SessionData::builder()
+    ///     .with_data_id("1234")
     ///     .with_uri("data.bin")
     ///     .with_format(Format::Raw)
     ///     .finish();
     /// ```
-    pub fn builder(data_id: impl Into<Cow<'a, str>>) -> SessionDataBuilder<'a> {
-        SessionDataBuilder::new(data_id)
+    /// Note that the HLS specification indicates:
+    /// > Each EXT-X-SESSION-DATA tag MUST contain either a VALUE or URI attribute, but not both.
+    ///
+    /// This is enforced with the builder, meaning, the `finish` method is only available once the
+    /// `data_id` attribute has been set and either the `value` or `uri` attribute. Further, the
+    /// `uri` attribute can only be set when `value` has not been set, and similarly, `value` can
+    /// only be set when `uri` has not been set. Each of the following fail to compile:
+    /// ```compile_fail
+    /// # use m3u8::tag::hls::SessionData;
+    /// let session_data = SessionData::builder().finish();
+    /// ```
+    /// ```compile_fail
+    /// # use m3u8::tag::hls::SessionData;
+    /// let session_data = SessionData::builder().with_data_id("1234").finish();
+    /// ```
+    /// ```compile_fail
+    /// # use m3u8::tag::hls::SessionData;
+    /// let session_data_builder = SessionData::builder().with_value("test").with_uri("data.bin");
+    /// ```
+    /// ```compile_fail
+    /// # use m3u8::tag::hls::SessionData;
+    /// let session_data_builder = SessionData::builder().with_uri("data.bin").with_value("test");
+    /// ```
+    pub fn builder() -> SessionDataBuilder<
+        'a,
+        SessionDataDataIdNeedsToBeSet,
+        SessionDataValueIsNotSet,
+        SessionDataUriIsNotSet,
+    > {
+        SessionDataBuilder::new()
     }
 
     /// Corresponds to the `DATA-ID` attribute.
@@ -427,7 +547,8 @@ mod tests {
     fn as_str_with_no_options_should_be_valid() {
         assert_eq!(
             b"#EXT-X-SESSION-DATA:DATA-ID=\"1234\",VALUE=\"test\",LANGUAGE=\"en\"",
-            SessionData::builder("1234")
+            SessionData::builder()
+                .with_data_id("1234")
                 .with_value("test")
                 .with_language("en")
                 .finish()
@@ -440,7 +561,8 @@ mod tests {
     fn as_str_with_options_should_be_valid() {
         assert_eq!(
             b"#EXT-X-SESSION-DATA:DATA-ID=\"1234\",URI=\"test.bin\",FORMAT=RAW",
-            SessionData::builder("1234")
+            SessionData::builder()
+                .with_data_id("1234")
                 .with_uri("test.bin")
                 .with_format("RAW")
                 .finish()
@@ -449,20 +571,63 @@ mod tests {
         )
     }
 
-    mutation_tests!(
-        SessionData::builder("1234")
-            .with_value("test")
-            .with_language("en")
-            .with_uri("test.bin")
-            .with_format("RAW")
-            .finish(),
-        (data_id, "abcd", @Attr="DATA-ID=\"abcd\""),
-        (language, @Option "es", @Attr="LANGUAGE=\"es\""),
-        (uri, @Option "example.bin", @Attr="URI=\"example.bin\""),
-        (
-            format,
-            EnumeratedString::<Format>::Unknown("INVALID");
-            @Default=EnumeratedString::Known(Format::Json),
-            @Attr="FORMAT=INVALID")
-    );
+    // Setting both URI and VALUE are not permitted via HLS spec and enforced here via special
+    // Builder generic types that only make setting those properties available when the other is not
+    // set.
+    //
+    // Therefore we run one set of tests with value and one with uri. Because the macro unwraps into
+    // multiple methods we have to wrap the tests in their own modules.
+    //
+    // We don't restrict setting value or uri based on presence of the other on the main body of the
+    // SessionData struct... Maybe we should?
+    mod with_value_mutation {
+        use super::*;
+        use pretty_assertions::assert_eq;
+        mutation_tests!(
+            SessionData::builder()
+                .with_data_id("1234")
+                .with_value("test")
+                .with_language("en")
+                .with_format("RAW")
+                .finish(),
+            (data_id, "abcd", @Attr="DATA-ID=\"abcd\""),
+            (language, @Option "es", @Attr="LANGUAGE=\"es\""),
+            (uri, @Option "example.bin", @Attr="URI=\"example.bin\""),
+            (
+                format,
+                EnumeratedString::<Format>::Unknown("INVALID");
+                @Default=EnumeratedString::Known(Format::Json),
+                @Attr="FORMAT=INVALID")
+        );
+    }
+
+    // Setting both URI and VALUE are not permitted via HLS spec and enforced here via special
+    // Builder generic types that only make setting those properties available when the other is not
+    // set.
+    //
+    // Therefore we run one set of tests with value and one with uri. Because the macro unwraps into
+    // multiple methods we have to wrap the tests in their own modules.
+    //
+    // We don't restrict setting value or uri based on presence of the other on the main body of the
+    // SessionData struct... Maybe we should?
+    mod with_uri_mutation {
+        use super::*;
+        use pretty_assertions::assert_eq;
+        mutation_tests!(
+            SessionData::builder()
+                .with_data_id("1234")
+                .with_language("en")
+                .with_uri("test.bin")
+                .with_format("RAW")
+                .finish(),
+            (data_id, "abcd", @Attr="DATA-ID=\"abcd\""),
+            (language, @Option "es", @Attr="LANGUAGE=\"es\""),
+            (uri, @Option "example.bin", @Attr="URI=\"example.bin\""),
+            (
+                format,
+                EnumeratedString::<Format>::Unknown("INVALID");
+                @Default=EnumeratedString::Known(Format::Json),
+                @Attr="FORMAT=INVALID")
+        );
+    }
 }

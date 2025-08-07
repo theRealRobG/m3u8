@@ -807,17 +807,6 @@ mod tests {
                 original_input: b"#EXT-X-SERVER-CONTROL:CAN-SKIP-UNTIL=36,CAN-SKIP-DATERANGES=YES,HOLD-BACK=12,PART-HOLD-BACK=1.5,CAN-BLOCK-RELOAD=YES"
             })
         );
-        // In reality this is not possible within regular parsing, as this would be considered empty
-        // value case (rather than attribute list), but this is used to validate optionality of all
-        // properties (which seems fair as part of a unit test).
-        assert_eq!(
-            Ok(Tag::ServerControl(ServerControl::builder().finish())),
-            Tag::try_from(ParsedTag {
-                name: "-X-SERVER-CONTROL",
-                value: SemiParsedTagValue::AttributeList(HashMap::new()),
-                original_input: b"#EXT-X-SERVER-CONTROL:"
-            })
-        );
     }
 
     #[test]
@@ -1204,7 +1193,9 @@ mod tests {
     fn preload_hint() {
         assert_eq!(
             Ok(Tag::PreloadHint(
-                PreloadHint::builder(preload_hint::PreloadHintType::Part, "part.2.mp4")
+                PreloadHint::builder()
+                    .with_hint_type(preload_hint::PreloadHintType::Part)
+                    .with_uri("part.2.mp4")
                     .with_byterange_start(512)
                     .with_byterange_length(1024)
                     .finish()
@@ -1225,7 +1216,10 @@ mod tests {
         );
         assert_eq!(
             Ok(Tag::PreloadHint(
-                PreloadHint::builder(preload_hint::PreloadHintType::Part, "part.2.mp4").finish()
+                PreloadHint::builder()
+                    .with_hint_type(preload_hint::PreloadHintType::Part)
+                    .with_uri("part.2.mp4")
+                    .finish()
             )),
             Tag::try_from(ParsedTag {
                 name: "-X-PRELOAD-HINT",
@@ -1242,7 +1236,9 @@ mod tests {
     fn rendition_report() {
         assert_eq!(
             Ok(Tag::RenditionReport(
-                RenditionReport::builder("high.m3u8".to_string(), 1000)
+                RenditionReport::builder()
+                    .with_uri("high.m3u8")
+                    .with_last_msn(1000)
                     .with_last_part(2)
                     .finish()
             )),
@@ -1259,7 +1255,10 @@ mod tests {
         );
         assert_eq!(
             Ok(Tag::RenditionReport(
-                RenditionReport::builder("high.m3u8", 1000).finish()
+                RenditionReport::builder()
+                    .with_uri("high.m3u8")
+                    .with_last_msn(1000)
+                    .finish()
             )),
             Tag::try_from(ParsedTag {
                 name: "-X-RENDITION-REPORT",
@@ -1622,7 +1621,8 @@ mod tests {
     fn session_data() {
         assert_eq!(
             Ok(Tag::SessionData(
-                SessionData::builder("1234")
+                SessionData::builder()
+                    .with_data_id("1234")
                     .with_value("test")
                     .with_language("en")
                     .finish()
@@ -1640,7 +1640,8 @@ mod tests {
         );
         assert_eq!(
             Ok(Tag::SessionData(
-                SessionData::builder("1234")
+                SessionData::builder()
+                    .with_data_id("1234")
                     .with_uri("test.bin")
                     .with_format("RAW")
                     .finish()

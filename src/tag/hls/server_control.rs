@@ -6,96 +6,122 @@ use crate::{
         value::{ParsedAttributeValue, SemiParsedTagValue},
     },
 };
-use std::{borrow::Cow, collections::HashMap};
+use std::{borrow::Cow, collections::HashMap, marker::PhantomData};
 
 /// The attribute list for the tag (`#EXT-X-SERVER-CONTROL:<attribute-list>`).
 ///
 /// See [`ServerControl`] for a link to the HLS documentation for this attribute.
-#[derive(Debug, PartialEq, Clone, Copy)]
-pub struct ServerControlAttributeList {
+#[derive(Debug, Clone, Copy)]
+struct ServerControlAttributeList {
     /// Corresponds to the `CAN-SKIP-UNTIL` attribute.
     ///
     /// See [`ServerControl`] for a link to the HLS documentation for this attribute.
-    pub can_skip_until: Option<f64>,
+    can_skip_until: Option<f64>,
     /// Corresponds to the `CAN-SKIP-DATERANGES` attribute.
     ///
     /// See [`ServerControl`] for a link to the HLS documentation for this attribute.
-    pub can_skip_dateranges: bool,
+    can_skip_dateranges: bool,
     /// Corresponds to the `HOLD-BACK` attribute.
     ///
     /// See [`ServerControl`] for a link to the HLS documentation for this attribute.
-    pub hold_back: Option<f64>,
+    hold_back: Option<f64>,
     /// Corresponds to the `PART-HOLD-BACK` attribute.
     ///
     /// See [`ServerControl`] for a link to the HLS documentation for this attribute.
-    pub part_hold_back: Option<f64>,
+    part_hold_back: Option<f64>,
     /// Corresponds to the `CAN-BLOCK-RELOAD` attribute.
     ///
     /// See [`ServerControl`] for a link to the HLS documentation for this attribute.
-    pub can_block_reload: bool,
-}
-
-/// A builder for convenience in constructing a [`ServerControl`].
-#[derive(Debug, PartialEq, Clone, Copy)]
-pub struct ServerControlBuilder {
-    can_skip_until: Option<f64>,
-    can_skip_dateranges: bool,
-    hold_back: Option<f64>,
-    part_hold_back: Option<f64>,
     can_block_reload: bool,
 }
-impl ServerControlBuilder {
+
+/// Placeholder struct for [`ServerControlBuilder`] indicating that an attribute needs to be set.
+#[derive(Debug, Clone, Copy)]
+pub struct ServerControlAttributeNeedsToBeSet;
+/// Placeholder struct for [`ServerControlBuilder`] indicating that an attribute has been set.
+#[derive(Debug, Clone, Copy)]
+pub struct ServerControlAttributeHasBeenSet;
+
+/// A builder for convenience in constructing a [`ServerControl`].
+#[derive(Debug, Clone, Copy)]
+pub struct ServerControlBuilder<AttributeStatus> {
+    attribute_list: ServerControlAttributeList,
+    attribute_status: PhantomData<AttributeStatus>,
+}
+impl ServerControlBuilder<ServerControlAttributeNeedsToBeSet> {
     /// Creates a new builder.
     pub fn new() -> Self {
         Self {
-            can_skip_until: Default::default(),
-            can_skip_dateranges: Default::default(),
-            hold_back: Default::default(),
-            part_hold_back: Default::default(),
-            can_block_reload: Default::default(),
+            attribute_list: ServerControlAttributeList {
+                can_skip_until: Default::default(),
+                can_skip_dateranges: Default::default(),
+                hold_back: Default::default(),
+                part_hold_back: Default::default(),
+                can_block_reload: Default::default(),
+            },
+            attribute_status: PhantomData,
         }
     }
-
+}
+impl ServerControlBuilder<ServerControlAttributeHasBeenSet> {
     /// Finish building and construct the `ServerControl`.
     pub fn finish<'a>(self) -> ServerControl<'a> {
-        ServerControl::new(ServerControlAttributeList {
-            can_skip_until: self.can_skip_until,
-            can_skip_dateranges: self.can_skip_dateranges,
-            hold_back: self.hold_back,
-            part_hold_back: self.part_hold_back,
-            can_block_reload: self.can_block_reload,
-        })
-    }
-
-    /// Add the provided `can_skip_until` to the attributes built into `ServerControl`
-    pub fn with_can_skip_until(mut self, can_skip_until: f64) -> Self {
-        self.can_skip_until = Some(can_skip_until);
-        self
-    }
-    /// Add the provided `can_skip_dateranges` to the attributes built into `ServerControl`
-    pub fn with_can_skip_dateranges(mut self) -> Self {
-        self.can_skip_dateranges = true;
-        self
-    }
-    /// Add the provided `hold_back` to the attributes built into `ServerControl`
-    pub fn with_hold_back(mut self, hold_back: f64) -> Self {
-        self.hold_back = Some(hold_back);
-        self
-    }
-    /// Add the provided `part_hold_back` to the attributes built into `ServerControl`
-    pub fn with_part_hold_back(mut self, part_hold_back: f64) -> Self {
-        self.part_hold_back = Some(part_hold_back);
-        self
-    }
-    /// Add the provided `can_block_reload` to the attributes built into `ServerControl`
-    pub fn with_can_block_reload(mut self) -> Self {
-        self.can_block_reload = true;
-        self
+        ServerControl::new(self.attribute_list)
     }
 }
-impl Default for ServerControlBuilder {
-    fn default() -> Self {
-        Self::new()
+impl<AttributeStatus> ServerControlBuilder<AttributeStatus> {
+    /// Add the provided `can_skip_until` to the attributes built into `ServerControl`
+    pub fn with_can_skip_until(
+        mut self,
+        can_skip_until: f64,
+    ) -> ServerControlBuilder<ServerControlAttributeHasBeenSet> {
+        self.attribute_list.can_skip_until = Some(can_skip_until);
+        ServerControlBuilder {
+            attribute_list: self.attribute_list,
+            attribute_status: PhantomData,
+        }
+    }
+    /// Add the provided `can_skip_dateranges` to the attributes built into `ServerControl`
+    pub fn with_can_skip_dateranges(
+        mut self,
+    ) -> ServerControlBuilder<ServerControlAttributeHasBeenSet> {
+        self.attribute_list.can_skip_dateranges = true;
+        ServerControlBuilder {
+            attribute_list: self.attribute_list,
+            attribute_status: PhantomData,
+        }
+    }
+    /// Add the provided `hold_back` to the attributes built into `ServerControl`
+    pub fn with_hold_back(
+        mut self,
+        hold_back: f64,
+    ) -> ServerControlBuilder<ServerControlAttributeHasBeenSet> {
+        self.attribute_list.hold_back = Some(hold_back);
+        ServerControlBuilder {
+            attribute_list: self.attribute_list,
+            attribute_status: PhantomData,
+        }
+    }
+    /// Add the provided `part_hold_back` to the attributes built into `ServerControl`
+    pub fn with_part_hold_back(
+        mut self,
+        part_hold_back: f64,
+    ) -> ServerControlBuilder<ServerControlAttributeHasBeenSet> {
+        self.attribute_list.part_hold_back = Some(part_hold_back);
+        ServerControlBuilder {
+            attribute_list: self.attribute_list,
+            attribute_status: PhantomData,
+        }
+    }
+    /// Add the provided `can_block_reload` to the attributes built into `ServerControl`
+    pub fn with_can_block_reload(
+        mut self,
+    ) -> ServerControlBuilder<ServerControlAttributeHasBeenSet> {
+        self.attribute_list.can_block_reload = true;
+        ServerControlBuilder {
+            attribute_list: self.attribute_list,
+            attribute_status: PhantomData,
+        }
     }
 }
 
@@ -148,7 +174,7 @@ impl<'a> TryFrom<ParsedTag<'a>> for ServerControl<'a> {
 
 impl<'a> ServerControl<'a> {
     /// Constructs a new `ServerControl` tag.
-    pub fn new(attribute_list: ServerControlAttributeList) -> Self {
+    fn new(attribute_list: ServerControlAttributeList) -> Self {
         let output_line = Cow::Owned(calculate_line(&attribute_list));
         let ServerControlAttributeList {
             can_skip_until,
@@ -179,7 +205,13 @@ impl<'a> ServerControl<'a> {
     ///     .with_can_skip_dateranges()
     ///     .finish();
     /// ```
-    pub fn builder() -> ServerControlBuilder {
+    /// Note that the `finish` method is only callable if at least one attribute has been set. The
+    /// following will fail to compile:
+    /// ```compile_fail
+    /// # use m3u8::tag::hls::ServerControl;
+    /// let server_control = ServerControl::builder().finish();
+    /// ```
+    pub fn builder() -> ServerControlBuilder<ServerControlAttributeNeedsToBeSet> {
         ServerControlBuilder::new()
     }
 

@@ -7,7 +7,7 @@ use crate::{
     },
     utils::AsStaticCow,
 };
-use std::{borrow::Cow, collections::HashMap, fmt::Display};
+use std::{borrow::Cow, collections::HashMap, fmt::Display, marker::PhantomData};
 
 /// Corresponds to the `#EXT-X-PRELOAD-HINT:TYPE` attribute.
 ///
@@ -58,64 +58,103 @@ const MAP: &str = "MAP";
 /// The attribute list for the tag (`#EXT-X-PRELOAD-HINT:<attribute-list>`).
 ///
 /// See [`PreloadHint`] for a link to the HLS documentation for this attribute.
-#[derive(Debug, PartialEq, Clone)]
-pub struct PreloadHintAttributeList<'a> {
+#[derive(Debug, Clone)]
+struct PreloadHintAttributeList<'a> {
     /// Corresponds to the `TYPE` attribute.
     ///
     /// See [`PreloadHint`] for a link to the HLS documentation for this attribute.
-    pub hint_type: Cow<'a, str>,
+    hint_type: Cow<'a, str>,
     /// Corresponds to the `URI` attribute.
     ///
     /// See [`PreloadHint`] for a link to the HLS documentation for this attribute.
-    pub uri: Cow<'a, str>,
+    uri: Cow<'a, str>,
     /// Corresponds to the `BYTERANGE-START` attribute.
     ///
     /// See [`PreloadHint`] for a link to the HLS documentation for this attribute.
-    pub byterange_start: Option<u64>,
+    byterange_start: Option<u64>,
     /// Corresponds to the `BYTERANGE-LENGTH` attribute.
     ///
     /// See [`PreloadHint`] for a link to the HLS documentation for this attribute.
-    pub byterange_length: Option<u64>,
-}
-
-/// A builder for convenience in constructing a [`PreloadHint`].
-#[derive(Debug, PartialEq, Clone)]
-pub struct PreloadHintBuilder<'a> {
-    hint_type: Cow<'a, str>,
-    uri: Cow<'a, str>,
-    byterange_start: Option<u64>,
     byterange_length: Option<u64>,
 }
-impl<'a> PreloadHintBuilder<'a> {
+
+/// Placeholder struct for [`PreloadHintBuilder`] indicating that `hint_type` needs to be set.
+#[derive(Debug, Clone, Copy)]
+pub struct PreloadHintTypeNeedsToBeSet;
+/// Placeholder struct for [`PreloadHintBuilder`] indicating that `uri` needs to be set.
+#[derive(Debug, Clone, Copy)]
+pub struct PreloadHintUriNeedsToBeSet;
+/// Placeholder struct for [`PreloadHintBuilder`] indicating that `hint_type` has been set.
+#[derive(Debug, Clone, Copy)]
+pub struct PreloadHintTypeHasBeenSet;
+/// Placeholder struct for [`PreloadHintBuilder`] indicating that `uri` has been set.
+#[derive(Debug, Clone, Copy)]
+pub struct PreloadHintUriHasBeenSet;
+
+/// A builder for convenience in constructing a [`PreloadHint`].
+#[derive(Debug, Clone)]
+pub struct PreloadHintBuilder<'a, TypeStatus, UriStatus> {
+    attribute_list: PreloadHintAttributeList<'a>,
+    type_status: PhantomData<TypeStatus>,
+    uri_status: PhantomData<UriStatus>,
+}
+impl<'a> PreloadHintBuilder<'a, PreloadHintTypeNeedsToBeSet, PreloadHintUriNeedsToBeSet> {
     /// Creates a new builder.
-    pub fn new(hint_type: impl Into<Cow<'a, str>>, uri: impl Into<Cow<'a, str>>) -> Self {
+    pub fn new() -> Self {
         Self {
-            hint_type: hint_type.into(),
-            uri: uri.into(),
-            byterange_start: Default::default(),
-            byterange_length: Default::default(),
+            attribute_list: PreloadHintAttributeList {
+                hint_type: Cow::Borrowed(""),
+                uri: Cow::Borrowed(""),
+                byterange_start: Default::default(),
+                byterange_length: Default::default(),
+            },
+            type_status: PhantomData,
+            uri_status: PhantomData,
+        }
+    }
+}
+impl<'a> PreloadHintBuilder<'a, PreloadHintTypeHasBeenSet, PreloadHintUriHasBeenSet> {
+    /// Finish building and construct the `PreloadHint`.
+    pub fn finish(self) -> PreloadHint<'a> {
+        PreloadHint::new(self.attribute_list)
+    }
+}
+impl<'a, TypeStatus, UriStatus> PreloadHintBuilder<'a, TypeStatus, UriStatus> {
+    /// Add the provided `hint_type` to the attributes built into `PreloadHint`.
+    pub fn with_hint_type(
+        mut self,
+        hint_type: impl Into<Cow<'a, str>>,
+    ) -> PreloadHintBuilder<'a, PreloadHintTypeHasBeenSet, UriStatus> {
+        self.attribute_list.hint_type = hint_type.into();
+        PreloadHintBuilder {
+            attribute_list: self.attribute_list,
+            type_status: PhantomData,
+            uri_status: PhantomData,
         }
     }
 
-    /// Finish building and construct the `PreloadHint`.
-    pub fn finish(self) -> PreloadHint<'a> {
-        PreloadHint::new(PreloadHintAttributeList {
-            hint_type: self.hint_type,
-            uri: self.uri,
-            byterange_start: self.byterange_start,
-            byterange_length: self.byterange_length,
-        })
+    /// Add the provided `uri` to the attributes built into `PreloadHint`.
+    pub fn with_uri(
+        mut self,
+        uri: impl Into<Cow<'a, str>>,
+    ) -> PreloadHintBuilder<'a, TypeStatus, PreloadHintUriHasBeenSet> {
+        self.attribute_list.uri = uri.into();
+        PreloadHintBuilder {
+            attribute_list: self.attribute_list,
+            type_status: PhantomData,
+            uri_status: PhantomData,
+        }
     }
 
     /// Add the provided `byterange_start` to the attributes built into `PreloadHint`.
     pub fn with_byterange_start(mut self, byterange_start: u64) -> Self {
-        self.byterange_start = Some(byterange_start);
+        self.attribute_list.byterange_start = Some(byterange_start);
         self
     }
 
     /// Add the provided `byterange_length` to the attributes built into `PreloadHint`.
     pub fn with_byterange_length(mut self, byterange_length: u64) -> Self {
-        self.byterange_length = Some(byterange_length);
+        self.attribute_list.byterange_length = Some(byterange_length);
         self
     }
 }
@@ -172,7 +211,7 @@ impl<'a> TryFrom<ParsedTag<'a>> for PreloadHint<'a> {
 
 impl<'a> PreloadHint<'a> {
     /// Constructs a new `PreloadHint` tag.
-    pub fn new(attribute_list: PreloadHintAttributeList<'a>) -> Self {
+    fn new(attribute_list: PreloadHintAttributeList<'a>) -> Self {
         let output_line = Cow::Owned(calculate_line(&attribute_list));
         let PreloadHintAttributeList {
             hint_type,
@@ -196,16 +235,30 @@ impl<'a> PreloadHint<'a> {
     /// For example, we could construct a `PreloadHint` as such:
     /// ```
     /// # use m3u8::tag::hls::{PreloadHint, PreloadHintType};
-    /// let preload_hint = PreloadHint::builder(PreloadHintType::Part, "part.100.2.mp4")
+    /// let preload_hint = PreloadHint::builder()
+    ///     .with_hint_type(PreloadHintType::Part)
+    ///     .with_uri("part.100.2.mp4")
     ///     .with_byterange_start(1024)
     ///     .with_byterange_length(1024)
     ///     .finish();
     /// ```
-    pub fn builder(
-        hint_type: impl Into<Cow<'a, str>>,
-        uri: impl Into<Cow<'a, str>>,
-    ) -> PreloadHintBuilder<'a> {
-        PreloadHintBuilder::new(hint_type, uri)
+    /// Note that the `finish` method is only callable if the builder has set `hint_type` AND `uri`.
+    /// Each of the following fail to compile:
+    /// ```compile_fail
+    /// # use m3u8::tag::hls::PreloadHint;
+    /// let preload_hint = PreloadHint::builder().finish();
+    /// ```
+    /// ```compile_fail
+    /// # use m3u8::tag::hls::PreloadHint;
+    /// let preload_hint = PreloadHint::builder().with_hint_type(PreloadHintType::Part).finish();
+    /// ```
+    /// ```compile_fail
+    /// # use m3u8::tag::hls::PreloadHint;
+    /// let preload_hint = PreloadHint::builder().with_uri("part.100.2.mp4").finish();
+    /// ```
+    pub fn builder()
+    -> PreloadHintBuilder<'a, PreloadHintTypeNeedsToBeSet, PreloadHintUriNeedsToBeSet> {
+        PreloadHintBuilder::new()
     }
 
     /// Corresponds to the `TYPE` attribute.
@@ -354,7 +407,9 @@ mod tests {
     fn as_str_with_no_options_should_be_valid() {
         assert_eq!(
             b"#EXT-X-PRELOAD-HINT:TYPE=PART,URI=\"part.2.mp4\"",
-            PreloadHint::builder(PreloadHintType::Part, "part.2.mp4")
+            PreloadHint::builder()
+                .with_hint_type(PreloadHintType::Part)
+                .with_uri("part.2.mp4")
                 .finish()
                 .into_inner()
                 .value()
@@ -365,7 +420,9 @@ mod tests {
     fn as_str_with_options_should_be_valid() {
         assert_eq!(
             b"#EXT-X-PRELOAD-HINT:TYPE=PART,URI=\"part.2.mp4\",BYTERANGE-START=512,BYTERANGE-LENGTH=1024",
-            PreloadHint::builder(PreloadHintType::Part, "part.2.mp4")
+            PreloadHint::builder()
+                .with_hint_type(PreloadHintType::Part)
+                .with_uri("part.2.mp4")
                 .with_byterange_start(512)
                 .with_byterange_length(1024)
                 .finish()
@@ -375,7 +432,9 @@ mod tests {
     }
 
     mutation_tests!(
-        PreloadHint::builder(PreloadHintType::Map, "init.mp4")
+        PreloadHint::builder()
+            .with_hint_type(PreloadHintType::Map)
+            .with_uri("init.mp4")
             .with_byterange_start(512)
             .with_byterange_length(1024)
             .finish(),
