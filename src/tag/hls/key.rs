@@ -7,7 +7,7 @@ use crate::{
     },
     utils::AsStaticCow,
 };
-use std::{borrow::Cow, collections::HashMap, fmt::Display};
+use std::{borrow::Cow, collections::HashMap, fmt::Display, marker::PhantomData};
 
 /// Corresponds to the `#EXT-X-KEY:METHOD` attribute.
 ///
@@ -78,83 +78,100 @@ const SAMPLE_AES_CTR: &str = "SAMPLE-AES-CTR";
 /// The attribute list for the tag (`#EXT-X-KEY:<attribute-list>`).
 ///
 /// See [`Key`] for a link to the HLS documentation for this attribute.
-#[derive(Debug, PartialEq, Clone)]
-pub struct KeyAttributeList<'a> {
+#[derive(Debug, Clone)]
+struct KeyAttributeList<'a> {
     /// Corresponds to the `METHOD` attribute.
     ///
     /// See [`Key`] for a link to the HLS documentation for this attribute.
-    pub method: Cow<'a, str>,
+    method: Cow<'a, str>,
     /// Corresponds to the `URI` attribute.
     ///
     /// See [`Key`] for a link to the HLS documentation for this attribute.
-    pub uri: Option<Cow<'a, str>>,
+    uri: Option<Cow<'a, str>>,
     /// Corresponds to the `IV` attribute.
     ///
     /// See [`Key`] for a link to the HLS documentation for this attribute.
-    pub iv: Option<Cow<'a, str>>,
+    iv: Option<Cow<'a, str>>,
     /// Corresponds to the `KEYFORMAT` attribute.
     ///
     /// See [`Key`] for a link to the HLS documentation for this attribute.
-    pub keyformat: Option<Cow<'a, str>>,
+    keyformat: Option<Cow<'a, str>>,
     /// Corresponds to the `KEYFORMATVERSIONS` attribute.
     ///
     /// See [`Key`] for a link to the HLS documentation for this attribute.
-    pub keyformatversions: Option<Cow<'a, str>>,
-}
-
-/// A builder for convenience in constructing a [`Key`].
-#[derive(Debug, PartialEq, Clone)]
-pub struct KeyBuilder<'a> {
-    method: Cow<'a, str>,
-    uri: Option<Cow<'a, str>>,
-    iv: Option<Cow<'a, str>>,
-    keyformat: Option<Cow<'a, str>>,
     keyformatversions: Option<Cow<'a, str>>,
 }
-impl<'a> KeyBuilder<'a> {
+
+/// Placeholder struct for [`KeyBuilder`] indicating that `method` needs to be set.
+#[allow(missing_copy_implementations)] // should not be used externally
+#[derive(Debug)]
+pub struct KeyMethodNeedsToBeSet;
+/// Placeholder struct for [`KeyBuilder`] indicating that `method` has been set.
+#[allow(missing_copy_implementations)] // should not be used externally
+#[derive(Debug)]
+pub struct KeyMethodHasBeenSet;
+
+/// A builder for convenience in constructing a [`Key`].
+#[derive(Debug, Clone)]
+pub struct KeyBuilder<'a, MethodStatus> {
+    attribute_list: KeyAttributeList<'a>,
+    method_status: PhantomData<MethodStatus>,
+}
+impl<'a> KeyBuilder<'a, KeyMethodNeedsToBeSet> {
     /// Create a new builder.
-    pub fn new(method: impl Into<Cow<'a, str>>) -> Self {
+    pub fn new() -> Self {
         Self {
-            method: method.into(),
-            uri: Default::default(),
-            iv: Default::default(),
-            keyformat: Default::default(),
-            keyformatversions: Default::default(),
+            attribute_list: KeyAttributeList {
+                method: Cow::Borrowed(""),
+                uri: Default::default(),
+                iv: Default::default(),
+                keyformat: Default::default(),
+                keyformatversions: Default::default(),
+            },
+            method_status: PhantomData,
         }
     }
-
+}
+impl<'a> KeyBuilder<'a, KeyMethodHasBeenSet> {
     /// Finish building and construct the `Key`.
     pub fn finish(self) -> Key<'a> {
-        Key::new(KeyAttributeList {
-            method: self.method,
-            uri: self.uri,
-            iv: self.iv,
-            keyformat: self.keyformat,
-            keyformatversions: self.keyformatversions,
-        })
+        Key::new(self.attribute_list)
+    }
+}
+impl<'a, MethodStatus> KeyBuilder<'a, MethodStatus> {
+    /// Add the proivded `method` to the attributes built into `Key`.
+    pub fn with_method(
+        mut self,
+        method: impl Into<Cow<'a, str>>,
+    ) -> KeyBuilder<'a, KeyMethodHasBeenSet> {
+        self.attribute_list.method = method.into();
+        KeyBuilder {
+            attribute_list: self.attribute_list,
+            method_status: PhantomData,
+        }
     }
 
     /// Add the proivded `uri` to the attributes built into `Key`.
     pub fn with_uri(mut self, uri: impl Into<Cow<'a, str>>) -> Self {
-        self.uri = Some(uri.into());
+        self.attribute_list.uri = Some(uri.into());
         self
     }
 
     /// Add the proivded `iv` to the attributes built into `Key`.
     pub fn with_iv(mut self, iv: impl Into<Cow<'a, str>>) -> Self {
-        self.iv = Some(iv.into());
+        self.attribute_list.iv = Some(iv.into());
         self
     }
 
     /// Add the proivded `keyformat` to the attributes built into `Key`.
     pub fn with_keyformat(mut self, keyformat: impl Into<Cow<'a, str>>) -> Self {
-        self.keyformat = Some(keyformat.into());
+        self.attribute_list.keyformat = Some(keyformat.into());
         self
     }
 
     /// Add the proivded `keyformatversions` to the attributes built into `Key`.
     pub fn with_keyformatversions(mut self, keyformatversions: impl Into<Cow<'a, str>>) -> Self {
-        self.keyformatversions = Some(keyformatversions.into());
+        self.attribute_list.keyformatversions = Some(keyformatversions.into());
         self
     }
 }
@@ -211,7 +228,7 @@ impl<'a> TryFrom<ParsedTag<'a>> for Key<'a> {
 
 impl<'a> Key<'a> {
     /// Constructs a new `Key` tag.
-    pub fn new(attribute_list: KeyAttributeList<'a>) -> Self {
+    fn new(attribute_list: KeyAttributeList<'a>) -> Self {
         let output_line = Cow::Owned(calculate_line(&attribute_list));
         let KeyAttributeList {
             method,
@@ -237,14 +254,21 @@ impl<'a> Key<'a> {
     /// For example, we could construct a `Key` as such:
     /// ```
     /// # use m3u8::tag::hls::{Key, Method};
-    /// let key = Key::builder(Method::SampleAes)
+    /// let key = Key::builder()
+    ///     .with_method(Method::SampleAes)
     ///     .with_uri("skd://1234")
     ///     .with_keyformat("com.apple.streamingkeydelivery")
     ///     .with_keyformatversions("1")
     ///     .finish();
     /// ```
-    pub fn builder(method: impl Into<Cow<'a, str>>) -> KeyBuilder<'a> {
-        KeyBuilder::new(method)
+    /// Note that the `finish` method is only callable if the builder has set `method`. The
+    /// following fail to compile:
+    /// ```compile_fail
+    /// # use m3u8::tag::hls::Key;
+    /// let key = Key::builder().finish();
+    /// ```
+    pub fn builder() -> KeyBuilder<'a, KeyMethodNeedsToBeSet> {
+        KeyBuilder::new()
     }
 
     /// Corresponds to the `METHOD` attribute.
@@ -457,7 +481,8 @@ mod tests {
                 "KEYFORMAT=\"com.apple.streamingkeydelivery\",KEYFORMATVERSIONS=\"1\"",
             )
             .as_bytes(),
-            Key::builder(EnumeratedString::Known(Method::SampleAes))
+            Key::builder()
+                .with_method(Method::SampleAes)
                 .with_uri("skd://some-key-id")
                 .with_iv("0xABCD")
                 .with_keyformat("com.apple.streamingkeydelivery")
@@ -472,7 +497,8 @@ mod tests {
     fn as_str_with_options_should_be_valid() {
         assert_eq!(
             b"#EXT-X-KEY:METHOD=NONE",
-            Key::builder(EnumeratedString::Known(Method::None))
+            Key::builder()
+                .with_method(Method::None)
                 .finish()
                 .into_inner()
                 .value()
@@ -480,7 +506,8 @@ mod tests {
     }
 
     mutation_tests!(
-        Key::builder(EnumeratedString::Known(Method::SampleAes))
+        Key::builder()
+            .with_method(Method::SampleAes)
             .with_uri("skd://some-key-id")
             .with_iv("0xABCD")
             .with_keyformat("com.apple.streamingkeydelivery")

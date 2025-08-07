@@ -162,7 +162,9 @@ use std::marker::PhantomData;
 ///         Ok(Some(HlsLine::KnownTag(known::Tag::Hls(hls::Tag::Daterange(tag))))) => {
 ///             if let Some(advert_id) = tag.scte35_out().and_then(advert_id_from_scte35_out) {
 ///                 let id = format!("ADVERT:{}", tag.id());
-///                 let builder = Daterange::builder(id, tag.start_date())
+///                 let builder = Daterange::builder()
+///                     .with_id(id)
+///                     .with_start_date(tag.start_date())
 ///                     .with_class("com.apple.hls.interstitial")
 ///                     .with_cue(Cue::Once)
 ///                     .with_extension_attribute(
@@ -293,7 +295,9 @@ use std::marker::PhantomData;
 ///                 let tag_ref = tag.as_ref();
 ///                 let id = format!("ADVERT:{}", tag_ref.id.unwrap_or(generate_uuid()));
 ///                 let start_date = calculate_start_date_based_on_inf_durations();
-///                 let builder = Daterange::builder(id, start_date)
+///                 let builder = Daterange::builder()
+///                     .with_id(id)
+///                     .with_start_date(start_date)
 ///                     .with_class("com.apple.hls.interstitial")
 ///                     .with_cue(Cue::Once)
 ///                     .with_extension_attribute(

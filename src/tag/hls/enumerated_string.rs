@@ -343,7 +343,9 @@ where
     /// possible. For example:
     /// ```
     /// # use m3u8::{date_time, tag::hls::{Daterange, Cue, EnumeratedStringList}};
-    /// let mut daterange = Daterange::builder("id", date_time!(2025-08-03 T 00:49:12.000 -05:00))
+    /// let mut daterange = Daterange::builder()
+    ///     .with_id("id")
+    ///     .with_start_date(date_time!(2025-08-03 T 00:49:12.000 -05:00))
     ///     .with_cue(EnumeratedStringList::from([Cue::Pre]))
     ///     .finish();
     /// let mut cue = daterange.cue().expect("should be defined");

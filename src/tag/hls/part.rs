@@ -6,80 +6,115 @@ use crate::{
         value::{ParsedAttributeValue, SemiParsedTagValue},
     },
 };
-use std::{borrow::Cow, collections::HashMap, fmt::Display};
+use std::{borrow::Cow, collections::HashMap, fmt::Display, marker::PhantomData};
 
 /// The attribute list for the tag (`#EXT-X-PART:<attribute-list>`).
 ///
 /// See [`Part`] for a link to the HLS documentation for this attribute.
-#[derive(Debug, PartialEq, Clone)]
-pub struct PartAttributeList<'a> {
+#[derive(Debug, Clone)]
+struct PartAttributeList<'a> {
     /// Corresponds to the `URI` attribute.
     ///
     /// See [`Part`] for a link to the HLS documentation for this attribute.
-    pub uri: Cow<'a, str>,
+    uri: Cow<'a, str>,
     /// Corresponds to the `DURATION` attribute.
     ///
     /// See [`Part`] for a link to the HLS documentation for this attribute.
-    pub duration: f64,
+    duration: f64,
     /// Corresponds to the `INDEPENDENT` attribute.
     ///
     /// See [`Part`] for a link to the HLS documentation for this attribute.
-    pub independent: bool,
+    independent: bool,
     /// Corresponds to the `BYTERANGE` attribute.
     ///
     /// See [`Part`] for a link to the HLS documentation for this attribute.
-    pub byterange: Option<PartByterange>,
+    byterange: Option<PartByterange>,
     /// Corresponds to the `GAP` attribute.
     ///
     /// See [`Part`] for a link to the HLS documentation for this attribute.
-    pub gap: bool,
-}
-
-/// A builder for convenience in constructing a [`Part`].
-#[derive(Debug, PartialEq, Clone)]
-pub struct PartBuilder<'a> {
-    uri: Cow<'a, str>,
-    duration: f64,
-    independent: bool,
-    byterange: Option<PartByterange>,
     gap: bool,
 }
-impl<'a> PartBuilder<'a> {
+
+/// Placeholder struct for [`PartBuilder`] indicating that `uri` needs to be set.
+#[derive(Debug, Clone, Copy)]
+pub struct PartUriNeedsToBeSet;
+/// Placeholder struct for [`PartBuilder`] indicating that `duration` needs to be set.
+#[derive(Debug, Clone, Copy)]
+pub struct PartDurationNeedsToBeSet;
+/// Placeholder struct for [`PartBuilder`] indicating that `uri` has been set.
+#[derive(Debug, Clone, Copy)]
+pub struct PartUriHasBeenSet;
+/// Placeholder struct for [`PartBuilder`] indicating that `duration` has been set.
+#[derive(Debug, Clone, Copy)]
+pub struct PartDurationHasBeenSet;
+
+/// A builder for convenience in constructing a [`Part`].
+#[derive(Debug, Clone)]
+pub struct PartBuilder<'a, UriStatus, DurationStatus> {
+    attribute_list: PartAttributeList<'a>,
+    uri_status: PhantomData<UriStatus>,
+    duration_status: PhantomData<DurationStatus>,
+}
+impl<'a> PartBuilder<'a, PartUriNeedsToBeSet, PartDurationNeedsToBeSet> {
     /// Creates a new builder.
-    pub fn new(uri: impl Into<Cow<'a, str>>, duration: f64) -> Self {
+    pub fn new() -> Self {
         Self {
-            uri: uri.into(),
-            duration,
-            independent: Default::default(),
-            byterange: Default::default(),
-            gap: Default::default(),
+            attribute_list: PartAttributeList {
+                uri: Cow::Borrowed(""),
+                duration: Default::default(),
+                independent: Default::default(),
+                byterange: Default::default(),
+                gap: Default::default(),
+            },
+            uri_status: PhantomData,
+            duration_status: PhantomData,
         }
     }
-
+}
+impl<'a> PartBuilder<'a, PartUriHasBeenSet, PartDurationHasBeenSet> {
     /// Finish building and construct the `Part`.
     pub fn finish(self) -> Part<'a> {
-        Part::new(PartAttributeList {
-            uri: self.uri,
-            duration: self.duration,
-            independent: self.independent,
-            byterange: self.byterange,
-            gap: self.gap,
-        })
+        Part::new(self.attribute_list)
     }
-
+}
+impl<'a, UriStatus, DurationStatus> PartBuilder<'a, UriStatus, DurationStatus> {
+    /// Add the provided `uri` to the attributes built into `Part`.
+    pub fn with_uri(
+        mut self,
+        uri: impl Into<Cow<'a, str>>,
+    ) -> PartBuilder<'a, PartUriHasBeenSet, DurationStatus> {
+        self.attribute_list.uri = uri.into();
+        PartBuilder {
+            attribute_list: self.attribute_list,
+            uri_status: PhantomData,
+            duration_status: PhantomData,
+        }
+    }
+    /// Add the provided `duration` to the attributes built into `Part`.
+    pub fn with_duration(
+        mut self,
+        duration: f64,
+    ) -> PartBuilder<'a, UriStatus, PartDurationHasBeenSet> {
+        self.attribute_list.duration = duration;
+        PartBuilder {
+            attribute_list: self.attribute_list,
+            uri_status: PhantomData,
+            duration_status: PhantomData,
+        }
+    }
     /// Add the provided `independent` to the attributes built into `Part`.
     pub fn with_independent(mut self) -> Self {
-        self.independent = true;
+        self.attribute_list.independent = true;
         self
     }
     /// Add the provided `byterange` to the attributes built into `Part`.
     pub fn with_byterange(mut self, byterange: PartByterange) -> Self {
-        self.byterange = Some(byterange);
+        self.attribute_list.byterange = Some(byterange);
         self
     }
     /// Add the provided `gap` to the attributes built into `Part`.
     pub fn with_gap(mut self) -> Self {
-        self.gap = true;
+        self.attribute_list.gap = true;
         self
     }
 }
@@ -163,7 +198,7 @@ impl<'a> TryFrom<ParsedTag<'a>> for Part<'a> {
 
 impl<'a> Part<'a> {
     /// Constructs a new `Part` tag.
-    pub fn new(attribute_list: PartAttributeList<'a>) -> Self {
+    fn new(attribute_list: PartAttributeList<'a>) -> Self {
         let output_line = Cow::Owned(calculate_line(&attribute_list));
         let PartAttributeList {
             uri,
@@ -189,13 +224,29 @@ impl<'a> Part<'a> {
     /// For example, we could construct a `Part` as such:
     /// ```
     /// # use m3u8::tag::hls::{Part, PartByterange};
-    /// let part = Part::builder("part.100.0.mp4", 0.5)
+    /// let part = Part::builder()
+    ///     .with_uri("part.100.0.mp4")
+    ///     .with_duration(0.5)
     ///     .with_independent()
     ///     .with_byterange(PartByterange { length: 1024, offset: None })
     ///     .finish();
     /// ```
-    pub fn builder(uri: impl Into<Cow<'a, str>>, duration: f64) -> PartBuilder<'a> {
-        PartBuilder::new(uri, duration)
+    /// Note that the `finish` method is only callable if the builder has set `uri` AND `duration`.
+    /// Each of the following fail to compile:
+    /// ```compile_fail
+    /// # use m3u8::tag::hls::Part;
+    /// let part = Part::builder().finish();
+    /// ```
+    /// ```compile_fail
+    /// # use m3u8::tag::hls::Part;
+    /// let part = Part::builder().with_uri("uri").finish();
+    /// ```
+    /// ```compile_fail
+    /// # use m3u8::tag::hls::Part;
+    /// let part = Part::builder().with_duration(0.5).finish();
+    /// ```
+    pub fn builder() -> PartBuilder<'a, PartUriNeedsToBeSet, PartDurationNeedsToBeSet> {
+        PartBuilder::new()
     }
 
     /// Corresponds to the `URI` attribute.
@@ -366,7 +417,9 @@ mod tests {
     fn as_str_with_no_options_should_be_valid() {
         assert_eq!(
             b"#EXT-X-PART:URI=\"part.1.0.mp4\",DURATION=0.5",
-            Part::builder("part.1.0.mp4", 0.5)
+            Part::builder()
+                .with_uri("part.1.0.mp4")
+                .with_duration(0.5)
                 .finish()
                 .into_inner()
                 .value()
@@ -377,7 +430,9 @@ mod tests {
     fn as_str_with_options_no_byterange_offset_should_be_valid() {
         assert_eq!(
             b"#EXT-X-PART:URI=\"part.1.0.mp4\",DURATION=0.5,INDEPENDENT=YES,BYTERANGE=\"1024\",GAP=YES",
-            Part::builder("part.1.0.mp4", 0.5)
+            Part::builder()
+                .with_uri("part.1.0.mp4")
+                .with_duration(0.5)
                 .with_independent()
                 .with_byterange(PartByterange {
                     length: 1024,
@@ -394,7 +449,9 @@ mod tests {
     fn as_str_with_options_with_byterange_offset_should_be_valid() {
         assert_eq!(
             b"#EXT-X-PART:URI=\"part.1.0.mp4\",DURATION=0.5,INDEPENDENT=YES,BYTERANGE=\"1024@512\",GAP=YES",
-            Part::builder("part.1.0.mp4", 0.5)
+            Part::builder()
+                .with_uri("part.1.0.mp4")
+                .with_duration(0.5)
                 .with_independent()
                 .with_byterange(PartByterange { length: 1024, offset: Some(512) })
                 .with_gap()
@@ -405,7 +462,9 @@ mod tests {
     }
 
     mutation_tests!(
-        Part::builder("part.1.0.mp4", 0.5)
+        Part::builder()
+            .with_uri("part.1.0.mp4")
+            .with_duration(0.5)
             .with_byterange(PartByterange { length: 1024, offset: Some(512) })
             .finish(),
         (uri, "example", @Attr="URI=\"example\""),

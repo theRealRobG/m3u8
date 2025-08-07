@@ -886,7 +886,8 @@ mod tests {
     #[test]
     fn key() {
         assert_eq!(
-            Ok(Tag::Key(Key::builder(key::Method::SampleAes)
+            Ok(Tag::Key(Key::builder()
+                .with_method(key::Method::SampleAes)
                 .with_uri("skd://some-key-id")
                 .with_iv("0xABCD")
                 .with_keyformat("com.apple.streamingkeydelivery")
@@ -912,7 +913,9 @@ mod tests {
             })
         );
         assert_eq!(
-            Ok(Tag::Key(Key::builder(key::Method::None).finish())),
+            Ok(Tag::Key(
+                Key::builder().with_method(key::Method::None).finish()
+            )),
             Tag::try_from(ParsedTag {
                 name: "-X-KEY",
                 value: SemiParsedTagValue::AttributeList(HashMap::from([(
@@ -928,7 +931,8 @@ mod tests {
     fn map() {
         assert_eq!(
             Ok(Tag::Map(
-                Map::builder("init.mp4")
+                Map::builder()
+                    .with_uri("init.mp4")
                     .with_byterange(MapByterange {
                         length: 1024,
                         offset: 0
@@ -945,7 +949,7 @@ mod tests {
             })
         );
         assert_eq!(
-            Ok(Tag::Map(Map::builder("init.mp4").finish())),
+            Ok(Tag::Map(Map::builder().with_uri("init.mp4").finish())),
             Tag::try_from(ParsedTag {
                 name: "-X-MAP",
                 value: SemiParsedTagValue::AttributeList(HashMap::from([(
@@ -1001,7 +1005,9 @@ mod tests {
     fn part() {
         assert_eq!(
             Ok(Tag::Part(
-                Part::builder("part.1.mp4", 0.5)
+                Part::builder()
+                    .with_uri("part.1.mp4")
+                    .with_duration(0.5)
                     .with_independent()
                     .with_byterange(PartByterange { length: 1024, offset: Some(512) })
                     .with_gap()
@@ -1024,7 +1030,9 @@ mod tests {
         );
         assert_eq!(
             Ok(Tag::Part(
-                Part::builder("part.1.mp4", 0.5)
+                Part::builder()
+                    .with_uri("part.1.mp4")
+                    .with_duration(0.5)
                     .with_byterange(PartByterange {
                         length: 1024,
                         offset: None
@@ -1045,7 +1053,12 @@ mod tests {
             })
         );
         assert_eq!(
-            Ok(Tag::Part(Part::builder("part.1.mp4", 0.5).finish())),
+            Ok(Tag::Part(
+                Part::builder()
+                    .with_uri("part.1.mp4")
+                    .with_duration(0.5)
+                    .finish()
+            )),
             Tag::try_from(ParsedTag {
                 name: "-X-PART",
                 value: SemiParsedTagValue::AttributeList(HashMap::from([
@@ -1064,7 +1077,9 @@ mod tests {
     fn daterange() {
         assert_eq!(
             Ok(Tag::Daterange(
-                Daterange::builder("test", date_time!(2025-06-05 T 20:38:42.149 -05:00))
+                Daterange::builder()
+                    .with_id("test")
+                    .with_start_date(date_time!(2025-06-05 T 20:38:42.149 -05:00))
                     .with_class("com.m3u8.test")
                     .with_cue(EnumeratedStringList::from([daterange::Cue::Once]))
                     .with_end_date(date_time!(2025-06-05 T 20:40:42.149 -05:00))
@@ -1128,7 +1143,10 @@ mod tests {
         );
         assert_eq!(
             Ok(Tag::Daterange(
-                Daterange::builder("test", date_time!(2025-06-05 T 20:38:42.149 -05:00)).finish()
+                Daterange::builder()
+                    .with_id("test")
+                    .with_start_date(date_time!(2025-06-05 T 20:38:42.149 -05:00))
+                    .finish()
             )),
             Tag::try_from(ParsedTag {
                 name: "-X-DATERANGE",
@@ -1258,7 +1276,10 @@ mod tests {
     fn media() {
         assert_eq!(
             Ok(Tag::Media(
-                Media::builder(media::MediaType::Audio, "English", "stereo")
+                Media::builder()
+                    .with_media_type(media::MediaType::Audio)
+                    .with_name("English")
+                    .with_group_id("stereo")
                     .with_uri("audio/en/stereo.m3u8")
                     .with_language("en")
                     .with_assoc_language("en")
@@ -1321,7 +1342,10 @@ mod tests {
         );
         assert_eq!(
             Ok(Tag::Media(
-                Media::builder(media::MediaType::ClosedCaptions, "English", "cc")
+                Media::builder()
+                    .with_media_type(media::MediaType::ClosedCaptions)
+                    .with_name("English")
+                    .with_group_id("cc")
                     .with_instream_id("CC1")
                     .finish()
             )),
@@ -1480,7 +1504,9 @@ mod tests {
     fn i_frame_stream_inf() {
         assert_eq!(
             Ok(Tag::IFrameStreamInf(
-                IFrameStreamInf::builder("iframe.high.m3u8", 10000000)
+                IFrameStreamInf::builder()
+                    .with_uri("iframe.high.m3u8")
+                    .with_bandwidth(10000000)
                     .with_average_bandwidth(9000000)
                     .with_score(2.0)
                     .with_codecs("hvc1.2.4.L153.b0,ec-3")
@@ -1568,7 +1594,10 @@ mod tests {
         );
         assert_eq!(
             Ok(Tag::IFrameStreamInf(
-                IFrameStreamInf::builder("iframe.high.m3u8", 10000000).finish()
+                IFrameStreamInf::builder()
+                    .with_uri("iframe.high.m3u8")
+                    .with_bandwidth(10000000)
+                    .finish()
             )),
             Tag::try_from(ParsedTag {
                 name: "-X-I-FRAME-STREAM-INF",
@@ -1677,7 +1706,8 @@ mod tests {
     fn content_steering() {
         assert_eq!(
             Ok(Tag::ContentSteering(
-                ContentSteering::builder("content-steering.json")
+                ContentSteering::builder()
+                    .with_server_uri("content-steering.json")
                     .with_pathway_id("1234")
                     .finish()
             )),
@@ -1695,7 +1725,9 @@ mod tests {
         );
         assert_eq!(
             Ok(Tag::ContentSteering(
-                ContentSteering::builder("content-steering.json").finish()
+                ContentSteering::builder()
+                    .with_server_uri("content-steering.json")
+                    .finish()
             )),
             Tag::try_from(ParsedTag {
                 name: "-X-CONTENT-STEERING",

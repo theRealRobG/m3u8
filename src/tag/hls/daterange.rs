@@ -12,6 +12,7 @@ use std::{
     borrow::Cow,
     collections::{HashMap, HashSet},
     fmt::Display,
+    marker::PhantomData,
 };
 
 /// Corresponds to the `#EXT-X-DATERANGE:CUE` attribute.
@@ -71,138 +72,165 @@ const ONCE: &str = "ONCE";
 /// The attribute list for the tag (`#EXT-X-DATERANGE:<attribute-list>`).
 ///
 /// See [`Daterange`] for a link to the HLS documentation for this attribute.
-#[derive(Debug, PartialEq, Clone)]
-pub struct DaterangeAttributeList<'a> {
+#[derive(Debug, Clone)]
+struct DaterangeAttributeList<'a> {
     /// Corresponds to the `ID` attribute.
     ///
     /// See [`Daterange`] for a link to the HLS documentation for this attribute.
-    pub id: Cow<'a, str>,
+    id: Cow<'a, str>,
     /// Corresponds to the `START-DATE` attribute.
     ///
     /// See [`Daterange`] for a link to the HLS documentation for this attribute.
-    pub start_date: DateTime,
+    start_date: DateTime,
     /// Corresponds to the `CLASS` attribute.
     ///
     /// See [`Daterange`] for a link to the HLS documentation for this attribute.
-    pub class: Option<Cow<'a, str>>,
+    class: Option<Cow<'a, str>>,
     /// Corresponds to the `CUE` attribute.
     ///
     /// See [`Daterange`] for a link to the HLS documentation for this attribute.
-    pub cue: Option<Cow<'a, str>>,
+    cue: Option<Cow<'a, str>>,
     /// Corresponds to the `END-DATE` attribute.
     ///
     /// See [`Daterange`] for a link to the HLS documentation for this attribute.
-    pub end_date: Option<DateTime>,
+    end_date: Option<DateTime>,
     /// Corresponds to the `DURATION` attribute.
     ///
     /// See [`Daterange`] for a link to the HLS documentation for this attribute.
-    pub duration: Option<f64>,
+    duration: Option<f64>,
     /// Corresponds to the `PLANNED-DURATION` attribute.
     ///
     /// See [`Daterange`] for a link to the HLS documentation for this attribute.
-    pub planned_duration: Option<f64>,
+    planned_duration: Option<f64>,
     /// Corresponds to `X-<extension-attribute>` attributes.
     ///
     /// See [`Daterange`] for a link to the HLS documentation for this attribute.
-    pub extension_attributes: HashMap<Cow<'a, str>, ExtensionAttributeValue<'a>>,
+    extension_attributes: HashMap<Cow<'a, str>, ExtensionAttributeValue<'a>>,
     /// Corresponds to the `END-ON-NEXT` attribute.
     ///
     /// See [`Daterange`] for a link to the HLS documentation for this attribute.
-    pub end_on_next: bool,
+    end_on_next: bool,
     /// Corresponds to the `SCTE35-CMD` attribute.
     ///
     /// See [`Daterange`] for a link to the HLS documentation for this attribute.
-    pub scte35_cmd: Option<Cow<'a, str>>,
+    scte35_cmd: Option<Cow<'a, str>>,
     /// Corresponds to the `SCTE35-OUT` attribute.
     ///
     /// See [`Daterange`] for a link to the HLS documentation for this attribute.
-    pub scte35_out: Option<Cow<'a, str>>,
+    scte35_out: Option<Cow<'a, str>>,
     /// Corresponds to the `SCTE35-IN` attribute.
     ///
     /// See [`Daterange`] for a link to the HLS documentation for this attribute.
-    pub scte35_in: Option<Cow<'a, str>>,
-}
-
-/// A builder for convenience in constructing a [`Daterange`].
-#[derive(Debug, PartialEq, Clone)]
-pub struct DaterangeBuilder<'a> {
-    id: Cow<'a, str>,
-    start_date: DateTime,
-    class: Option<Cow<'a, str>>,
-    cue: Option<Cow<'a, str>>,
-    end_date: Option<DateTime>,
-    duration: Option<f64>,
-    planned_duration: Option<f64>,
-    extension_attributes: HashMap<Cow<'a, str>, ExtensionAttributeValue<'a>>,
-    end_on_next: bool,
-    scte35_cmd: Option<Cow<'a, str>>,
-    scte35_out: Option<Cow<'a, str>>,
     scte35_in: Option<Cow<'a, str>>,
 }
-impl<'a> DaterangeBuilder<'a> {
+
+/// Placeholder struct for [`DaterangeBuilder`] indicating that `id` needs to be set.
+#[derive(Debug, Clone, Copy)]
+pub struct DaterangeIdNeedsToBeSet;
+/// Placeholder struct for [`DaterangeBuilder`] indicating that `start_date` needs to be set.
+#[derive(Debug, Clone, Copy)]
+pub struct DaterangeStartDateNeedsToBeSet;
+/// Placeholder struct for [`DaterangeBuilder`] indicating that `id` has been set.
+#[derive(Debug, Clone, Copy)]
+pub struct DaterangeIdHasBeenSet;
+/// Placeholder struct for [`DaterangeBuilder`] indicating that `start_date` has been set.
+#[derive(Debug, Clone, Copy)]
+pub struct DaterangeStartDateHasBeenSet;
+
+/// A builder for convenience in constructing a [`Daterange`].
+///
+/// Builder pattern inspired by [Sguaba]
+///
+/// [Sguaba]: https://github.com/helsing-ai/sguaba/blob/8dadfe066197551b0601e01676f8d13ef1168785/src/directions.rs#L271-L291
+#[derive(Debug, Clone)]
+pub struct DaterangeBuilder<'a, IdStatus, StartDateStatus> {
+    attribute_list: DaterangeAttributeList<'a>,
+    id_status: PhantomData<IdStatus>,
+    start_date_status: PhantomData<StartDateStatus>,
+}
+impl<'a> DaterangeBuilder<'a, DaterangeIdNeedsToBeSet, DaterangeStartDateNeedsToBeSet> {
     /// Create a new builder.
-    pub fn new(id: impl Into<Cow<'a, str>>, start_date: DateTime) -> Self {
+    pub fn new() -> Self {
         Self {
-            id: id.into(),
-            start_date,
-            class: Default::default(),
-            cue: Default::default(),
-            end_date: Default::default(),
-            duration: Default::default(),
-            planned_duration: Default::default(),
-            extension_attributes: Default::default(),
-            end_on_next: Default::default(),
-            scte35_cmd: Default::default(),
-            scte35_out: Default::default(),
-            scte35_in: Default::default(),
+            attribute_list: DaterangeAttributeList {
+                id: Cow::Borrowed(""),
+                start_date: Default::default(),
+                class: Default::default(),
+                cue: Default::default(),
+                end_date: Default::default(),
+                duration: Default::default(),
+                planned_duration: Default::default(),
+                extension_attributes: Default::default(),
+                end_on_next: Default::default(),
+                scte35_cmd: Default::default(),
+                scte35_out: Default::default(),
+                scte35_in: Default::default(),
+            },
+            id_status: PhantomData,
+            start_date_status: PhantomData,
+        }
+    }
+}
+impl<'a> DaterangeBuilder<'a, DaterangeIdHasBeenSet, DaterangeStartDateHasBeenSet> {
+    /// Finish building and construct the `Daterange`.
+    pub fn finish(self) -> Daterange<'a> {
+        Daterange::new(self.attribute_list)
+    }
+}
+impl<'a, IdStatus, StartDateStatus> DaterangeBuilder<'a, IdStatus, StartDateStatus> {
+    /// Add the provided `id` to the attributes built into `Daterange`.
+    pub fn with_id(
+        mut self,
+        id: impl Into<Cow<'a, str>>,
+    ) -> DaterangeBuilder<'a, DaterangeIdHasBeenSet, StartDateStatus> {
+        self.attribute_list.id = id.into();
+        DaterangeBuilder {
+            attribute_list: self.attribute_list,
+            id_status: PhantomData,
+            start_date_status: PhantomData,
         }
     }
 
-    /// Finish building and construct the `Daterange`.
-    pub fn finish(self) -> Daterange<'a> {
-        Daterange::new(DaterangeAttributeList {
-            id: self.id,
-            start_date: self.start_date,
-            class: self.class,
-            cue: self.cue,
-            end_date: self.end_date,
-            duration: self.duration,
-            planned_duration: self.planned_duration,
-            extension_attributes: self.extension_attributes,
-            end_on_next: self.end_on_next,
-            scte35_cmd: self.scte35_cmd,
-            scte35_out: self.scte35_out,
-            scte35_in: self.scte35_in,
-        })
+    /// Add the provided `start_date` to the attributes built into `Daterange`.
+    pub fn with_start_date(
+        mut self,
+        start_date: DateTime,
+    ) -> DaterangeBuilder<'a, IdStatus, DaterangeStartDateHasBeenSet> {
+        self.attribute_list.start_date = start_date;
+        DaterangeBuilder {
+            attribute_list: self.attribute_list,
+            id_status: PhantomData,
+            start_date_status: PhantomData,
+        }
     }
 
     /// Add the provided `class` to the attributes built into `Daterange`.
     pub fn with_class(mut self, class: impl Into<Cow<'a, str>>) -> Self {
-        self.class = Some(class.into());
+        self.attribute_list.class = Some(class.into());
         self
     }
 
     /// Add the provided `cue` to the attributes built into `Daterange`.
     pub fn with_cue(mut self, cue: impl Into<Cow<'a, str>>) -> Self {
-        self.cue = Some(cue.into());
+        self.attribute_list.cue = Some(cue.into());
         self
     }
 
     /// Add the provided `end_date` to the attributes built into `Daterange`.
     pub fn with_end_date(mut self, end_date: DateTime) -> Self {
-        self.end_date = Some(end_date);
+        self.attribute_list.end_date = Some(end_date);
         self
     }
 
     /// Add the provided `duration` to the attributes built into `Daterange`.
     pub fn with_duration(mut self, duration: f64) -> Self {
-        self.duration = Some(duration);
+        self.attribute_list.duration = Some(duration);
         self
     }
 
     /// Add the provided `planned_duration` to the attributes built into `Daterange`.
     pub fn with_planned_duration(mut self, planned_duration: f64) -> Self {
-        self.planned_duration = Some(planned_duration);
+        self.attribute_list.planned_duration = Some(planned_duration);
         self
     }
 
@@ -216,7 +244,9 @@ impl<'a> DaterangeBuilder<'a> {
     /// # use m3u8::tag::hls::{Daterange, ExtensionAttributeValue};
     /// # use m3u8::tag::known::IntoInnerTag;
     /// # use m3u8::date_time;
-    /// let daterange = Daterange::builder("id", date_time!(2025-08-02 T 21:03:00.000 -05:00))
+    /// let daterange = Daterange::builder()
+    ///     .with_id("id")
+    ///     .with_start_date(date_time!(2025-08-02 T 21:03:00.000 -05:00))
     ///     .with_extension_attribute(
     ///         "X-MESSAGE",
     ///         ExtensionAttributeValue::QuotedString("Hello, World!".into()),
@@ -246,7 +276,8 @@ impl<'a> DaterangeBuilder<'a> {
         extension_attribute_name: impl Into<Cow<'a, str>>,
         extension_attribute_value: ExtensionAttributeValue<'a>,
     ) -> Self {
-        self.extension_attributes
+        self.attribute_list
+            .extension_attributes
             .insert(extension_attribute_name.into(), extension_attribute_value);
         self
     }
@@ -259,31 +290,31 @@ impl<'a> DaterangeBuilder<'a> {
         mut self,
         extension_attributes: HashMap<Cow<'a, str>, ExtensionAttributeValue<'a>>,
     ) -> Self {
-        self.extension_attributes = extension_attributes;
+        self.attribute_list.extension_attributes = extension_attributes;
         self
     }
 
     /// Add `END-ON-NEXT=YES` to the attributes that are built into `Daterange`.
     pub fn with_end_on_next(mut self) -> Self {
-        self.end_on_next = true;
+        self.attribute_list.end_on_next = true;
         self
     }
 
     /// Add the provided `scte35_cmd` to the attributes that are built into the `Daterange`.
     pub fn with_scte35_cmd(mut self, scte35_cmd: impl Into<Cow<'a, str>>) -> Self {
-        self.scte35_cmd = Some(scte35_cmd.into());
+        self.attribute_list.scte35_cmd = Some(scte35_cmd.into());
         self
     }
 
     /// Add the provided `scte35_out` to the attributes that are built into the `Daterange`.
     pub fn with_scte35_out(mut self, scte35_out: impl Into<Cow<'a, str>>) -> Self {
-        self.scte35_out = Some(scte35_out.into());
+        self.attribute_list.scte35_out = Some(scte35_out.into());
         self
     }
 
     /// Add the provided `scte35_in` to the attributes that are built into the `Daterange`.
     pub fn with_scte35_in(mut self, scte35_in: impl Into<Cow<'a, str>>) -> Self {
-        self.scte35_in = Some(scte35_in.into());
+        self.attribute_list.scte35_in = Some(scte35_in.into());
         self
     }
 }
@@ -367,7 +398,7 @@ impl<'a> TryFrom<ParsedTag<'a>> for Daterange<'a> {
 
 impl<'a> Daterange<'a> {
     /// Constructs a new `Daterange` tag.
-    pub fn new(attribute_list: DaterangeAttributeList<'a>) -> Self {
+    fn new(attribute_list: DaterangeAttributeList<'a>) -> Self {
         let output_line = Cow::Owned(calculate_line(&attribute_list));
         let DaterangeAttributeList {
             id,
@@ -408,7 +439,9 @@ impl<'a> Daterange<'a> {
     /// ```
     /// # use m3u8::tag::hls::{Daterange, ExtensionAttributeValue, Cue};
     /// # use m3u8::date_time;
-    /// let daterange = Daterange::builder("id", date_time!(2025-08-02 T 21:22:33.123))
+    /// let daterange = Daterange::builder()
+    ///     .with_id("id")
+    ///     .with_start_date(date_time!(2025-08-02 T 21:22:33.123))
     ///     .with_duration(120.0)
     ///     .with_cue(Cue::Once)
     ///     .with_class("com.example.ad.id")
@@ -418,8 +451,23 @@ impl<'a> Daterange<'a> {
     ///     )
     ///     .finish();
     /// ```
-    pub fn builder(id: impl Into<Cow<'a, str>>, start_date: DateTime) -> DaterangeBuilder<'a> {
-        DaterangeBuilder::new(id, start_date)
+    /// Note that the `finish` method is only callable if the builder has set `id` AND `start_date`.
+    /// Each of the following fail to compile:
+    /// ```compile_fail
+    /// # use m3u8::tag::hls::Daterange;
+    /// let daterange = Daterange::builder().finish();
+    /// ```
+    /// ```compile_fail
+    /// # use m3u8::tag::hls::Daterange;
+    /// let daterange = Daterange::builder().with_id("id").finish();
+    /// ```
+    /// ```compile_fail
+    /// # use m3u8::tag::hls::Daterange;
+    /// let daterange = Daterange::builder().with_start_date(Default::default()).finish();
+    /// ```
+    pub fn builder() -> DaterangeBuilder<'a, DaterangeIdNeedsToBeSet, DaterangeStartDateNeedsToBeSet>
+    {
+        DaterangeBuilder::new()
     }
 
     // === GETTERS ===
@@ -1194,8 +1242,10 @@ mod tests {
 
     #[test]
     fn new_with_no_optionals_should_be_valid() {
-        let tag =
-            Daterange::builder("some-id", date_time!(2025-06-14 T 23:41:42.000 -05:00)).finish();
+        let tag = Daterange::builder()
+            .with_id("some-id")
+            .with_start_date(date_time!(2025-06-14 T 23:41:42.000 -05:00))
+            .finish();
         assert_eq!(
             b"#EXT-X-DATERANGE:ID=\"some-id\",START-DATE=\"2025-06-14T23:41:42.000-05:00\"",
             tag.into_inner().value()
@@ -1204,7 +1254,9 @@ mod tests {
 
     #[test]
     fn new_with_optionals_should_be_valid() {
-        let tag = Daterange::builder("some-id", date_time!(2025-06-14 T 23:41:42.000 -05:00))
+        let tag = Daterange::builder()
+            .with_id("some-id")
+            .with_start_date(date_time!(2025-06-14 T 23:41:42.000 -05:00))
             .with_class("com.example.class")
             .with_cue(EnumeratedStringList::from([Cue::Once]))
             .with_end_date(date_time!(2025-06-14 T 23:43:42.000 -05:00))
@@ -1229,7 +1281,9 @@ mod tests {
 
     #[test]
     fn new_with_optionals_and_some_client_attributes_should_be_valid() {
-        let tag = Daterange::builder("some-id", date_time!(2025-06-14 T 23:41:42.000 -05:00))
+        let tag = Daterange::builder()
+            .with_id("some-id")
+            .with_start_date(date_time!(2025-06-14 T 23:41:42.000 -05:00))
             .with_extension_attribute(
                 "X-COM-EXAMPLE-A",
                 ExtensionAttributeValue::QuotedString("Example A".into()),
@@ -1287,7 +1341,9 @@ mod tests {
 
     #[test]
     fn mutation_should_work() {
-        let mut daterange = Daterange::builder("some-id", DateTime::default())
+        let mut daterange = Daterange::builder()
+            .with_id("some-id")
+            .with_start_date(DateTime::default())
             .with_cue(EnumeratedStringList::from([Cue::Once]))
             .with_extension_attribute(
                 "X-TO-REMOVE",
@@ -1322,7 +1378,9 @@ mod tests {
 
     #[test]
     fn mutating_cue_works_as_expected() {
-        let mut daterange = Daterange::builder("some-id", DateTime::default())
+        let mut daterange = Daterange::builder()
+            .with_id("some-id")
+            .with_start_date(DateTime::default())
             .with_cue(EnumeratedStringList::from([Cue::Once]))
             .finish();
         let mut cue = daterange.cue().unwrap();
@@ -1335,7 +1393,9 @@ mod tests {
     }
 
     mutation_tests!(
-        Daterange::builder("some-id", date_time!(2025-06-14 T 23:41:42.000 -05:00))
+        Daterange::builder()
+            .with_id("some-id")
+            .with_start_date(date_time!(2025-06-14 T 23:41:42.000 -05:00))
             .with_class("com.example.class")
             .with_cue(EnumeratedStringList::from([Cue::Once]))
             .with_end_date(date_time!(2025-06-14 T 23:43:42.000 -05:00))

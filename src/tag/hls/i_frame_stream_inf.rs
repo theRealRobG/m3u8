@@ -9,145 +9,172 @@ use crate::{
         value::{DecimalResolution, ParsedAttributeValue, SemiParsedTagValue},
     },
 };
-use std::{borrow::Cow, collections::HashMap};
+use std::{borrow::Cow, collections::HashMap, marker::PhantomData};
 
 /// The attribute list for the tag (`#EXT-X-I-FRAME-STREAM-INF:<attribute-list>`)
 ///
 /// See [`IFrameStreamInf`] for a link to the HLS documentation for this attribute.
 #[derive(Debug, Clone)]
-pub struct IFrameStreamInfAttributeList<'a> {
+struct IFrameStreamInfAttributeList<'a> {
     /// Corresponds to the `URI` attribute.
     ///
     /// See [`IFrameStreamInf`] for a link to the HLS documentation for this attribute.
-    pub uri: Cow<'a, str>,
+    uri: Cow<'a, str>,
     /// Corresponds to the BANDWIDTH attribute.
     ///
     /// See [`IFrameStreamInf`] for a link to the HLS documentation for this attribute.
-    pub bandwidth: u64,
+    bandwidth: u64,
     /// Corresponds to the AVERAGE-BANDWIDTH attribute.
     ///
     /// See [`IFrameStreamInf`] for a link to the HLS documentation for this attribute.
-    pub average_bandwidth: Option<u64>,
+    average_bandwidth: Option<u64>,
     /// Corresponds to the SCORE attribute.
     ///
     /// See [`IFrameStreamInf`] for a link to the HLS documentation for this attribute.
-    pub score: Option<f64>,
+    score: Option<f64>,
     /// Corresponds to the CODECS attribute.
     ///
     /// See [`IFrameStreamInf`] for a link to the HLS documentation for this attribute.
-    pub codecs: Option<Cow<'a, str>>,
+    codecs: Option<Cow<'a, str>>,
     /// Corresponds to the SUPPLEMENTAL-CODECS attribute.
     ///
     /// See [`IFrameStreamInf`] for a link to the HLS documentation for this attribute.
-    pub supplemental_codecs: Option<Cow<'a, str>>,
+    supplemental_codecs: Option<Cow<'a, str>>,
     /// Corresponds to the RESOLUTION attribute.
     ///
     /// See [`IFrameStreamInf`] for a link to the HLS documentation for this attribute.
-    pub resolution: Option<DecimalResolution>,
+    resolution: Option<DecimalResolution>,
     /// Corresponds to the HDCP-LEVEL attribute.
     ///
     /// See [`IFrameStreamInf`] for a link to the HLS documentation for this attribute.
-    pub hdcp_level: Option<Cow<'a, str>>,
+    hdcp_level: Option<Cow<'a, str>>,
     /// Corresponds to the ALLOWED-CPC attribute.
     ///
     /// See [`IFrameStreamInf`] for a link to the HLS documentation for this attribute.
-    pub allowed_cpc: Option<Cow<'a, str>>,
+    allowed_cpc: Option<Cow<'a, str>>,
     /// Corresponds to the VIDEO-RANGE attribute.
     ///
     /// See [`IFrameStreamInf`] for a link to the HLS documentation for this attribute.
-    pub video_range: Option<Cow<'a, str>>,
+    video_range: Option<Cow<'a, str>>,
     /// Corresponds to the REQ-VIDEO-LAYOUT attribute.
     ///
     /// See [`IFrameStreamInf`] for a link to the HLS documentation for this attribute.
-    pub req_video_layout: Option<Cow<'a, str>>,
+    req_video_layout: Option<Cow<'a, str>>,
     /// Corresponds to the STABLE-VARIANT-ID attribute.
     ///
     /// See [`IFrameStreamInf`] for a link to the HLS documentation for this attribute.
-    pub stable_variant_id: Option<Cow<'a, str>>,
+    stable_variant_id: Option<Cow<'a, str>>,
     /// Corresponds to the VIDEO attribute.
     ///
     /// See [`IFrameStreamInf`] for a link to the HLS documentation for this attribute.
-    pub video: Option<Cow<'a, str>>,
+    video: Option<Cow<'a, str>>,
     /// Corresponds to the PATHWAY-ID attribute.
     ///
     /// See [`IFrameStreamInf`] for a link to the HLS documentation for this attribute.
-    pub pathway_id: Option<Cow<'a, str>>,
-}
-
-/// A builder for convenience in constructing a [`IFrameStreamInf`].
-#[derive(Debug)]
-pub struct IFrameStreamInfBuilder<'a> {
-    uri: Cow<'a, str>,
-    bandwidth: u64,
-    average_bandwidth: Option<u64>,
-    score: Option<f64>,
-    codecs: Option<Cow<'a, str>>,
-    supplemental_codecs: Option<Cow<'a, str>>,
-    resolution: Option<DecimalResolution>,
-    hdcp_level: Option<Cow<'a, str>>,
-    allowed_cpc: Option<Cow<'a, str>>,
-    video_range: Option<Cow<'a, str>>,
-    req_video_layout: Option<Cow<'a, str>>,
-    stable_variant_id: Option<Cow<'a, str>>,
-    video: Option<Cow<'a, str>>,
     pathway_id: Option<Cow<'a, str>>,
 }
-impl<'a> IFrameStreamInfBuilder<'a> {
+
+/// Placeholder struct for [`IFrameStreamInfBuilder`] indicating that `uri` needs to be set.
+#[derive(Debug, Clone, Copy)]
+pub struct IFrameStreamInfUriNeedsToBeSet;
+/// Placeholder struct for [`IFrameStreamInfBuilder`] indicating that `bandwidth` needs to be set.
+#[derive(Debug, Clone, Copy)]
+pub struct IFrameStreamInfBandwidthNeedsToBeSet;
+/// Placeholder struct for [`IFrameStreamInfBuilder`] indicating that `uri` has been set.
+#[derive(Debug, Clone, Copy)]
+pub struct IFrameStreamInfUriHasBeenSet;
+/// Placeholder struct for [`IFrameStreamInfBuilder`] indicating that `bandwidth` has been set.
+#[derive(Debug, Clone, Copy)]
+pub struct IFrameStreamInfBandwidthHasBeenSet;
+
+/// A builder for convenience in constructing a [`IFrameStreamInf`].
+///
+/// Builder pattern inspired by [Sguaba]
+///
+/// [Sguaba]: https://github.com/helsing-ai/sguaba/blob/8dadfe066197551b0601e01676f8d13ef1168785/src/directions.rs#L271-L291
+#[derive(Debug)]
+pub struct IFrameStreamInfBuilder<'a, UriStatus, BandwidthStatus> {
+    attribute_list: IFrameStreamInfAttributeList<'a>,
+    uri_status: PhantomData<UriStatus>,
+    bandwidth_status: PhantomData<BandwidthStatus>,
+}
+impl<'a>
+    IFrameStreamInfBuilder<'a, IFrameStreamInfUriNeedsToBeSet, IFrameStreamInfBandwidthNeedsToBeSet>
+{
     /// Creates a new builder.
-    pub fn new(uri: impl Into<Cow<'a, str>>, bandwidth: u64) -> Self {
+    pub fn new() -> Self {
         Self {
-            uri: uri.into(),
-            bandwidth,
-            average_bandwidth: Default::default(),
-            score: Default::default(),
-            codecs: Default::default(),
-            supplemental_codecs: Default::default(),
-            resolution: Default::default(),
-            hdcp_level: Default::default(),
-            allowed_cpc: Default::default(),
-            video_range: Default::default(),
-            req_video_layout: Default::default(),
-            stable_variant_id: Default::default(),
-            video: Default::default(),
-            pathway_id: Default::default(),
+            attribute_list: IFrameStreamInfAttributeList {
+                uri: Cow::Borrowed(""),
+                bandwidth: Default::default(),
+                average_bandwidth: Default::default(),
+                score: Default::default(),
+                codecs: Default::default(),
+                supplemental_codecs: Default::default(),
+                resolution: Default::default(),
+                hdcp_level: Default::default(),
+                allowed_cpc: Default::default(),
+                video_range: Default::default(),
+                req_video_layout: Default::default(),
+                stable_variant_id: Default::default(),
+                video: Default::default(),
+                pathway_id: Default::default(),
+            },
+            uri_status: PhantomData,
+            bandwidth_status: PhantomData,
+        }
+    }
+}
+impl<'a>
+    IFrameStreamInfBuilder<'a, IFrameStreamInfUriHasBeenSet, IFrameStreamInfBandwidthHasBeenSet>
+{
+    /// Finish building and construct the `IFrameStreamInf`.
+    pub fn finish(self) -> IFrameStreamInf<'a> {
+        IFrameStreamInf::new(self.attribute_list)
+    }
+}
+impl<'a, UriStatus, BandwidthStatus> IFrameStreamInfBuilder<'a, UriStatus, BandwidthStatus> {
+    /// Add the provided `uri` to the attributes built into `IFrameStreamInf`.
+    pub fn with_uri(
+        mut self,
+        uri: impl Into<Cow<'a, str>>,
+    ) -> IFrameStreamInfBuilder<'a, IFrameStreamInfUriHasBeenSet, BandwidthStatus> {
+        self.attribute_list.uri = uri.into();
+        IFrameStreamInfBuilder {
+            attribute_list: self.attribute_list,
+            uri_status: PhantomData,
+            bandwidth_status: PhantomData,
         }
     }
 
-    /// Finish building and construct the `IFrameStreamInf`.
-    pub fn finish(self) -> IFrameStreamInf<'a> {
-        IFrameStreamInf::new(IFrameStreamInfAttributeList {
-            uri: self.uri,
-            bandwidth: self.bandwidth,
-            average_bandwidth: self.average_bandwidth,
-            score: self.score,
-            codecs: self.codecs,
-            supplemental_codecs: self.supplemental_codecs,
-            resolution: self.resolution,
-            hdcp_level: self.hdcp_level,
-            allowed_cpc: self.allowed_cpc,
-            video_range: self.video_range,
-            req_video_layout: self.req_video_layout,
-            stable_variant_id: self.stable_variant_id,
-            video: self.video,
-            pathway_id: self.pathway_id,
-        })
+    /// Add the provided `bandwidth` to the attributes built into `IFrameStreamInf`.
+    pub fn with_bandwidth(
+        mut self,
+        bandwidth: u64,
+    ) -> IFrameStreamInfBuilder<'a, UriStatus, IFrameStreamInfBandwidthHasBeenSet> {
+        self.attribute_list.bandwidth = bandwidth;
+        IFrameStreamInfBuilder {
+            attribute_list: self.attribute_list,
+            uri_status: PhantomData,
+            bandwidth_status: PhantomData,
+        }
     }
 
     /// Add the provided `average_bandwidth` to the attributes built into `IFrameStreamInf`.
     pub fn with_average_bandwidth(mut self, average_bandwidth: u64) -> Self {
-        self.average_bandwidth = Some(average_bandwidth);
+        self.attribute_list.average_bandwidth = Some(average_bandwidth);
         self
     }
 
     /// Add the provided `score` to the attributes built into `IFrameStreamInf`.
     pub fn with_score(mut self, score: f64) -> Self {
-        self.score = Some(score);
+        self.attribute_list.score = Some(score);
         self
     }
 
     /// Add the provided `codecs` to the attributes built into `IFrameStreamInf`.
     pub fn with_codecs(mut self, codecs: impl Into<Cow<'a, str>>) -> Self {
-        self.codecs = Some(codecs.into());
+        self.attribute_list.codecs = Some(codecs.into());
         self
     }
 
@@ -156,13 +183,13 @@ impl<'a> IFrameStreamInfBuilder<'a> {
         mut self,
         supplemental_codecs: impl Into<Cow<'a, str>>,
     ) -> Self {
-        self.supplemental_codecs = Some(supplemental_codecs.into());
+        self.attribute_list.supplemental_codecs = Some(supplemental_codecs.into());
         self
     }
 
     /// Add the provided `resolution` to the attributes built into `IFrameStreamInf`.
     pub fn with_resolution(mut self, resolution: DecimalResolution) -> Self {
-        self.resolution = Some(resolution);
+        self.attribute_list.resolution = Some(resolution);
         self
     }
 
@@ -172,23 +199,27 @@ impl<'a> IFrameStreamInfBuilder<'a> {
     /// For example:
     /// ```
     /// # use m3u8::tag::hls::{IFrameStreamInfBuilder, HdcpLevel};
-    /// let builder = IFrameStreamInfBuilder::new("uri", 10000000)
+    /// let builder = IFrameStreamInfBuilder::new()
+    ///     .with_uri("uri")
+    ///     .with_bandwidth(10000000)
     ///     .with_hdcp_level(HdcpLevel::Type1);
     /// ```
     /// Alternatively, a string slice can be used:
     /// ```
     /// # use m3u8::tag::hls::{IFrameStreamInfBuilder, HdcpLevel};
-    /// let builder = IFrameStreamInfBuilder::new("uri", 10000000)
+    /// let builder = IFrameStreamInfBuilder::new()
+    ///     .with_uri("uri")
+    ///     .with_bandwidth(10000000)
     ///     .with_hdcp_level("TYPE-1");
     /// ```
     pub fn with_hdcp_level(mut self, hdcp_level: impl Into<Cow<'a, str>>) -> Self {
-        self.hdcp_level = Some(hdcp_level.into());
+        self.attribute_list.hdcp_level = Some(hdcp_level.into());
         self
     }
 
     /// Add the provided `allowed_cpc` to the attributes built into `IFrameStreamInf`.
     pub fn with_allowed_cpc(mut self, allowed_cpc: impl Into<Cow<'a, str>>) -> Self {
-        self.allowed_cpc = Some(allowed_cpc.into());
+        self.attribute_list.allowed_cpc = Some(allowed_cpc.into());
         self
     }
 
@@ -198,17 +229,21 @@ impl<'a> IFrameStreamInfBuilder<'a> {
     /// here. For example:
     /// ```
     /// # use m3u8::tag::hls::{IFrameStreamInfBuilder, VideoRange};
-    /// let builder = IFrameStreamInfBuilder::new("uri", 10000000)
+    /// let builder = IFrameStreamInfBuilder::new()
+    ///     .with_uri("uri")
+    ///     .with_bandwidth(10000000)
     ///     .with_video_range(VideoRange::Pq);
     /// ```
     /// Alternatively, a string slice can be used:
     /// ```
     /// # use m3u8::tag::hls::{IFrameStreamInfBuilder, VideoRange};
-    /// let builder = IFrameStreamInfBuilder::new("uri", 10000000)
+    /// let builder = IFrameStreamInfBuilder::new()
+    ///     .with_uri("uri")
+    ///     .with_bandwidth(10000000)
     ///     .with_video_range("PQ");
     /// ```
     pub fn with_video_range(mut self, video_range: impl Into<Cow<'a, str>>) -> Self {
-        self.video_range = Some(video_range.into());
+        self.attribute_list.video_range = Some(video_range.into());
         self
     }
 
@@ -221,7 +256,9 @@ impl<'a> IFrameStreamInfBuilder<'a> {
     /// # IFrameStreamInfBuilder, VideoLayout, EnumeratedStringList, VideoChannelSpecifier,
     /// # VideoProjectionSpecifier
     /// # };
-    /// let builder = IFrameStreamInfBuilder::new("uri", 10000000)
+    /// let builder = IFrameStreamInfBuilder::new()
+    ///     .with_uri("uri")
+    ///     .with_bandwidth(10000000)
     ///     .with_req_video_layout(VideoLayout::new(
     ///         EnumeratedStringList::from([VideoChannelSpecifier::Stereo]),
     ///         EnumeratedStringList::from([VideoProjectionSpecifier::Equirectangular]),
@@ -234,29 +271,31 @@ impl<'a> IFrameStreamInfBuilder<'a> {
     /// # IFrameStreamInfBuilder, VideoLayout, EnumeratedStringList, VideoChannelSpecifier,
     /// # VideoProjectionSpecifier
     /// # };
-    /// let builder = IFrameStreamInfBuilder::new("uri", 10000000)
+    /// let builder = IFrameStreamInfBuilder::new()
+    ///     .with_uri("uri")
+    ///     .with_bandwidth(10000000)
     ///     .with_req_video_layout("CH-STEREO/PROJ-EQUI");
     /// ```
     pub fn with_req_video_layout(mut self, req_video_layout: impl Into<Cow<'a, str>>) -> Self {
-        self.req_video_layout = Some(req_video_layout.into());
+        self.attribute_list.req_video_layout = Some(req_video_layout.into());
         self
     }
 
     /// Add the provided `stable_variant_id` to the attributes built into `IFrameStreamInf`.
     pub fn with_stable_variant_id(mut self, stable_variant_id: impl Into<Cow<'a, str>>) -> Self {
-        self.stable_variant_id = Some(stable_variant_id.into());
+        self.attribute_list.stable_variant_id = Some(stable_variant_id.into());
         self
     }
 
     /// Add the provided `video` to the attributes built into `IFrameStreamInf`.
     pub fn with_video(mut self, video: impl Into<Cow<'a, str>>) -> Self {
-        self.video = Some(video.into());
+        self.attribute_list.video = Some(video.into());
         self
     }
 
     /// Add the provided `pathway_id` to the attributes built into `IFrameStreamInf`.
     pub fn with_pathway_id(mut self, pathway_id: impl Into<Cow<'a, str>>) -> Self {
-        self.pathway_id = Some(pathway_id.into());
+        self.attribute_list.pathway_id = Some(pathway_id.into());
         self
     }
 }
@@ -344,7 +383,7 @@ impl<'a> TryFrom<ParsedTag<'a>> for IFrameStreamInf<'a> {
 
 impl<'a> IFrameStreamInf<'a> {
     /// Constructs a new `IFrameStreamInf` tag.
-    pub fn new(attribute_list: IFrameStreamInfAttributeList<'a>) -> Self {
+    fn new(attribute_list: IFrameStreamInfAttributeList<'a>) -> Self {
         let output_line = Cow::Owned(calculate_line(&attribute_list));
         let IFrameStreamInfAttributeList {
             uri,
@@ -388,7 +427,9 @@ impl<'a> IFrameStreamInf<'a> {
     /// For example, we could construct a `IFrameStreamInf` as such:
     /// ```
     /// # use m3u8::tag::{value::DecimalResolution, hls::{IFrameStreamInf, HdcpLevel, VideoRange}};
-    /// let i_frame_stream_inf = IFrameStreamInf::builder("uri", 10000000)
+    /// let i_frame_stream_inf = IFrameStreamInf::builder()
+    ///     .with_uri("uri")
+    ///     .with_bandwidth(10000000)
     ///     .with_codecs("hvc1.2.4.L153.b0")
     ///     .with_supplemental_codecs("dvh1.08.07/db4h")
     ///     .with_resolution(DecimalResolution { width: 3840, height: 2160 })
@@ -396,8 +437,26 @@ impl<'a> IFrameStreamInf<'a> {
     ///     .with_video_range(VideoRange::Hlg)
     ///     .finish();
     /// ```
-    pub fn builder(uri: impl Into<Cow<'a, str>>, bandwidth: u64) -> IFrameStreamInfBuilder<'a> {
-        IFrameStreamInfBuilder::new(uri, bandwidth)
+    /// Note that the `finish` method is only callable if the builder has set `uri` AND `bandwidth`.
+    /// Each of the following fail to compile:
+    /// ```compile_fail
+    /// # use m3u8::tag::hls::IFrameStreamInf;
+    /// let i_frame_stream_inf = IFrameStreamInf::builder().finish();
+    /// ```
+    /// ```compile_fail
+    /// # use m3u8::tag::hls::IFrameStreamInf;
+    /// let i_frame_stream_inf = IFrameStreamInf::builder().with_uri("uri").finish();
+    /// ```
+    /// ```compile_fail
+    /// # use m3u8::tag::hls::IFrameStreamInf;
+    /// let i_frame_stream_inf = IFrameStreamInf::builder().with_bandwidth(10000000).finish();
+    /// ```
+    pub fn builder() -> IFrameStreamInfBuilder<
+        'a,
+        IFrameStreamInfUriNeedsToBeSet,
+        IFrameStreamInfBandwidthNeedsToBeSet,
+    > {
+        IFrameStreamInfBuilder::new()
     }
 
     // === GETTERS ===
@@ -498,7 +557,9 @@ impl<'a> IFrameStreamInf<'a> {
     /// # use m3u8::tag::hls::{IFrameStreamInf, HdcpLevel};
     /// use m3u8::tag::hls::GetKnown;
     ///
-    /// let tag = IFrameStreamInf::builder("uri", 10000000)
+    /// let tag = IFrameStreamInf::builder()
+    ///     .with_uri("uri")
+    ///     .with_bandwidth(10000000)
     ///     .with_hdcp_level(HdcpLevel::Type0)
     ///     .finish();
     /// assert_eq!(Some(HdcpLevel::Type0), tag.hdcp_level().known());
@@ -538,7 +599,9 @@ impl<'a> IFrameStreamInf<'a> {
     /// # use m3u8::tag::hls::{IFrameStreamInf, VideoRange};
     /// use m3u8::tag::hls::GetKnown;
     ///
-    /// let tag = IFrameStreamInf::builder("uri", 10000000)
+    /// let tag = IFrameStreamInf::builder()
+    ///     .with_uri("uri")
+    ///     .with_bandwidth(10000000)
     ///     .with_video_range(VideoRange::Pq)
     ///     .finish();
     /// assert_eq!(Some(VideoRange::Pq), tag.video_range().known());
@@ -957,7 +1020,9 @@ mod tests {
     fn as_str_with_no_options_should_be_valid() {
         assert_eq!(
             b"#EXT-X-I-FRAME-STREAM-INF:URI=\"example.iframe.m3u8\",BANDWIDTH=10000000",
-            IFrameStreamInf::builder("example.iframe.m3u8", 10000000)
+            IFrameStreamInf::builder()
+                .with_uri("example.iframe.m3u8")
+                .with_bandwidth(10000000)
                 .finish()
                 .into_inner()
                 .value()
@@ -976,7 +1041,9 @@ mod tests {
                 "VIDEO=\"alternate-view\",PATHWAY-ID=\"1234\""
             )
             .as_bytes(),
-            IFrameStreamInf::builder("iframe.high.m3u8", 10000000)
+            IFrameStreamInf::builder()
+                .with_uri("iframe.high.m3u8")
+                .with_bandwidth(10000000)
                 .with_average_bandwidth(9000000)
                 .with_score(2.0)
                 .with_codecs("hvc1.2.4.L153.b0,ec-3")
@@ -1000,7 +1067,9 @@ mod tests {
 
     mutation_tests!(
         // Initial value
-        IFrameStreamInf::builder("iframe.high.m3u8", 10000000)
+        IFrameStreamInf::builder()
+            .with_uri("iframe.high.m3u8")
+            .with_bandwidth(10000000)
             .with_average_bandwidth(9000000)
             .with_score(2.0)
             .with_codecs("hvc1.2.4.L153.b0,ec-3")

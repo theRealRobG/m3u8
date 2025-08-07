@@ -7,7 +7,7 @@ use crate::{
     },
     utils::AsStaticCow,
 };
-use std::{borrow::Cow, collections::HashMap, fmt::Display, str::Split};
+use std::{borrow::Cow, collections::HashMap, fmt::Display, marker::PhantomData, str::Split};
 
 /// Corresponds to the `#EXT-X-MEDIA:TYPE` attribute.
 ///
@@ -541,149 +541,185 @@ impl<'a> From<Channels<'a>> for Cow<'a, str> {
 /// The attribute list for the tag (`#EXT-X-MEDIA:<attribute-list>`).
 ///
 /// See [`Media`] for a link to the HLS documentation for this attribute.
-#[derive(Debug, PartialEq, Clone)]
-pub struct MediaAttributeList<'a> {
+#[derive(Debug, Clone)]
+struct MediaAttributeList<'a> {
     /// Corresponds to the `TYPE` attribute.
     ///
     /// See [`Media`] for a link to the HLS documentation for this attribute.
-    pub media_type: Cow<'a, str>,
+    media_type: Cow<'a, str>,
     /// Corresponds to the `NAME` attribute.
     ///
     /// See [`Media`] for a link to the HLS documentation for this attribute.
-    pub name: Cow<'a, str>,
+    name: Cow<'a, str>,
     /// Corresponds to the `GROUP-ID` attribute.
     ///
     /// See [`Media`] for a link to the HLS documentation for this attribute.
-    pub group_id: Cow<'a, str>,
+    group_id: Cow<'a, str>,
     /// Corresponds to the `URI` attribute.
     ///
     /// See [`Media`] for a link to the HLS documentation for this attribute.
-    pub uri: Option<Cow<'a, str>>,
+    uri: Option<Cow<'a, str>>,
     /// Corresponds to the `LANGUAGE` attribute.
     ///
     /// See [`Media`] for a link to the HLS documentation for this attribute.
-    pub language: Option<Cow<'a, str>>,
+    language: Option<Cow<'a, str>>,
     /// Corresponds to the `ASSOC-LANGUAGE` attribute.
     ///
     /// See [`Media`] for a link to the HLS documentation for this attribute.
-    pub assoc_language: Option<Cow<'a, str>>,
+    assoc_language: Option<Cow<'a, str>>,
     /// Corresponds to the `STABLE-RENDITION-ID` attribute.
     ///
     /// See [`Media`] for a link to the HLS documentation for this attribute.
-    pub stable_rendition_id: Option<Cow<'a, str>>,
+    stable_rendition_id: Option<Cow<'a, str>>,
     /// Corresponds to the `DEFAULT` attribute.
     ///
     /// See [`Media`] for a link to the HLS documentation for this attribute.
-    pub default: bool,
+    default: bool,
     /// Corresponds to the `AUTOSELECT` attribute.
     ///
     /// See [`Media`] for a link to the HLS documentation for this attribute.
-    pub autoselect: bool,
+    autoselect: bool,
     /// Corresponds to the `FORCED` attribute.
     ///
     /// See [`Media`] for a link to the HLS documentation for this attribute.
-    pub forced: bool,
+    forced: bool,
     /// Corresponds to the `INSTREAM-ID` attribute.
     ///
     /// See [`Media`] for a link to the HLS documentation for this attribute.
-    pub instream_id: Option<Cow<'a, str>>,
+    instream_id: Option<Cow<'a, str>>,
     /// Corresponds to the `BIT-DEPTH` attribute.
     ///
     /// See [`Media`] for a link to the HLS documentation for this attribute.
-    pub bit_depth: Option<u64>,
+    bit_depth: Option<u64>,
     /// Corresponds to the `SAMPLE-RATE` attribute.
     ///
     /// See [`Media`] for a link to the HLS documentation for this attribute.
-    pub sample_rate: Option<u64>,
+    sample_rate: Option<u64>,
     /// Corresponds to the `CHARACTERISTICS` attribute.
     ///
     /// See [`Media`] for a link to the HLS documentation for this attribute.
-    pub characteristics: Option<Cow<'a, str>>,
+    characteristics: Option<Cow<'a, str>>,
     /// Corresponds to the `CHANNELS` attribute.
     ///
     /// See [`Media`] for a link to the HLS documentation for this attribute.
-    pub channels: Option<Cow<'a, str>>,
-}
-
-/// A builder for convenience in constructing a [`Media`].
-#[derive(Debug, PartialEq, Clone)]
-pub struct MediaBuilder<'a> {
-    media_type: Cow<'a, str>,
-    name: Cow<'a, str>,
-    group_id: Cow<'a, str>,
-    uri: Option<Cow<'a, str>>,
-    language: Option<Cow<'a, str>>,
-    assoc_language: Option<Cow<'a, str>>,
-    stable_rendition_id: Option<Cow<'a, str>>,
-    default: bool,
-    autoselect: bool,
-    forced: bool,
-    instream_id: Option<Cow<'a, str>>,
-    bit_depth: Option<u64>,
-    sample_rate: Option<u64>,
-    characteristics: Option<Cow<'a, str>>,
     channels: Option<Cow<'a, str>>,
 }
-impl<'a> MediaBuilder<'a> {
+
+/// Placeholder struct for [`MediaBuilder`] indicating that `media_type` needs to be set.
+#[derive(Debug, Clone, Copy)]
+pub struct MediaTypeNeedsToBeSet;
+/// Placeholder struct for [`MediaBuilder`] indicating that `name` needs to be set.
+#[derive(Debug, Clone, Copy)]
+pub struct MediaNameNeedsToBeSet;
+/// Placeholder struct for [`MediaBuilder`] indicating that `group_id` needs to be set.
+#[derive(Debug, Clone, Copy)]
+pub struct MediaGroupIdNeedsToBeSet;
+/// Placeholder struct for [`MediaBuilder`] indicating that `media_type` has been set.
+#[derive(Debug, Clone, Copy)]
+pub struct MediaTypeHasBeenSet;
+/// Placeholder struct for [`MediaBuilder`] indicating that `name` has been set.
+#[derive(Debug, Clone, Copy)]
+pub struct MediaNameHasBeenSet;
+/// Placeholder struct for [`MediaBuilder`] indicating that `group_id` has been set.
+#[derive(Debug, Clone, Copy)]
+pub struct MediaGroupIdHasBeenSet;
+
+/// A builder for convenience in constructing a [`Media`].
+#[derive(Debug, Clone)]
+pub struct MediaBuilder<'a, TypeStatus, NameStatus, GroupIdStatus> {
+    attribute_list: MediaAttributeList<'a>,
+    type_status: PhantomData<TypeStatus>,
+    name_status: PhantomData<NameStatus>,
+    group_id_status: PhantomData<GroupIdStatus>,
+}
+impl<'a> MediaBuilder<'a, MediaTypeNeedsToBeSet, MediaNameNeedsToBeSet, MediaGroupIdNeedsToBeSet> {
     /// Creates a new builder.
-    pub fn new(
-        media_type: impl Into<Cow<'a, str>>,
-        name: impl Into<Cow<'a, str>>,
-        group_id: impl Into<Cow<'a, str>>,
-    ) -> Self {
+    pub fn new() -> Self {
         Self {
-            media_type: media_type.into(),
-            name: name.into(),
-            group_id: group_id.into(),
-            uri: Default::default(),
-            language: Default::default(),
-            assoc_language: Default::default(),
-            stable_rendition_id: Default::default(),
-            default: Default::default(),
-            autoselect: Default::default(),
-            forced: Default::default(),
-            instream_id: Default::default(),
-            bit_depth: Default::default(),
-            sample_rate: Default::default(),
-            characteristics: Default::default(),
-            channels: Default::default(),
+            attribute_list: MediaAttributeList {
+                media_type: Cow::Borrowed(""),
+                name: Cow::Borrowed(""),
+                group_id: Cow::Borrowed(""),
+                uri: Default::default(),
+                language: Default::default(),
+                assoc_language: Default::default(),
+                stable_rendition_id: Default::default(),
+                default: Default::default(),
+                autoselect: Default::default(),
+                forced: Default::default(),
+                instream_id: Default::default(),
+                bit_depth: Default::default(),
+                sample_rate: Default::default(),
+                characteristics: Default::default(),
+                channels: Default::default(),
+            },
+            type_status: PhantomData,
+            name_status: PhantomData,
+            group_id_status: PhantomData,
         }
     }
-
+}
+impl<'a> MediaBuilder<'a, MediaTypeHasBeenSet, MediaNameHasBeenSet, MediaGroupIdHasBeenSet> {
     /// Finish building and construct the `Media`.
     pub fn finish(self) -> Media<'a> {
-        Media::new(MediaAttributeList {
-            media_type: self.media_type,
-            name: self.name,
-            group_id: self.group_id,
-            uri: self.uri,
-            language: self.language,
-            assoc_language: self.assoc_language,
-            stable_rendition_id: self.stable_rendition_id,
-            default: self.default,
-            autoselect: self.autoselect,
-            forced: self.forced,
-            instream_id: self.instream_id,
-            bit_depth: self.bit_depth,
-            sample_rate: self.sample_rate,
-            characteristics: self.characteristics,
-            channels: self.channels,
-        })
+        Media::new(self.attribute_list)
     }
-
+}
+impl<'a, TypeStatus, NameStatus, GroupIdStatus>
+    MediaBuilder<'a, TypeStatus, NameStatus, GroupIdStatus>
+{
+    /// Add the provided `media_type` to the attributes built into `Media`.
+    pub fn with_media_type(
+        mut self,
+        media_type: impl Into<Cow<'a, str>>,
+    ) -> MediaBuilder<'a, MediaTypeHasBeenSet, NameStatus, GroupIdStatus> {
+        self.attribute_list.media_type = media_type.into();
+        MediaBuilder {
+            attribute_list: self.attribute_list,
+            type_status: PhantomData,
+            name_status: PhantomData,
+            group_id_status: PhantomData,
+        }
+    }
+    /// Add the provided `name` to the attributes built into `Media`.
+    pub fn with_name(
+        mut self,
+        name: impl Into<Cow<'a, str>>,
+    ) -> MediaBuilder<'a, TypeStatus, MediaNameHasBeenSet, GroupIdStatus> {
+        self.attribute_list.name = name.into();
+        MediaBuilder {
+            attribute_list: self.attribute_list,
+            type_status: PhantomData,
+            name_status: PhantomData,
+            group_id_status: PhantomData,
+        }
+    }
+    /// Add the provided `group_id` to the attributes built into `Media`.
+    pub fn with_group_id(
+        mut self,
+        group_id: impl Into<Cow<'a, str>>,
+    ) -> MediaBuilder<'a, TypeStatus, NameStatus, MediaGroupIdHasBeenSet> {
+        self.attribute_list.group_id = group_id.into();
+        MediaBuilder {
+            attribute_list: self.attribute_list,
+            type_status: PhantomData,
+            name_status: PhantomData,
+            group_id_status: PhantomData,
+        }
+    }
     /// Add the provided `uri` to the attributes built into `Media`.
     pub fn with_uri(mut self, uri: impl Into<Cow<'a, str>>) -> Self {
-        self.uri = Some(uri.into());
+        self.attribute_list.uri = Some(uri.into());
         self
     }
     /// Add the provided `language` to the attributes built into `Media`.
     pub fn with_language(mut self, language: impl Into<Cow<'a, str>>) -> Self {
-        self.language = Some(language.into());
+        self.attribute_list.language = Some(language.into());
         self
     }
     /// Add the provided `assoc_language` to the attributes built into `Media`.
     pub fn with_assoc_language(mut self, assoc_language: impl Into<Cow<'a, str>>) -> Self {
-        self.assoc_language = Some(assoc_language.into());
+        self.attribute_list.assoc_language = Some(assoc_language.into());
         self
     }
     /// Add the provided `stable_rendition_id` to the attributes built into `Media`.
@@ -691,42 +727,42 @@ impl<'a> MediaBuilder<'a> {
         mut self,
         stable_rendition_id: impl Into<Cow<'a, str>>,
     ) -> Self {
-        self.stable_rendition_id = Some(stable_rendition_id.into());
+        self.attribute_list.stable_rendition_id = Some(stable_rendition_id.into());
         self
     }
     /// Add the provided `default` to the attributes built into `Media`.
     pub fn with_default(mut self) -> Self {
-        self.default = true;
+        self.attribute_list.default = true;
         self
     }
     /// Add the provided `autoselect` to the attributes built into `Media`.
     pub fn with_autoselect(mut self) -> Self {
-        self.autoselect = true;
+        self.attribute_list.autoselect = true;
         self
     }
     /// Add the provided `forced` to the attributes built into `Media`.
     pub fn with_forced(mut self) -> Self {
-        self.forced = true;
+        self.attribute_list.forced = true;
         self
     }
     /// Add the provided `instream_id` to the attributes built into `Media`.
     pub fn with_instream_id(mut self, instream_id: impl Into<Cow<'a, str>>) -> Self {
-        self.instream_id = Some(instream_id.into());
+        self.attribute_list.instream_id = Some(instream_id.into());
         self
     }
     /// Add the provided `bit_depth` to the attributes built into `Media`.
     pub fn with_bit_depth(mut self, bit_depth: u64) -> Self {
-        self.bit_depth = Some(bit_depth);
+        self.attribute_list.bit_depth = Some(bit_depth);
         self
     }
     /// Add the provided `sample_rate` to the attributes built into `Media`.
     pub fn with_sample_rate(mut self, sample_rate: u64) -> Self {
-        self.sample_rate = Some(sample_rate);
+        self.attribute_list.sample_rate = Some(sample_rate);
         self
     }
     /// Add the provided `characteristics` to the attributes built into `Media`.
     pub fn with_characteristics(mut self, characteristics: impl Into<Cow<'a, str>>) -> Self {
-        self.characteristics = Some(characteristics.into());
+        self.attribute_list.characteristics = Some(characteristics.into());
         self
     }
     /// Add the provided `channels` to the attributes built into `Media`.
@@ -738,7 +774,10 @@ impl<'a> MediaBuilder<'a> {
     /// # MediaBuilder, ValidChannels, MediaType, EnumeratedStringList, AudioCodingIdentifier,
     /// # ChannelSpecialUsageIdentifier
     /// # };
-    /// let builder = MediaBuilder::new(MediaType::Audio, "ENGLISH", "SPECIAL-GROUP")
+    /// let builder = MediaBuilder::new()
+    ///     .with_media_type(MediaType::Audio)
+    ///     .with_name("ENGLISH")
+    ///     .with_group_id("SPECIAL-GROUP")
     ///     .with_channels(ValidChannels::new(
     ///         16,
     ///         EnumeratedStringList::from([AudioCodingIdentifier::JointObjectCoding]),
@@ -749,11 +788,14 @@ impl<'a> MediaBuilder<'a> {
     /// syntax defined for `CHANNELS`.
     /// ```
     /// # use m3u8::tag::hls::{ MediaBuilder, MediaType };
-    /// let builder = MediaBuilder::new(MediaType::Audio, "ENGLISH", "SPECIAL-GROUP")
+    /// let builder = MediaBuilder::new()
+    ///     .with_media_type(MediaType::Audio)
+    ///     .with_name("ENGLISH")
+    ///     .with_group_id("SPECIAL-GROUP")
     ///     .with_channels("16/JOC/BINAURAL");
     /// ```
     pub fn with_channels(mut self, channels: impl Into<Cow<'a, str>>) -> Self {
-        self.channels = Some(channels.into());
+        self.attribute_list.channels = Some(channels.into());
         self
     }
 }
@@ -848,7 +890,7 @@ impl<'a> TryFrom<ParsedTag<'a>> for Media<'a> {
 
 impl<'a> Media<'a> {
     /// Constructs a new `Media` tag.
-    pub fn new(attribute_list: MediaAttributeList<'a>) -> Self {
+    fn new(attribute_list: MediaAttributeList<'a>) -> Self {
         let output_line = Cow::Owned(calculate_line(&attribute_list));
         let MediaAttributeList {
             media_type,
@@ -895,7 +937,10 @@ impl<'a> Media<'a> {
     /// ```
     /// # use m3u8::tag::hls::{Media, MediaType, EnumeratedStringList, MediaCharacteristicTag,
     /// # ValidChannels, AudioCodingIdentifier, ChannelSpecialUsageIdentifier};
-    /// let media = Media::builder(MediaType::Audio, "ENGLISH", "SPECIAL-GROUP")
+    /// let media = Media::builder()
+    ///     .with_media_type(MediaType::Audio)
+    ///     .with_name("ENGLISH")
+    ///     .with_group_id("SPECIAL-GROUP")
     ///     .with_uri("special-audio.m3u8")
     ///     .with_language("en")
     ///     .with_default()
@@ -911,12 +956,49 @@ impl<'a> Media<'a> {
     ///     ))
     ///     .finish();
     /// ```
-    pub fn builder(
-        media_type: impl Into<Cow<'a, str>>,
-        name: impl Into<Cow<'a, str>>,
-        group_id: impl Into<Cow<'a, str>>,
-    ) -> MediaBuilder<'a> {
-        MediaBuilder::new(media_type, name, group_id)
+    /// Note that the `finish` method is only callable if the builder has set `media_type`, `name`,
+    /// AND `group_id`. Each of the following fail to compile:
+    /// ```compile_fail
+    /// # use m3u8::tag::hls::Media;
+    /// let media = Media::builder().finish();
+    /// ```
+    /// ```compile_fail
+    /// # use m3u8::tag::hls::Media;
+    /// let media = Media::builder().with_media_type(MediaType::Audio).finish();
+    /// ```
+    /// ```compile_fail
+    /// # use m3u8::tag::hls::Media;
+    /// let media = Media::builder().with_name("test").finish();
+    /// ```
+    /// ```compile_fail
+    /// # use m3u8::tag::hls::Media;
+    /// let media = Media::builder().with_group_id("test").finish();
+    /// ```
+    /// ```compile_fail
+    /// # use m3u8::tag::hls::Media;
+    /// let media = Media::builder()
+    ///     .with_media_type(MediaType::Audio)
+    ///     .with_name("test")
+    ///     .finish();
+    /// ```
+    /// ```compile_fail
+    /// # use m3u8::tag::hls::Media;
+    /// let media = Media::builder()
+    ///     .with_media_type(MediaType::Audio)
+    ///     .with_group_id("test")
+    ///     .finish();
+    /// ```
+    /// ```compile_fail
+    /// # use m3u8::tag::hls::Media;
+    /// let media = Media::builder()
+    ///     .name("test")
+    ///     .with_group_id("test")
+    ///     .finish();
+    /// ```
+    pub fn builder()
+    -> MediaBuilder<'a, MediaTypeNeedsToBeSet, MediaNameNeedsToBeSet, MediaGroupIdNeedsToBeSet>
+    {
+        MediaBuilder::new()
     }
 
     /// Corresponds to the `TYPE` attribute.
@@ -1038,7 +1120,10 @@ impl<'a> Media<'a> {
     /// # use m3u8::tag::hls::{Media, MediaType, InstreamId, Cea608InstreamId};
     /// use m3u8::tag::hls::GetKnown;
     ///
-    /// let tag = Media::builder(MediaType::ClosedCaptions, "name", "id")
+    /// let tag = Media::builder()
+    ///     .with_media_type(MediaType::ClosedCaptions)
+    ///     .with_name("name")
+    ///     .with_group_id("id")
     ///     .with_instream_id(InstreamId::Cea608(Cea608InstreamId::Cc1))
     ///     .finish();
     /// assert_eq!(Some(InstreamId::Cea608(Cea608InstreamId::Cc1)), tag.instream_id().known());
@@ -1326,7 +1411,11 @@ impl<'a> Media<'a> {
     /// ```
     /// # use m3u8::tag::hls::{Media, EnumeratedStringList, AudioCodingIdentifier, ValidChannels,
     /// # GetValid};
-    /// # let mut media = Media::builder("u", "n", "g").finish();
+    /// # let mut media = Media::builder()
+    /// #     .with_media_type("u")
+    /// #     .with_name("n")
+    /// #     .with_group_id("g")
+    /// #     .finish();
     /// media.set_channels(ValidChannels::new(
     ///     12,
     ///     EnumeratedStringList::from([AudioCodingIdentifier::JointObjectCoding]),
@@ -1342,7 +1431,11 @@ impl<'a> Media<'a> {
     /// ```
     /// # use m3u8::tag::hls::{Media, EnumeratedStringList, AudioCodingIdentifier, ValidChannels,
     /// # ChannelSpecialUsageIdentifier, GetValid};
-    /// # let mut media = Media::builder("u", "n", "g").finish();
+    /// # let mut media = Media::builder()
+    /// #     .with_media_type("u")
+    /// #     .with_name("n")
+    /// #     .with_group_id("g")
+    /// #     .finish();
     /// media.set_channels("16/3OA/IMMERSIVE,BED-4,DOF-6");
     /// let channels = media.channels().valid().expect("should be defined");
     /// assert_eq!(16, channels.count());
@@ -1514,7 +1607,10 @@ mod tests {
                 "INSTREAM-ID=\"CC1\""
             )
             .as_bytes(),
-            Media::builder(MediaType::ClosedCaptions, "English", "cc")
+            Media::builder()
+                .with_media_type(MediaType::ClosedCaptions)
+                .with_name("English")
+                .with_group_id("cc")
                 .with_instream_id("CC1")
                 .finish()
                 .into_inner()
@@ -1543,7 +1639,10 @@ mod tests {
                 "CHANNELS=\"2\"",
             )
             .as_bytes(),
-            Media::builder(MediaType::Audio, "English", "stereo")
+            Media::builder()
+                .with_media_type(MediaType::Audio)
+                .with_name("English")
+                .with_group_id("stereo")
                 .with_uri("audio/en/stereo.m3u8")
                 .with_language("en")
                 .with_assoc_language("en")
@@ -1562,7 +1661,10 @@ mod tests {
     }
 
     mutation_tests!(
-        Media::builder(MediaType::Audio, "English", "stereo")
+        Media::builder()
+            .with_media_type(MediaType::Audio)
+            .with_name("English")
+            .with_group_id("stereo")
             .with_uri("audio/en/stereo.m3u8")
             .with_language("en")
             .with_assoc_language("en")

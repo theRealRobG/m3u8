@@ -6,50 +6,75 @@ use crate::{
         value::{ParsedAttributeValue, SemiParsedTagValue},
     },
 };
-use std::{borrow::Cow, collections::HashMap};
+use std::{borrow::Cow, collections::HashMap, marker::PhantomData};
 
 /// The attribute list for the tag (`#EXT-X-CONTENT-STEERING:<attribute-list>`).
 ///
 /// See [`ContentSteering`] for a link to the HLS documentation for these attributes.
 #[derive(Debug, PartialEq, Clone)]
-pub struct ContentSteeringAttributeList<'a> {
+struct ContentSteeringAttributeList<'a> {
     /// Corresponds to the `SERVER-URI` attribute.
     ///
     /// See [`ContentSteering`] for a link to the HLS documentation for this attribute.
-    pub server_uri: Cow<'a, str>,
+    server_uri: Cow<'a, str>,
     /// Corresponds to the `PATHWAY-ID` attribute.
     ///
     /// See [`ContentSteering`] for a link to the HLS documentation for this attribute.
-    pub pathway_id: Option<Cow<'a, str>>,
-}
-
-/// A builder for convenience in constructing a [`ContentSteering`].
-#[derive(Debug, PartialEq, Clone)]
-pub struct ContentSteeringBuilder<'a> {
-    server_uri: Cow<'a, str>,
     pathway_id: Option<Cow<'a, str>>,
 }
-impl<'a> ContentSteeringBuilder<'a> {
+
+/// Placeholder struct for [`ContentSteeringBuilder`] indicating that `server_uri` needs to be set.
+#[derive(Debug, Clone, Copy)]
+pub struct ContentSteeringServerUriNeedsToBeSet;
+/// Placeholder struct for [`ContentSteeringBuilder`] indicating that `server_uri` has been set.
+#[derive(Debug, Clone, Copy)]
+pub struct ContentSteeringServerUriHasBeenSet;
+
+/// A builder for convenience in constructing a [`ContentSteering`].
+///
+/// Builder pattern inspired by [Sguaba]
+///
+/// [Sguaba]: https://github.com/helsing-ai/sguaba/blob/8dadfe066197551b0601e01676f8d13ef1168785/src/directions.rs#L271-L291
+#[derive(Debug, PartialEq, Clone)]
+pub struct ContentSteeringBuilder<'a, ServerUriStatus> {
+    attribute_list: ContentSteeringAttributeList<'a>,
+    attribute_status: PhantomData<ServerUriStatus>,
+}
+impl<'a> ContentSteeringBuilder<'a, ContentSteeringServerUriNeedsToBeSet> {
     /// Create a new builder.
-    pub fn new(server_uri: impl Into<Cow<'a, str>>) -> Self {
+    pub fn new() -> Self {
         Self {
-            server_uri: server_uri.into(),
-            pathway_id: Default::default(),
+            attribute_list: ContentSteeringAttributeList {
+                server_uri: Cow::Borrowed(""),
+                pathway_id: Default::default(),
+            },
+            attribute_status: PhantomData,
+        }
+    }
+}
+impl<'a> ContentSteeringBuilder<'a, ContentSteeringServerUriHasBeenSet> {
+    /// Finish building and construct the `ContentSteering`.
+    pub fn finish(self) -> ContentSteering<'a> {
+        ContentSteering::new(self.attribute_list)
+    }
+}
+impl<'a, ServerUriStatus> ContentSteeringBuilder<'a, ServerUriStatus> {
+    /// Add the provided `server_uri` to the attributes that are built into the `ContentSteering`.
+    pub fn with_server_uri(
+        mut self,
+        server_uri: impl Into<Cow<'a, str>>,
+    ) -> ContentSteeringBuilder<'a, ContentSteeringServerUriHasBeenSet> {
+        self.attribute_list.server_uri = server_uri.into();
+        ContentSteeringBuilder {
+            attribute_list: self.attribute_list,
+            attribute_status: PhantomData,
         }
     }
 
     /// Add the provided `pathway_id` to the attributes that are built into the `ContentSteering`.
     pub fn with_pathway_id(mut self, pathway_id: impl Into<Cow<'a, str>>) -> Self {
-        self.pathway_id = Some(pathway_id.into());
+        self.attribute_list.pathway_id = Some(pathway_id.into());
         self
-    }
-
-    /// Finish building and construct the `ContentSteering`.
-    pub fn finish(self) -> ContentSteering<'a> {
-        ContentSteering::new(ContentSteeringAttributeList {
-            server_uri: self.server_uri,
-            pathway_id: self.pathway_id,
-        })
     }
 }
 
@@ -96,7 +121,7 @@ impl<'a> TryFrom<ParsedTag<'a>> for ContentSteering<'a> {
 
 impl<'a> ContentSteering<'a> {
     /// Constructs a new `ContentSteering` tag.
-    pub fn new(attribute_list: ContentSteeringAttributeList<'a>) -> Self {
+    fn new(attribute_list: ContentSteeringAttributeList<'a>) -> Self {
         let output_line = Cow::Owned(calculate_line(&attribute_list));
         let ContentSteeringAttributeList {
             server_uri,
@@ -116,12 +141,19 @@ impl<'a> ContentSteering<'a> {
     /// For example, we could construct a `ContentSteering` as such:
     /// ```
     /// # use m3u8::tag::hls::ContentSteering;
-    /// let content_steering = ContentSteering::builder("https://example.com/steering.json")
+    /// let content_steering = ContentSteering::builder()
+    ///     .with_server_uri("https://example.com/steering.json")
     ///     .with_pathway_id("1234")
     ///     .finish();
     /// ```
-    pub fn builder(server_uri: impl Into<Cow<'a, str>>) -> ContentSteeringBuilder<'a> {
-        ContentSteeringBuilder::new(server_uri)
+    /// Note that the `finish` method is only callable if the builder has set `server_uri`. The
+    /// following fail to compile:
+    /// ```compile_fail
+    /// # use m3u8::tag::hls::ContentSteering;
+    /// let content_steering = ContentSteering::builder().finish();
+    /// ```
+    pub fn builder() -> ContentSteeringBuilder<'a, ContentSteeringServerUriNeedsToBeSet> {
+        ContentSteeringBuilder::new()
     }
 
     /// Corresponds to the `SERVER-URI` attribute.
@@ -211,7 +243,9 @@ mod tests {
 
     #[test]
     fn new_without_pathway_id_should_be_valid_line() {
-        let tag = ContentSteering::builder("example.json").finish();
+        let tag = ContentSteering::builder()
+            .with_server_uri("example.json")
+            .finish();
         assert_eq!(
             b"#EXT-X-CONTENT-STEERING:SERVER-URI=\"example.json\"",
             tag.into_inner().value()
@@ -220,7 +254,8 @@ mod tests {
 
     #[test]
     fn new_with_pathway_id_should_be_valid_line() {
-        let tag = ContentSteering::builder("example.json")
+        let tag = ContentSteering::builder()
+            .with_server_uri("example.json")
             .with_pathway_id("1234")
             .finish();
         assert_eq!(
@@ -230,7 +265,8 @@ mod tests {
     }
 
     mutation_tests!(
-        ContentSteering::builder("server-uri.json")
+        ContentSteering::builder()
+            .with_server_uri("server-uri.json")
             .with_pathway_id("1234")
             .finish(),
         (server_uri, "other-steering.json", @Attr="SERVER-URI=\"other-steering.json\""),

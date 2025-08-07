@@ -6,49 +6,67 @@ use crate::{
         value::{ParsedAttributeValue, SemiParsedTagValue},
     },
 };
-use std::{borrow::Cow, collections::HashMap, fmt::Display};
+use std::{borrow::Cow, collections::HashMap, fmt::Display, marker::PhantomData};
 
 /// The attribute list for the tag (`#EXT-X-MAP:<attribute-list>`).
 ///
 /// See [`Map`] for a link to the HLS documentation for this attribute.
-#[derive(Debug, PartialEq, Clone)]
-pub struct MapAttributeList<'a> {
+#[derive(Debug, Clone)]
+struct MapAttributeList<'a> {
     /// Corresponds to the `URI` attribute.
     ///
     /// See [`Map`] for a link to the HLS documentation for this attribute.
-    pub uri: Cow<'a, str>,
+    uri: Cow<'a, str>,
     /// Corresponds to the `BYTERANGE` attribute.
     ///
     /// See [`Map`] for a link to the HLS documentation for this attribute.
-    pub byterange: Option<MapByterange>,
-}
-
-/// A builder for convenience in constructing a [`Map`].
-#[derive(Debug, PartialEq, Clone)]
-pub struct MapBuilder<'a> {
-    uri: Cow<'a, str>,
     byterange: Option<MapByterange>,
 }
-impl<'a> MapBuilder<'a> {
+
+/// Placeholder struct for [`MapBuilder`] indicating that `uri` needs to be set.
+#[derive(Debug, Clone, Copy)]
+pub struct MapUriNeedsToBeSet;
+/// Placeholder struct for [`MapBuilder`] indicating that `uri` has been set.
+#[derive(Debug, Clone, Copy)]
+pub struct MapUriHasBeenSet;
+
+/// A builder for convenience in constructing a [`Map`].
+#[derive(Debug, Clone)]
+pub struct MapBuilder<'a, UriStatus> {
+    attribute_list: MapAttributeList<'a>,
+    uri_status: PhantomData<UriStatus>,
+}
+impl<'a> MapBuilder<'a, MapUriNeedsToBeSet> {
     /// Create a new builder.
-    pub fn new(uri: impl Into<Cow<'a, str>>) -> Self {
+    pub fn new() -> Self {
         Self {
-            uri: uri.into(),
-            byterange: Default::default(),
+            attribute_list: MapAttributeList {
+                uri: Cow::Borrowed(""),
+                byterange: Default::default(),
+            },
+            uri_status: PhantomData,
         }
     }
-
+}
+impl<'a> MapBuilder<'a, MapUriHasBeenSet> {
     /// Finish building and construct the `Map`.
     pub fn finish(self) -> Map<'a> {
-        Map::new(MapAttributeList {
-            uri: self.uri,
-            byterange: self.byterange,
-        })
+        Map::new(self.attribute_list)
+    }
+}
+impl<'a, UriStatus> MapBuilder<'a, UriStatus> {
+    /// Add the provided `uri` to the attributes built into `Map`.
+    pub fn with_uri(mut self, uri: impl Into<Cow<'a, str>>) -> MapBuilder<'a, MapUriHasBeenSet> {
+        self.attribute_list.uri = uri.into();
+        MapBuilder {
+            attribute_list: self.attribute_list,
+            uri_status: PhantomData,
+        }
     }
 
     /// Add the provided `byterange` to the attributes built into `Map`.
     pub fn with_byterange(mut self, byterange: MapByterange) -> Self {
-        self.byterange = Some(byterange);
+        self.attribute_list.byterange = Some(byterange);
         self
     }
 }
@@ -113,7 +131,7 @@ impl<'a> TryFrom<ParsedTag<'a>> for Map<'a> {
 
 impl<'a> Map<'a> {
     /// Constructs a new `Map` tag.
-    pub fn new(attribute_list: MapAttributeList<'a>) -> Self {
+    fn new(attribute_list: MapAttributeList<'a>) -> Self {
         let output_line = Cow::Owned(calculate_line(&attribute_list));
         let MapAttributeList { uri, byterange } = attribute_list;
         Self {
@@ -130,12 +148,19 @@ impl<'a> Map<'a> {
     /// For example, we could construct a `Map` as such:
     /// ```
     /// # use m3u8::tag::hls::{Map, MapByterange};
-    /// let map = Map::builder("uri")
+    /// let map = Map::builder()
+    ///     .with_uri("uri")
     ///     .with_byterange(MapByterange { length: 1024, offset: 0 })
     ///     .finish();
     /// ```
-    pub fn builder(uri: impl Into<Cow<'a, str>>) -> MapBuilder<'a> {
-        MapBuilder::new(uri)
+    /// Note that the `finish` method is only callable if the builder has set `uri`. The following
+    /// will fail to compile:
+    /// ```compile_fail
+    /// # use m3u8::tag::hls::Map;
+    /// let map = Map::builder().finish();
+    /// ```
+    pub fn builder() -> MapBuilder<'a, MapUriNeedsToBeSet> {
+        MapBuilder::new()
     }
 
     /// Corresponds to the `URI` attribute.
@@ -228,7 +253,11 @@ mod tests {
     fn as_str_no_byterange_should_be_valid() {
         assert_eq!(
             b"#EXT-X-MAP:URI=\"example.mp4\"",
-            Map::builder("example.mp4").finish().into_inner().value()
+            Map::builder()
+                .with_uri("example.mp4")
+                .finish()
+                .into_inner()
+                .value()
         );
     }
 
@@ -236,7 +265,8 @@ mod tests {
     fn as_str_with_byterange_should_be_valid() {
         assert_eq!(
             b"#EXT-X-MAP:URI=\"example.mp4\",BYTERANGE=\"1024@512\"",
-            Map::builder("example.mp4")
+            Map::builder()
+                .with_uri("example.mp4")
                 .with_byterange(MapByterange {
                     length: 1024,
                     offset: 512
@@ -248,7 +278,8 @@ mod tests {
     }
 
     mutation_tests!(
-        Map::builder("example.mp4")
+        Map::builder()
+            .with_uri("example.mp4")
             .with_byterange(MapByterange {
                 length: 1024,
                 offset: 512
