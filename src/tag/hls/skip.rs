@@ -29,6 +29,10 @@ pub struct SkipSkippedSegmentsNeedsToBeSet;
 pub struct SkipSkippedSegmentsHasBeenSet;
 
 /// A builder for convenience in constructing a [`Skip`].
+///
+/// Builder pattern inspired by [Sguaba]
+///
+/// [Sguaba]: https://github.com/helsing-ai/sguaba/blob/8dadfe066197551b0601e01676f8d13ef1168785/src/directions.rs#L271-L291
 #[derive(Debug, Clone)]
 pub struct SkipBuilder<'a, SkippedSegmentsStatus> {
     attribute_list: SkipAttributeList<'a>,
