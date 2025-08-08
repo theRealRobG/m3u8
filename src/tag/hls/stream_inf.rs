@@ -7,7 +7,7 @@ use crate::{
     },
     utils::AsStaticCow,
 };
-use std::{borrow::Cow, collections::HashMap, fmt::Display};
+use std::{borrow::Cow, collections::HashMap, fmt::Display, marker::PhantomData};
 
 /// Corresponds to the `#EXT-X-STREAM-INF:HDCP-LEVEL` attribute.
 ///
@@ -411,159 +411,149 @@ impl<'a> From<VideoLayout<'a>> for Cow<'a, str> {
 /// The attribute list for the tag (`#EXT-X-STREAM-INF:<attribute-list>`).
 ///
 /// See [`StreamInf`] for a link to the HLS documentation for this attribute.
-#[derive(Debug, PartialEq, Clone)]
-pub struct StreamInfAttributeList<'a> {
+#[derive(Debug, Clone)]
+struct StreamInfAttributeList<'a> {
     /// Corresponds to the `BANDWIDTH` attribute.
     ///
     /// See [`StreamInf`] for a link to the HLS documentation for this attribute.
-    pub bandwidth: u64,
+    bandwidth: u64,
     /// Corresponds to the `AVERAGE-BANDWIDTH` attribute.
     ///
     /// See [`StreamInf`] for a link to the HLS documentation for this attribute.
-    pub average_bandwidth: Option<u64>,
+    average_bandwidth: Option<u64>,
     /// Corresponds to the `SCORE` attribute.
     ///
     /// See [`StreamInf`] for a link to the HLS documentation for this attribute.
-    pub score: Option<f64>,
+    score: Option<f64>,
     /// Corresponds to the `CODECS` attribute.
     ///
     /// See [`StreamInf`] for a link to the HLS documentation for this attribute.
-    pub codecs: Option<Cow<'a, str>>,
+    codecs: Option<Cow<'a, str>>,
     /// Corresponds to the `SUPPLEMENTAL-CODECS` attribute.
     ///
     /// See [`StreamInf`] for a link to the HLS documentation for this attribute.
-    pub supplemental_codecs: Option<Cow<'a, str>>,
+    supplemental_codecs: Option<Cow<'a, str>>,
     /// Corresponds to the `RESOLUTION` attribute.
     ///
     /// See [`StreamInf`] for a link to the HLS documentation for this attribute.
-    pub resolution: Option<DecimalResolution>,
+    resolution: Option<DecimalResolution>,
     /// Corresponds to the `FRAME-RATE` attribute.
     ///
     /// See [`StreamInf`] for a link to the HLS documentation for this attribute.
-    pub frame_rate: Option<f64>,
+    frame_rate: Option<f64>,
     /// Corresponds to the `HDCP-LEVEL` attribute.
     ///
     /// See [`StreamInf`] for a link to the HLS documentation for this attribute.
-    pub hdcp_level: Option<Cow<'a, str>>,
+    hdcp_level: Option<Cow<'a, str>>,
     /// Corresponds to the `ALLOWED-CPC` attribute.
     ///
     /// See [`StreamInf`] for a link to the HLS documentation for this attribute.
-    pub allowed_cpc: Option<Cow<'a, str>>,
+    allowed_cpc: Option<Cow<'a, str>>,
     /// Corresponds to the `VIDEO-RANGE` attribute.
     ///
     /// See [`StreamInf`] for a link to the HLS documentation for this attribute.
-    pub video_range: Option<Cow<'a, str>>,
+    video_range: Option<Cow<'a, str>>,
     /// Corresponds to the `REQ-VIDEO-LAYOUT` attribute.
     ///
     /// See [`StreamInf`] for a link to the HLS documentation for this attribute.
-    pub req_video_layout: Option<Cow<'a, str>>,
+    req_video_layout: Option<Cow<'a, str>>,
     /// Corresponds to the `STABLE-VARIANT-ID` attribute.
     ///
     /// See [`StreamInf`] for a link to the HLS documentation for this attribute.
-    pub stable_variant_id: Option<Cow<'a, str>>,
+    stable_variant_id: Option<Cow<'a, str>>,
     /// Corresponds to the `AUDIO` attribute.
     ///
     /// See [`StreamInf`] for a link to the HLS documentation for this attribute.
-    pub audio: Option<Cow<'a, str>>,
+    audio: Option<Cow<'a, str>>,
     /// Corresponds to the `VIDEO` attribute.
     ///
     /// See [`StreamInf`] for a link to the HLS documentation for this attribute.
-    pub video: Option<Cow<'a, str>>,
+    video: Option<Cow<'a, str>>,
     /// Corresponds to the `SUBTITLES` attribute.
     ///
     /// See [`StreamInf`] for a link to the HLS documentation for this attribute.
-    pub subtitles: Option<Cow<'a, str>>,
+    subtitles: Option<Cow<'a, str>>,
     /// Corresponds to the `CLOSED-CAPTIONS` attribute.
     ///
     /// See [`StreamInf`] for a link to the HLS documentation for this attribute.
-    pub closed_captions: Option<Cow<'a, str>>,
+    closed_captions: Option<Cow<'a, str>>,
     /// Corresponds to the `PATHWAY-ID` attribute.
     ///
     /// See [`StreamInf`] for a link to the HLS documentation for this attribute.
-    pub pathway_id: Option<Cow<'a, str>>,
-}
-
-/// A builder for convenience in constructing a [`StreamInf`].
-#[derive(Debug, PartialEq, Clone)]
-pub struct StreamInfBuilder<'a> {
-    bandwidth: u64,
-    average_bandwidth: Option<u64>,
-    score: Option<f64>,
-    codecs: Option<Cow<'a, str>>,
-    supplemental_codecs: Option<Cow<'a, str>>,
-    resolution: Option<DecimalResolution>,
-    frame_rate: Option<f64>,
-    hdcp_level: Option<Cow<'a, str>>,
-    allowed_cpc: Option<Cow<'a, str>>,
-    video_range: Option<Cow<'a, str>>,
-    req_video_layout: Option<Cow<'a, str>>,
-    stable_variant_id: Option<Cow<'a, str>>,
-    audio: Option<Cow<'a, str>>,
-    video: Option<Cow<'a, str>>,
-    subtitles: Option<Cow<'a, str>>,
-    closed_captions: Option<Cow<'a, str>>,
     pathway_id: Option<Cow<'a, str>>,
 }
-impl<'a> StreamInfBuilder<'a> {
+
+/// Placeholder struct for [`StreamInfBuilder`] indicating that `bandwidth` needs to be set.
+#[derive(Debug, Clone, Copy)]
+pub struct StreamInfBandwidthNeedsToBeSet;
+/// Placeholder struct for [`StreamInfBuilder`] indicating that `bandwidth` has been set.
+#[derive(Debug, Clone, Copy)]
+pub struct StreamInfBandwidthHasBeenSet;
+
+/// A builder for convenience in constructing a [`StreamInf`].
+#[derive(Debug, Clone)]
+pub struct StreamInfBuilder<'a, BandwidthStatus> {
+    attribute_list: StreamInfAttributeList<'a>,
+    bandwidth_status: PhantomData<BandwidthStatus>,
+}
+impl<'a> StreamInfBuilder<'a, StreamInfBandwidthNeedsToBeSet> {
     /// Creates a new builder.
-    pub fn new(bandwidth: u64) -> Self {
+    pub fn new() -> Self {
         Self {
-            bandwidth,
-            average_bandwidth: Default::default(),
-            score: Default::default(),
-            codecs: Default::default(),
-            supplemental_codecs: Default::default(),
-            resolution: Default::default(),
-            frame_rate: Default::default(),
-            hdcp_level: Default::default(),
-            allowed_cpc: Default::default(),
-            video_range: Default::default(),
-            req_video_layout: Default::default(),
-            stable_variant_id: Default::default(),
-            audio: Default::default(),
-            video: Default::default(),
-            subtitles: Default::default(),
-            closed_captions: Default::default(),
-            pathway_id: Default::default(),
+            attribute_list: StreamInfAttributeList {
+                bandwidth: Default::default(),
+                average_bandwidth: Default::default(),
+                score: Default::default(),
+                codecs: Default::default(),
+                supplemental_codecs: Default::default(),
+                resolution: Default::default(),
+                frame_rate: Default::default(),
+                hdcp_level: Default::default(),
+                allowed_cpc: Default::default(),
+                video_range: Default::default(),
+                req_video_layout: Default::default(),
+                stable_variant_id: Default::default(),
+                audio: Default::default(),
+                video: Default::default(),
+                subtitles: Default::default(),
+                closed_captions: Default::default(),
+                pathway_id: Default::default(),
+            },
+            bandwidth_status: PhantomData,
         }
     }
-
+}
+impl<'a> StreamInfBuilder<'a, StreamInfBandwidthHasBeenSet> {
     /// Finish building and construct the `StreamInf`.
     pub fn finish(self) -> StreamInf<'a> {
-        StreamInf::new(StreamInfAttributeList {
-            bandwidth: self.bandwidth,
-            average_bandwidth: self.average_bandwidth,
-            score: self.score,
-            codecs: self.codecs,
-            supplemental_codecs: self.supplemental_codecs,
-            resolution: self.resolution,
-            frame_rate: self.frame_rate,
-            hdcp_level: self.hdcp_level,
-            allowed_cpc: self.allowed_cpc,
-            video_range: self.video_range,
-            req_video_layout: self.req_video_layout,
-            stable_variant_id: self.stable_variant_id,
-            audio: self.audio,
-            video: self.video,
-            subtitles: self.subtitles,
-            closed_captions: self.closed_captions,
-            pathway_id: self.pathway_id,
-        })
+        StreamInf::new(self.attribute_list)
     }
-
+}
+impl<'a, BandwidthStatus> StreamInfBuilder<'a, BandwidthStatus> {
+    /// Add the provided `bandwidth` to the attributes built into `StreamInf`.
+    pub fn with_bandwidth(
+        mut self,
+        bandwidth: u64,
+    ) -> StreamInfBuilder<'a, StreamInfBandwidthHasBeenSet> {
+        self.attribute_list.bandwidth = bandwidth;
+        StreamInfBuilder {
+            attribute_list: self.attribute_list,
+            bandwidth_status: PhantomData,
+        }
+    }
     /// Add the provided `average_bandwidth` to the attributes built into `StreamInf`.
     pub fn with_average_bandwidth(mut self, average_bandwidth: u64) -> Self {
-        self.average_bandwidth = Some(average_bandwidth);
+        self.attribute_list.average_bandwidth = Some(average_bandwidth);
         self
     }
     /// Add the provided `score` to the attributes built into `StreamInf`.
     pub fn with_score(mut self, score: f64) -> Self {
-        self.score = Some(score);
+        self.attribute_list.score = Some(score);
         self
     }
     /// Add the provided `codecs` to the attributes built into `StreamInf`.
     pub fn with_codecs(mut self, codecs: impl Into<Cow<'a, str>>) -> Self {
-        self.codecs = Some(codecs.into());
+        self.attribute_list.codecs = Some(codecs.into());
         self
     }
     /// Add the provided `supplemental_codecs` to the attributes built into `StreamInf`.
@@ -571,17 +561,17 @@ impl<'a> StreamInfBuilder<'a> {
         mut self,
         supplemental_codecs: impl Into<Cow<'a, str>>,
     ) -> Self {
-        self.supplemental_codecs = Some(supplemental_codecs.into());
+        self.attribute_list.supplemental_codecs = Some(supplemental_codecs.into());
         self
     }
     /// Add the provided `resolution` to the attributes built into `StreamInf`.
     pub fn with_resolution(mut self, resolution: DecimalResolution) -> Self {
-        self.resolution = Some(resolution);
+        self.attribute_list.resolution = Some(resolution);
         self
     }
     /// Add the provided `frame_rate` to the attributes built into `StreamInf`.
     pub fn with_frame_rate(mut self, frame_rate: f64) -> Self {
-        self.frame_rate = Some(frame_rate);
+        self.attribute_list.frame_rate = Some(frame_rate);
         self
     }
     /// Add the provided `hdcp_level` to the attributes built into `StreamInf`.
@@ -590,22 +580,22 @@ impl<'a> StreamInfBuilder<'a> {
     /// For example:
     /// ```
     /// # use m3u8::tag::hls::{StreamInfBuilder, HdcpLevel};
-    /// let builder = StreamInfBuilder::new(10000000)
+    /// let builder = StreamInfBuilder::new()
     ///     .with_hdcp_level(HdcpLevel::Type1);
     /// ```
     /// Alternatively, a string slice can be used:
     /// ```
     /// # use m3u8::tag::hls::{StreamInfBuilder, HdcpLevel};
-    /// let builder = StreamInfBuilder::new(10000000)
+    /// let builder = StreamInfBuilder::new()
     ///     .with_hdcp_level("TYPE-1");
     /// ```
     pub fn with_hdcp_level(mut self, hdcp_level: impl Into<Cow<'a, str>>) -> Self {
-        self.hdcp_level = Some(hdcp_level.into());
+        self.attribute_list.hdcp_level = Some(hdcp_level.into());
         self
     }
     /// Add the provided `allowed_cpc` to the attributes built into `StreamInf`.
     pub fn with_allowed_cpc(mut self, allowed_cpc: impl Into<Cow<'a, str>>) -> Self {
-        self.allowed_cpc = Some(allowed_cpc.into());
+        self.attribute_list.allowed_cpc = Some(allowed_cpc.into());
         self
     }
     /// Add the provided `video_range` to the attributes built into `StreamInf`.
@@ -614,17 +604,17 @@ impl<'a> StreamInfBuilder<'a> {
     /// here. For example:
     /// ```
     /// # use m3u8::tag::hls::{StreamInfBuilder, VideoRange};
-    /// let builder = StreamInfBuilder::new(10000000)
+    /// let builder = StreamInfBuilder::new()
     ///     .with_video_range(VideoRange::Pq);
     /// ```
     /// Alternatively, a string slice can be used:
     /// ```
     /// # use m3u8::tag::hls::{StreamInfBuilder, VideoRange};
-    /// let builder = StreamInfBuilder::new(10000000)
+    /// let builder = StreamInfBuilder::new()
     ///     .with_video_range("PQ");
     /// ```
     pub fn with_video_range(mut self, video_range: impl Into<Cow<'a, str>>) -> Self {
-        self.video_range = Some(video_range.into());
+        self.attribute_list.video_range = Some(video_range.into());
         self
     }
     /// Add the provided `req_video_layout` to the attributes built into `StreamInf`.
@@ -636,7 +626,7 @@ impl<'a> StreamInfBuilder<'a> {
     /// # StreamInfBuilder, VideoLayout, EnumeratedStringList, VideoChannelSpecifier,
     /// # VideoProjectionSpecifier
     /// # };
-    /// let builder = StreamInfBuilder::new(10000000)
+    /// let builder = StreamInfBuilder::new()
     ///     .with_req_video_layout(VideoLayout::new(
     ///         EnumeratedStringList::from([VideoChannelSpecifier::Stereo]),
     ///         EnumeratedStringList::from([VideoProjectionSpecifier::Equirectangular]),
@@ -649,41 +639,41 @@ impl<'a> StreamInfBuilder<'a> {
     /// # StreamInfBuilder, VideoLayout, EnumeratedStringList, VideoChannelSpecifier,
     /// # VideoProjectionSpecifier
     /// # };
-    /// let builder = StreamInfBuilder::new(10000000)
+    /// let builder = StreamInfBuilder::new()
     ///     .with_req_video_layout("CH-STEREO/PROJ-EQUI");
     /// ```
     pub fn with_req_video_layout(mut self, req_video_layout: impl Into<Cow<'a, str>>) -> Self {
-        self.req_video_layout = Some(req_video_layout.into());
+        self.attribute_list.req_video_layout = Some(req_video_layout.into());
         self
     }
     /// Add the provided `stable_variant_id` to the attributes built into `StreamInf`.
     pub fn with_stable_variant_id(mut self, stable_variant_id: impl Into<Cow<'a, str>>) -> Self {
-        self.stable_variant_id = Some(stable_variant_id.into());
+        self.attribute_list.stable_variant_id = Some(stable_variant_id.into());
         self
     }
     /// Add the provided `audio` to the attributes built into `StreamInf`.
     pub fn with_audio(mut self, audio: impl Into<Cow<'a, str>>) -> Self {
-        self.audio = Some(audio.into());
+        self.attribute_list.audio = Some(audio.into());
         self
     }
     /// Add the provided `video` to the attributes built into `StreamInf`.
     pub fn with_video(mut self, video: impl Into<Cow<'a, str>>) -> Self {
-        self.video = Some(video.into());
+        self.attribute_list.video = Some(video.into());
         self
     }
     /// Add the provided `subtitles` to the attributes built into `StreamInf`.
     pub fn with_subtitles(mut self, subtitles: impl Into<Cow<'a, str>>) -> Self {
-        self.subtitles = Some(subtitles.into());
+        self.attribute_list.subtitles = Some(subtitles.into());
         self
     }
     /// Add the provided `closed_captions` to the attributes built into `StreamInf`.
     pub fn with_closed_captions(mut self, closed_captions: impl Into<Cow<'a, str>>) -> Self {
-        self.closed_captions = Some(closed_captions.into());
+        self.attribute_list.closed_captions = Some(closed_captions.into());
         self
     }
     /// Add the provided `pathway_id` to the attributes built into `StreamInf`.
     pub fn with_pathway_id(mut self, pathway_id: impl Into<Cow<'a, str>>) -> Self {
-        self.pathway_id = Some(pathway_id.into());
+        self.attribute_list.pathway_id = Some(pathway_id.into());
         self
     }
 }
@@ -777,7 +767,7 @@ impl<'a> TryFrom<ParsedTag<'a>> for StreamInf<'a> {
 
 impl<'a> StreamInf<'a> {
     /// Constructs a new `StreamInf` tag.
-    pub fn new(attribute_list: StreamInfAttributeList<'a>) -> Self {
+    fn new(attribute_list: StreamInfAttributeList<'a>) -> Self {
         let output_line = Cow::Owned(calculate_line(&attribute_list));
         let StreamInfAttributeList {
             bandwidth,
@@ -827,7 +817,8 @@ impl<'a> StreamInf<'a> {
     /// For example, we could construct a `StreamInf` as such:
     /// ```
     /// # use m3u8::tag::{value::DecimalResolution, hls::{StreamInf, HdcpLevel, VideoRange}};
-    /// let stream_inf = StreamInf::builder(10000000)
+    /// let stream_inf = StreamInf::builder()
+    ///     .with_bandwidth(10000000)
     ///     .with_codecs("hvc1.2.4.L153.b0")
     ///     .with_supplemental_codecs("dvh1.08.07/db4h")
     ///     .with_resolution(DecimalResolution { width: 3840, height: 2160 })
@@ -835,8 +826,14 @@ impl<'a> StreamInf<'a> {
     ///     .with_video_range(VideoRange::Hlg)
     ///     .finish();
     /// ```
-    pub fn builder(bandwidth: u64) -> StreamInfBuilder<'a> {
-        StreamInfBuilder::new(bandwidth)
+    /// Note that the `finish` method is only callable if the builder has set `bandwidth`. The
+    /// following fails to compile:
+    /// ```compile_fail
+    /// # use m3u8::tag::hls::StreamInf;
+    /// let stream_inf = StreamInf::builder().finish();
+    /// ```
+    pub fn builder() -> StreamInfBuilder<'a, StreamInfBandwidthNeedsToBeSet> {
+        StreamInfBuilder::new()
     }
 
     /// Corresponds to the `BANDWIDTH` attribute.
@@ -942,7 +939,8 @@ impl<'a> StreamInf<'a> {
     /// # use m3u8::tag::hls::{StreamInf, HdcpLevel};
     /// use m3u8::tag::hls::GetKnown;
     ///
-    /// let tag = StreamInf::builder(10000000)
+    /// let tag = StreamInf::builder()
+    ///     .with_bandwidth(10000000)
     ///     .with_hdcp_level(HdcpLevel::Type0)
     ///     .finish();
     /// assert_eq!(Some(HdcpLevel::Type0), tag.hdcp_level().known());
@@ -982,7 +980,8 @@ impl<'a> StreamInf<'a> {
     /// # use m3u8::tag::hls::{StreamInf, VideoRange};
     /// use m3u8::tag::hls::GetKnown;
     ///
-    /// let tag = StreamInf::builder(10000000)
+    /// let tag = StreamInf::builder()
+    ///     .with_bandwidth(10000000)
     ///     .with_video_range(VideoRange::Pq)
     ///     .finish();
     /// assert_eq!(Some(VideoRange::Pq), tag.video_range().known());
@@ -1308,7 +1307,7 @@ impl<'a> StreamInf<'a> {
     /// `VideoLayout` directly here. For example:
     /// ```
     /// # use m3u8::tag::hls::{StreamInf, EnumeratedStringList, VideoChannelSpecifier, VideoLayout};
-    /// # let mut stream_inf = StreamInf::builder(10000000).finish();
+    /// # let mut stream_inf = StreamInf::builder().with_bandwidth(10000000).finish();
     /// stream_inf.set_req_video_layout(VideoLayout::new(
     ///     EnumeratedStringList::from([
     ///         VideoChannelSpecifier::Stereo, VideoChannelSpecifier::Mono
@@ -1325,7 +1324,7 @@ impl<'a> StreamInf<'a> {
     /// ```
     /// # use m3u8::tag::hls::{StreamInf, EnumeratedStringList, VideoChannelSpecifier, VideoLayout,
     /// # VideoProjectionSpecifier};
-    /// # let mut stream_inf = StreamInf::builder(10000000).finish();
+    /// # let mut stream_inf = StreamInf::builder().with_bandwidth(10000000).finish();
     /// stream_inf.set_req_video_layout("CH-STEREO,CH-MONO/PROJ-HEQU");
     /// let video_layout = stream_inf.req_video_layout().expect("should be defined");
     /// assert_eq!(2, video_layout.channels().iter().count());
@@ -1610,7 +1609,11 @@ mod tests {
     fn as_str_with_no_options_should_be_valid() {
         assert_eq!(
             b"#EXT-X-STREAM-INF:BANDWIDTH=10000000",
-            StreamInf::builder(10000000).finish().into_inner().value()
+            StreamInf::builder()
+                .with_bandwidth(10000000)
+                .finish()
+                .into_inner()
+                .value()
         );
     }
 
@@ -1638,7 +1641,8 @@ mod tests {
                 "PATHWAY-ID=\"1234\"",
             )
             .as_bytes(),
-            StreamInf::builder(10000000)
+            StreamInf::builder()
+                .with_bandwidth(10000000)
                 .with_average_bandwidth(9000000)
                 .with_score(2.0)
                 .with_codecs("hvc1.2.4.L153.b0,ec-3")
@@ -1727,7 +1731,8 @@ mod tests {
     }
 
     mutation_tests!(
-        StreamInf::builder(10000000)
+        StreamInf::builder()
+            .with_bandwidth(10000000)
             .with_average_bandwidth(9000000)
             .with_score(2.0)
             .with_codecs("hvc1.2.4.L153.b0,ec-3")

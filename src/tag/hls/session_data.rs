@@ -58,7 +58,7 @@ const RAW: &str = "RAW";
 /// The attribute list for the tag (`#EXT-X-SESSION-DATA:<attribute-list>`).
 ///
 /// See [`SessionData`] for a link to the HLS documentation for this attribute.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Clone)]
 struct SessionDataAttributeList<'a> {
     /// Corresponds to the `DATA-ID` attribute.
     ///
@@ -102,7 +102,7 @@ pub struct SessionDataUriIsNotSet;
 pub struct SessionDataUriHasBeenSet;
 
 /// A builder for convenience in constructing a [`SessionData`].
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Clone)]
 pub struct SessionDataBuilder<'a, DataIdStatus, ValueStatus, UriStatus> {
     attribute_list: SessionDataAttributeList<'a>,
     data_id_status: PhantomData<DataIdStatus>,

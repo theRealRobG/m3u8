@@ -603,7 +603,7 @@ mod tests {
     #[test]
     fn start() {
         assert_eq!(
-            Ok(Tag::Start(Start::builder(10.5).finish())),
+            Ok(Tag::Start(Start::builder().with_time_offset(10.5).finish())),
             Tag::try_from(ParsedTag {
                 name: "-X-START",
                 value: SemiParsedTagValue::AttributeList(HashMap::from([(
@@ -613,7 +613,12 @@ mod tests {
                 original_input: b"#EXT-X-START:TIME-OFFSET=10.5"
             })
         );
-        let expected = Tag::Start(Start::builder(10.0).with_precise().finish());
+        let expected = Tag::Start(
+            Start::builder()
+                .with_time_offset(10.0)
+                .with_precise()
+                .finish(),
+        );
         let actual = Tag::try_from(ParsedTag {
             name: "-X-START",
             value: SemiParsedTagValue::AttributeList(HashMap::from([
@@ -1156,7 +1161,8 @@ mod tests {
     fn skip() {
         assert_eq!(
             Ok(Tag::Skip(
-                Skip::builder(100)
+                Skip::builder()
+                    .with_skipped_segments(100)
                     .with_recently_removed_dateranges("1234\tabcd")
                     .finish()
             )),
@@ -1177,7 +1183,9 @@ mod tests {
             })
         );
         assert_eq!(
-            Ok(Tag::Skip(Skip::builder(100).finish())),
+            Ok(Tag::Skip(
+                Skip::builder().with_skipped_segments(100).finish()
+            )),
             Tag::try_from(ParsedTag {
                 name: "-X-SKIP",
                 value: SemiParsedTagValue::AttributeList(HashMap::from([(
@@ -1375,7 +1383,8 @@ mod tests {
     fn stream_inf() {
         assert_eq!(
             Ok(Tag::StreamInf(
-                StreamInf::builder(10000000)
+                StreamInf::builder()
+                    .with_bandwidth(10000000)
                     .with_average_bandwidth(9000000)
                     .with_score(2.0)
                     .with_codecs("hvc1.2.4.L153.b0,ec-3")
@@ -1474,7 +1483,10 @@ mod tests {
         // One more test to check that integer frame rate parses well
         assert_eq!(
             Ok(Tag::StreamInf(
-                StreamInf::builder(10000000).with_frame_rate(25.0).finish()
+                StreamInf::builder()
+                    .with_bandwidth(10000000)
+                    .with_frame_rate(25.0)
+                    .finish()
             )),
             Tag::try_from(ParsedTag {
                 name: "-X-STREAM-INF",
@@ -1487,7 +1499,9 @@ mod tests {
         );
         // Final check with all options unset
         assert_eq!(
-            Ok(Tag::StreamInf(StreamInf::builder(10000000).finish())),
+            Ok(Tag::StreamInf(
+                StreamInf::builder().with_bandwidth(10000000).finish()
+            )),
             Tag::try_from(ParsedTag {
                 name: "-X-STREAM-INF",
                 value: SemiParsedTagValue::AttributeList(HashMap::from([(
@@ -1661,7 +1675,9 @@ mod tests {
     #[test]
     fn session_key() {
         assert_eq!(
-            Ok(Tag::SessionKey(SessionKey::builder("SAMPLE-AES", "skd://some-key-id")
+            Ok(Tag::SessionKey(SessionKey::builder()
+                .with_method("SAMPLE-AES")
+                .with_uri("skd://some-key-id")
                 .with_iv("0xABCD")
                 .with_keyformat("com.apple.streamingkeydelivery")
                 .with_keyformatversions("1")
@@ -1687,7 +1703,10 @@ mod tests {
         );
         assert_eq!(
             Ok(Tag::SessionKey(
-                SessionKey::builder("AES-128", "skd://some-key-id").finish()
+                SessionKey::builder()
+                    .with_method("AES-128")
+                    .with_uri("skd://some-key-id")
+                    .finish()
             )),
             Tag::try_from(ParsedTag {
                 name: "-X-SESSION-KEY",

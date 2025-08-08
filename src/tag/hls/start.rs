@@ -6,49 +6,66 @@ use crate::{
         value::{ParsedAttributeValue, SemiParsedTagValue},
     },
 };
-use std::{borrow::Cow, collections::HashMap};
+use std::{borrow::Cow, collections::HashMap, marker::PhantomData};
 
 /// The attribute list for the tag (`#EXT-X-START:<attribute-list>`).
 ///
 /// See [`Start`] for a link to the HLS documentation for this attribute.
-#[derive(Debug, PartialEq, Clone, Copy)]
-pub struct StartAttributeList {
+#[derive(Debug, Clone, Copy)]
+struct StartAttributeList {
     /// Corresponds to the `TIME-OFFSET` attribute.
     ///
     /// See [`Start`] for a link to the HLS documentation for this attribute.
-    pub time_offset: f64,
+    time_offset: f64,
     /// Corresponds to the `PRECISE` attribute.
     ///
     /// See [`Start`] for a link to the HLS documentation for this attribute.
-    pub precise: bool,
-}
-
-/// A builder for convenience in constructing a [`Start`].
-#[derive(Debug, PartialEq, Clone, Copy)]
-pub struct StartBuilder {
-    time_offset: f64,
     precise: bool,
 }
-impl StartBuilder {
+
+/// Placeholder struct for [`StartBuilder`] indicating that `time_offset` needs to be set.
+#[derive(Debug, Clone, Copy)]
+pub struct StartTimeOffsetNeedsToBeSet;
+/// Placeholder struct for [`StartBuilder`] indicating that `time_offset` has been set.
+#[derive(Debug, Clone, Copy)]
+pub struct StartTimeOffsetHasBeenSet;
+
+/// A builder for convenience in constructing a [`Start`].
+#[derive(Debug, Clone, Copy)]
+pub struct StartBuilder<TimeOffsetStatus> {
+    attribute_list: StartAttributeList,
+    time_offset_status: PhantomData<TimeOffsetStatus>,
+}
+impl StartBuilder<StartTimeOffsetNeedsToBeSet> {
     /// Creates a new builder.
-    pub fn new(time_offset: f64) -> Self {
+    pub fn new() -> Self {
         Self {
-            time_offset,
-            precise: Default::default(),
+            attribute_list: StartAttributeList {
+                time_offset: Default::default(),
+                precise: Default::default(),
+            },
+            time_offset_status: PhantomData,
         }
     }
-
+}
+impl StartBuilder<StartTimeOffsetHasBeenSet> {
     /// Finish building and construct the `Start`.
     pub fn finish<'a>(self) -> Start<'a> {
-        Start::new(StartAttributeList {
-            time_offset: self.time_offset,
-            precise: self.precise,
-        })
+        Start::new(self.attribute_list)
     }
-
+}
+impl<TimeOffsetStatus> StartBuilder<TimeOffsetStatus> {
+    /// Add the provided `time_offset` to the attributes built into `Start`.
+    pub fn with_time_offset(mut self, time_offset: f64) -> StartBuilder<StartTimeOffsetHasBeenSet> {
+        self.attribute_list.time_offset = time_offset;
+        StartBuilder {
+            attribute_list: self.attribute_list,
+            time_offset_status: PhantomData,
+        }
+    }
     /// Add the provided `precise` to the attributes built into `Start`.
     pub fn with_precise(mut self) -> Self {
-        self.precise = true;
+        self.attribute_list.precise = true;
         self
     }
 }
@@ -100,7 +117,7 @@ impl<'a> TryFrom<ParsedTag<'a>> for Start<'a> {
 
 impl<'a> Start<'a> {
     /// Constructs a new `Start` tag.
-    pub fn new(attribute_list: StartAttributeList) -> Self {
+    fn new(attribute_list: StartAttributeList) -> Self {
         let output_line = Cow::Owned(calculate_line(&attribute_list));
         let StartAttributeList {
             time_offset,
@@ -120,12 +137,19 @@ impl<'a> Start<'a> {
     /// For example, we could construct a `Start` as such:
     /// ```
     /// # use m3u8::tag::hls::Start;
-    /// let start = Start::builder(-18.0)
+    /// let start = Start::builder()
+    ///     .with_time_offset(-18.0)
     ///     .with_precise()
     ///     .finish();
     /// ```
-    pub fn builder(time_offset: f64) -> StartBuilder {
-        StartBuilder::new(time_offset)
+    /// Note that the `finish` method is only callable if the builder has set `time_offset`. The
+    /// following fails to compile:
+    /// ```compile_fail
+    /// # use m3u8::tag::hls::Start;
+    /// let start = Start::builder().finish();
+    /// ```
+    pub fn builder() -> StartBuilder<StartTimeOffsetNeedsToBeSet> {
+        StartBuilder::new()
     }
 
     /// Corresponds to the `TIME-OFFSET` attribute.
@@ -204,7 +228,11 @@ mod tests {
     fn as_str_without_precise_should_be_valid() {
         assert_eq!(
             b"#EXT-X-START:TIME-OFFSET=-42",
-            Start::builder(-42.0).finish().into_inner().value()
+            Start::builder()
+                .with_time_offset(-42.0)
+                .finish()
+                .into_inner()
+                .value()
         )
     }
 
@@ -212,7 +240,8 @@ mod tests {
     fn as_str_with_precise_should_be_valid() {
         assert_eq!(
             b"#EXT-X-START:TIME-OFFSET=-42,PRECISE=YES",
-            Start::builder(-42.0)
+            Start::builder()
+                .with_time_offset(-42.0)
                 .with_precise()
                 .finish()
                 .into_inner()
@@ -221,7 +250,7 @@ mod tests {
     }
 
     mutation_tests!(
-        Start::builder(-42.0).finish(),
+        Start::builder().with_time_offset(-42.0).finish(),
         (time_offset, 10.0, @Attr="TIME-OFFSET=10"),
         (precise, true, @Attr="PRECISE=YES")
     );

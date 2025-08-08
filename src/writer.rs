@@ -108,25 +108,31 @@ use std::{
 /// let mut writer = Writer::new(Vec::new());
 /// writer.write_line(HlsLine::from(M3u))?;
 /// writer.write_line(HlsLine::from(
-///     StreamInf::builder(1280000)
+///     StreamInf::builder()
+///         .with_bandwidth(1280000)
 ///         .with_average_bandwidth(1000000)
 ///         .finish(),
 /// ))?;
 /// writer.write_uri("http://example.com/low.m3u8")?;
 /// writer.write_line(HlsLine::from(
-///     StreamInf::builder(2560000)
+///     StreamInf::builder()
+///         .with_bandwidth(2560000)
 ///         .with_average_bandwidth(2000000)
 ///         .finish(),
 /// ))?;
 /// writer.write_uri("http://example.com/mid.m3u8")?;
 /// writer.write_line(HlsLine::from(
-///     StreamInf::builder(7680000)
+///     StreamInf::builder()
+///         .with_bandwidth(7680000)
 ///         .with_average_bandwidth(6000000)
 ///         .finish(),
 /// ))?;
 /// writer.write_uri("http://example.com/hi.m3u8")?;
 /// writer.write_line(HlsLine::from(
-///     StreamInf::builder(65000).with_codecs("mp4a.40.5").finish(),
+///     StreamInf::builder()
+///         .with_bandwidth(65000)
+///         .with_codecs("mp4a.40.5")
+///         .finish(),
 /// ))?;
 /// writer.write_uri("http://example.com/audio-only.m3u8")?;
 ///

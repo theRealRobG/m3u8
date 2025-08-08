@@ -6,80 +6,115 @@ use crate::{
         value::{ParsedAttributeValue, SemiParsedTagValue},
     },
 };
-use std::{borrow::Cow, collections::HashMap};
+use std::{borrow::Cow, collections::HashMap, marker::PhantomData};
 
 /// The attribute list for the tag (`#EXT-X-SESSION-KEY:<attribute-list>`).
 ///
 /// See [`SessionKey`] for a link to the HLS documentation for this attribute.
-#[derive(Debug, PartialEq, Clone)]
-pub struct SessionKeyAttributeList<'a> {
+#[derive(Debug, Clone)]
+struct SessionKeyAttributeList<'a> {
     /// Corresponds to the `METHOD` attribute.
     ///
     /// See [`SessionKey`] for a link to the HLS documentation for this attribute.
-    pub method: Cow<'a, str>,
+    method: Cow<'a, str>,
     /// Corresponds to the `URI` attribute.
     ///
     /// See [`SessionKey`] for a link to the HLS documentation for this attribute.
-    pub uri: Cow<'a, str>,
+    uri: Cow<'a, str>,
     /// Corresponds to the `IV` attribute.
     ///
     /// See [`SessionKey`] for a link to the HLS documentation for this attribute.
-    pub iv: Option<Cow<'a, str>>,
+    iv: Option<Cow<'a, str>>,
     /// Corresponds to the `KEYFORMAT` attribute.
     ///
     /// See [`SessionKey`] for a link to the HLS documentation for this attribute.
-    pub keyformat: Option<Cow<'a, str>>,
+    keyformat: Option<Cow<'a, str>>,
     /// Corresponds to the `KEYFORMATVERSIONS` attribute.
     ///
     /// See [`SessionKey`] for a link to the HLS documentation for this attribute.
-    pub keyformatversions: Option<Cow<'a, str>>,
-}
-
-/// A builder for convenience in constructing a [`SessionKey`].
-#[derive(Debug, PartialEq, Clone)]
-pub struct SessionKeyBuilder<'a> {
-    method: Cow<'a, str>,
-    uri: Cow<'a, str>,
-    iv: Option<Cow<'a, str>>,
-    keyformat: Option<Cow<'a, str>>,
     keyformatversions: Option<Cow<'a, str>>,
 }
-impl<'a> SessionKeyBuilder<'a> {
+
+/// Placeholder struct for [`SessionKeyBuilder`] indicating that `method` needs to be set.
+#[derive(Debug, Clone, Copy)]
+pub struct SessionKeyMethodNeedsToBeSet;
+/// Placeholder struct for [`SessionKeyBuilder`] indicating that `uri` needs to be set.
+#[derive(Debug, Clone, Copy)]
+pub struct SessionKeyUriNeedsToBeSet;
+/// Placeholder struct for [`SessionKeyBuilder`] indicating that `method` has been set.
+#[derive(Debug, Clone, Copy)]
+pub struct SessionKeyMethodHasBeenSet;
+/// Placeholder struct for [`SessionKeyBuilder`] indicating that `uri` has been set.
+#[derive(Debug, Clone, Copy)]
+pub struct SessionKeyUriHasBeenSet;
+
+/// A builder for convenience in constructing a [`SessionKey`].
+#[derive(Debug, Clone)]
+pub struct SessionKeyBuilder<'a, MethodStatus, UriStatus> {
+    attribute_list: SessionKeyAttributeList<'a>,
+    method_status: PhantomData<MethodStatus>,
+    uri_status: PhantomData<UriStatus>,
+}
+impl<'a> SessionKeyBuilder<'a, SessionKeyMethodNeedsToBeSet, SessionKeyUriNeedsToBeSet> {
     /// Create a new builder.
-    pub fn new(method: impl Into<Cow<'a, str>>, uri: impl Into<Cow<'a, str>>) -> Self {
+    pub fn new() -> Self {
         Self {
-            method: method.into(),
-            uri: uri.into(),
-            iv: Default::default(),
-            keyformat: Default::default(),
-            keyformatversions: Default::default(),
+            attribute_list: SessionKeyAttributeList {
+                method: Cow::Borrowed(""),
+                uri: Cow::Borrowed(""),
+                iv: Default::default(),
+                keyformat: Default::default(),
+                keyformatversions: Default::default(),
+            },
+            method_status: PhantomData,
+            uri_status: PhantomData,
         }
     }
-
+}
+impl<'a> SessionKeyBuilder<'a, SessionKeyMethodHasBeenSet, SessionKeyUriHasBeenSet> {
     /// Finish building and construct the `SessionKey`.
     pub fn finish(self) -> SessionKey<'a> {
-        SessionKey::new(SessionKeyAttributeList {
-            method: self.method,
-            uri: self.uri,
-            iv: self.iv,
-            keyformat: self.keyformat,
-            keyformatversions: self.keyformatversions,
-        })
+        SessionKey::new(self.attribute_list)
     }
-
+}
+impl<'a, MethodStatus, UriStatus> SessionKeyBuilder<'a, MethodStatus, UriStatus> {
+    /// Add the provided `method` to the attributes built into `SessionKey`.
+    pub fn with_method(
+        mut self,
+        method: impl Into<Cow<'a, str>>,
+    ) -> SessionKeyBuilder<'a, SessionKeyMethodHasBeenSet, UriStatus> {
+        self.attribute_list.method = method.into();
+        SessionKeyBuilder {
+            attribute_list: self.attribute_list,
+            method_status: PhantomData,
+            uri_status: PhantomData,
+        }
+    }
+    /// Add the provided `uri` to the attributes built into `SessionKey`.
+    pub fn with_uri(
+        mut self,
+        uri: impl Into<Cow<'a, str>>,
+    ) -> SessionKeyBuilder<'a, MethodStatus, SessionKeyUriHasBeenSet> {
+        self.attribute_list.uri = uri.into();
+        SessionKeyBuilder {
+            attribute_list: self.attribute_list,
+            method_status: PhantomData,
+            uri_status: PhantomData,
+        }
+    }
     /// Add the provided `iv` to the attributes built into `SessionKey`.
     pub fn with_iv(mut self, iv: impl Into<Cow<'a, str>>) -> Self {
-        self.iv = Some(iv.into());
+        self.attribute_list.iv = Some(iv.into());
         self
     }
     /// Add the provided `keyformat` to the attributes built into `SessionKey`.
     pub fn with_keyformat(mut self, keyformat: impl Into<Cow<'a, str>>) -> Self {
-        self.keyformat = Some(keyformat.into());
+        self.attribute_list.keyformat = Some(keyformat.into());
         self
     }
     /// Add the provided `keyformatversions` to the attributes built into `SessionKey`.
     pub fn with_keyformatversions(mut self, keyformatversions: impl Into<Cow<'a, str>>) -> Self {
-        self.keyformatversions = Some(keyformatversions.into());
+        self.attribute_list.keyformatversions = Some(keyformatversions.into());
         self
     }
 }
@@ -139,7 +174,7 @@ impl<'a> TryFrom<ParsedTag<'a>> for SessionKey<'a> {
 
 impl<'a> SessionKey<'a> {
     /// Constructs a new `SessionKey` tag.
-    pub fn new(attribute_list: SessionKeyAttributeList<'a>) -> Self {
+    fn new(attribute_list: SessionKeyAttributeList<'a>) -> Self {
         let output_line = Cow::Owned(calculate_line(&attribute_list));
         let SessionKeyAttributeList {
             method,
@@ -165,16 +200,30 @@ impl<'a> SessionKey<'a> {
     /// For example, we could construct a `SessionKey` as such:
     /// ```
     /// # use m3u8::tag::hls::{SessionKey, Method};
-    /// let session_key = SessionKey::builder(Method::SampleAes, "skd://1234")
+    /// let session_key = SessionKey::builder()
+    ///     .with_method(Method::SampleAes)
+    ///     .with_uri("skd://1234")
     ///     .with_keyformat("com.apple.streamingkeydelivery")
     ///     .with_keyformatversions("1")
     ///     .finish();
     /// ```
-    pub fn builder(
-        method: impl Into<Cow<'a, str>>,
-        uri: impl Into<Cow<'a, str>>,
-    ) -> SessionKeyBuilder<'a> {
-        SessionKeyBuilder::new(method, uri)
+    /// Note that the `finish` method is only callable if the builder has set `method` AND `uri`.
+    /// Each of the following fail to compile:
+    /// ```compile_fail
+    /// # use m3u8::tag::hls::SessionKey;
+    /// let session_key = SessionKey::builder().finish();
+    /// ```
+    /// ```compile_fail
+    /// # use m3u8::tag::hls::SessionKey;
+    /// let session_key = SessionKey::builder().method(Method::SampleAes).finish();
+    /// ```
+    /// ```compile_fail
+    /// # use m3u8::tag::hls::SessionKey;
+    /// let session_key = SessionKey::builder().with_uri("skd://1234").finish();
+    /// ```
+    pub fn builder()
+    -> SessionKeyBuilder<'a, SessionKeyMethodNeedsToBeSet, SessionKeyUriNeedsToBeSet> {
+        SessionKeyBuilder::new()
     }
 
     /// Corresponds to the `METHOD` attribute.
@@ -368,7 +417,9 @@ mod tests {
                 "KEYFORMAT=\"com.apple.streamingkeydelivery\",KEYFORMATVERSIONS=\"1\"",
             )
             .as_bytes(),
-            SessionKey::builder("SAMPLE-AES", "skd://some-key-id")
+            SessionKey::builder()
+                .with_method("SAMPLE-AES")
+                .with_uri("skd://some-key-id")
                 .with_iv("0xABCD")
                 .with_keyformat("com.apple.streamingkeydelivery")
                 .with_keyformatversions("1")
@@ -382,7 +433,9 @@ mod tests {
     fn as_str_with_options_should_be_valid() {
         assert_eq!(
             b"#EXT-X-SESSION-KEY:METHOD=SAMPLE-AES,URI=\"some-key-id\"",
-            SessionKey::builder("SAMPLE-AES", "some-key-id")
+            SessionKey::builder()
+                .with_method("SAMPLE-AES")
+                .with_uri("some-key-id")
                 .finish()
                 .into_inner()
                 .value()
@@ -390,7 +443,9 @@ mod tests {
     }
 
     mutation_tests!(
-        SessionKey::builder("SAMPLE-AES", "skd://some-key-id")
+        SessionKey::builder()
+            .with_method("SAMPLE-AES")
+            .with_uri("skd://some-key-id")
             .with_iv("0xABCD")
             .with_keyformat("com.apple.streamingkeydelivery")
             .with_keyformatversions("1")

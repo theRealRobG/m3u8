@@ -6,50 +6,70 @@ use crate::{
         value::{ParsedAttributeValue, SemiParsedTagValue},
     },
 };
-use std::{borrow::Cow, collections::HashMap};
+use std::{borrow::Cow, collections::HashMap, marker::PhantomData};
 
 /// The attribute list for the tag (`#EXT-X-SKIP:<attribute-list>`).
-#[derive(Debug, PartialEq, Clone)]
-pub struct SkipAttributeList<'a> {
+#[derive(Debug, Clone)]
+struct SkipAttributeList<'a> {
     /// Corresponds to the `SKIPPED-SEGMENTS` attribute.
     ///
     /// See [`Skip`] for a link to the HLS documentation for this attribute.
-    pub skipped_segments: u64,
+    skipped_segments: u64,
     /// Corresponds to the `RECENTLY-REMOVED-DATERANGES` attribute.
     ///
     /// See [`Skip`] for a link to the HLS documentation for this attribute.
-    pub recently_removed_dateranges: Option<Cow<'a, str>>,
-}
-
-/// A builder for convenience in constructing a [`Skip`].
-#[derive(Debug, PartialEq, Clone)]
-pub struct SkipBuilder<'a> {
-    skipped_segments: u64,
     recently_removed_dateranges: Option<Cow<'a, str>>,
 }
-impl<'a> SkipBuilder<'a> {
+
+/// Placeholder struct for [`SkipBuilder`] indicating that `skipped_segments` needs to be set.
+#[derive(Debug, Clone, Copy)]
+pub struct SkipSkippedSegmentsNeedsToBeSet;
+/// Placeholder struct for [`SkipBuilder`] indicating that `skipped_segments` has been set.
+#[derive(Debug, Clone, Copy)]
+pub struct SkipSkippedSegmentsHasBeenSet;
+
+/// A builder for convenience in constructing a [`Skip`].
+#[derive(Debug, Clone)]
+pub struct SkipBuilder<'a, SkippedSegmentsStatus> {
+    attribute_list: SkipAttributeList<'a>,
+    skipped_segments_status: PhantomData<SkippedSegmentsStatus>,
+}
+impl<'a> SkipBuilder<'a, SkipSkippedSegmentsNeedsToBeSet> {
     /// Creates a new builder.
-    pub fn new(skipped_segments: u64) -> Self {
+    pub fn new() -> Self {
         Self {
-            skipped_segments,
-            recently_removed_dateranges: Default::default(),
+            attribute_list: SkipAttributeList {
+                skipped_segments: Default::default(),
+                recently_removed_dateranges: Default::default(),
+            },
+            skipped_segments_status: PhantomData,
         }
     }
-
+}
+impl<'a> SkipBuilder<'a, SkipSkippedSegmentsHasBeenSet> {
     /// Finish building and construct the `Skip`.
     pub fn finish(self) -> Skip<'a> {
-        Skip::new(SkipAttributeList {
-            skipped_segments: self.skipped_segments,
-            recently_removed_dateranges: self.recently_removed_dateranges,
-        })
+        Skip::new(self.attribute_list)
     }
-
+}
+impl<'a, SkippedSegmentsStatus> SkipBuilder<'a, SkippedSegmentsStatus> {
+    /// Add the provided `skipped_segments` to the attributes built for `Skip`.
+    pub fn with_skipped_segments(
+        mut self,
+        skipped_segments: u64,
+    ) -> SkipBuilder<'a, SkipSkippedSegmentsHasBeenSet> {
+        self.attribute_list.skipped_segments = skipped_segments;
+        SkipBuilder {
+            attribute_list: self.attribute_list,
+            skipped_segments_status: PhantomData,
+        }
+    }
     /// Add the provided `recently_removed_dateranges` to the attributes built for `Skip`.
     pub fn with_recently_removed_dateranges(
         mut self,
         recently_removed_dateranges: impl Into<Cow<'a, str>>,
     ) -> Self {
-        self.recently_removed_dateranges = Some(recently_removed_dateranges.into());
+        self.attribute_list.recently_removed_dateranges = Some(recently_removed_dateranges.into());
         self
     }
 }
@@ -101,7 +121,7 @@ impl<'a> TryFrom<ParsedTag<'a>> for Skip<'a> {
 
 impl<'a> Skip<'a> {
     /// Constructs a new `Skip` tag.
-    pub fn new(attribute_list: SkipAttributeList<'a>) -> Self {
+    fn new(attribute_list: SkipAttributeList<'a>) -> Self {
         let output_line = Cow::Owned(calculate_line(&attribute_list));
         let SkipAttributeList {
             skipped_segments,
@@ -121,12 +141,19 @@ impl<'a> Skip<'a> {
     /// For example, we could construct a `Skip` as such:
     /// ```
     /// # use m3u8::tag::hls::Skip;
-    /// let skip = Skip::builder(1000)
+    /// let skip = Skip::builder()
+    ///     .with_skipped_segments(1000)
     ///     .with_recently_removed_dateranges("id_1\tid_2\tid_3")
     ///     .finish();
     /// ```
-    pub fn builder(skipped_segments: u64) -> SkipBuilder<'a> {
-        SkipBuilder::new(skipped_segments)
+    /// Note that the `finish` method is only callable if the builder has set `skipped_segments`.
+    /// The following fails to compile:
+    /// ```compile_fail
+    /// # use m3u8::tag::hls::Skip;
+    /// let skip = Skip::builder().finish();
+    /// ```
+    pub fn builder() -> SkipBuilder<'a, SkipSkippedSegmentsNeedsToBeSet> {
+        SkipBuilder::new()
     }
 
     /// Corresponds to the `SKIPPED-SEGMENTS` attribute.
@@ -218,7 +245,11 @@ mod tests {
     fn as_str_with_no_recently_removed_dateranges_should_be_valid() {
         assert_eq!(
             b"#EXT-X-SKIP:SKIPPED-SEGMENTS=100",
-            Skip::builder(100).finish().into_inner().value()
+            Skip::builder()
+                .with_skipped_segments(100)
+                .finish()
+                .into_inner()
+                .value()
         );
     }
 
@@ -226,7 +257,8 @@ mod tests {
     fn as_str_with_recently_removed_dateranges_shuold_be_valid() {
         assert_eq!(
             b"#EXT-X-SKIP:SKIPPED-SEGMENTS=100,RECENTLY-REMOVED-DATERANGES=\"abc\t123\"",
-            Skip::builder(100)
+            Skip::builder()
+                .with_skipped_segments(100)
                 .with_recently_removed_dateranges("abc\t123")
                 .finish()
                 .into_inner()
@@ -235,7 +267,8 @@ mod tests {
     }
 
     mutation_tests!(
-        Skip::builder(100)
+        Skip::builder()
+            .with_skipped_segments(100)
             .with_recently_removed_dateranges("abc\t123")
             .finish(),
         (skipped_segments, 200, @Attr="SKIPPED-SEGMENTS=200"),
