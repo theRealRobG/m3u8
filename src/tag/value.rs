@@ -6,14 +6,225 @@
 use crate::{
     date::{self, DateTime},
     error::{
-        DateTimeSyntaxError, DecimalResolutionParseError, ParseDecimalIntegerRangeError,
-        ParseFloatError, ParseNumberError, ParsePlaylistTypeError, TagValueSyntaxError,
+        AttributeListParsingError, DateTimeSyntaxError, DecimalResolutionParseError,
+        ParseDecimalIntegerRangeError, ParseFloatError, ParseNumberError, ParsePlaylistTypeError,
+        TagValueSyntaxError,
     },
     line::ParsedByteSlice,
     utils::{f64_to_u64, parse_u64, split_on_new_line},
 };
-use memchr::{memchr, memchr2, memchr3};
+use memchr::{memchr, memchr_iter, memchr2, memchr3, memchr3_iter};
 use std::{borrow::Cow, collections::HashMap, fmt::Display};
+
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub struct TagValue<'a>(pub &'a [u8]);
+impl<'a> TagValue<'a> {
+    pub fn try_as_decimal_integer(&self) -> Result<u64, ParseNumberError> {
+        parse_u64(self.0)
+    }
+
+    pub fn try_as_decimal_integer_range(
+        &self,
+    ) -> Result<(u64, Option<u64>), ParseDecimalIntegerRangeError> {
+        match memchr(b'@', self.0) {
+            Some(n) => {
+                let length = parse_u64(&self.0[..n])
+                    .map_err(ParseDecimalIntegerRangeError::InvalidLength)?;
+                let offset = parse_u64(&self.0[(n + 1)..])
+                    .map_err(ParseDecimalIntegerRangeError::InvalidOffset)?;
+                Ok((length, Some(offset)))
+            }
+            None => parse_u64(self.0)
+                .map(|length| (length, None))
+                .map_err(ParseDecimalIntegerRangeError::InvalidLength),
+        }
+    }
+
+    pub fn try_as_playlist_type(&self) -> Result<HlsPlaylistType, ParsePlaylistTypeError> {
+        if self.0 == b"VOD" {
+            Ok(HlsPlaylistType::Vod)
+        } else if self.0 == b"EVENT" {
+            Ok(HlsPlaylistType::Event)
+        } else {
+            Err(ParsePlaylistTypeError::InvalidValue)
+        }
+    }
+
+    pub fn try_as_decimal_floating_point(&self) -> Result<f64, ParseFloatError> {
+        fast_float2::parse(self.0).map_err(|_| ParseFloatError)
+    }
+
+    pub fn try_as_decimal_floating_point_with_title(
+        &self,
+    ) -> Result<(f64, &'a str), TagValueSyntaxError> {
+        match memchr(b',', self.0) {
+            Some(n) => {
+                let duration = fast_float2::parse(&self.0[..n])?;
+                let title = std::str::from_utf8(&self.0[(n + 1)..])?;
+                Ok((duration, title))
+            }
+            None => {
+                let duration = fast_float2::parse(self.0)?;
+                Ok((duration, ""))
+            }
+        }
+    }
+
+    pub fn try_as_date_time(&self) -> Result<DateTime, DateTimeSyntaxError> {
+        date::parse_bytes(self.0)
+    }
+
+    pub fn try_as_attribute_list(
+        &self,
+    ) -> Result<HashMap<&'a str, AttributeValue<'a>>, AttributeListParsingError> {
+        let mut attribute_list = HashMap::new();
+        let mut state = AttributeListParsingState::ReadingName;
+        let mut previous_match_index = 0;
+        let mut list_iter = memchr3_iter(b'=', b',', b'"', self.0);
+        // Name in first position is special because we want to capture the whole value from the
+        // previous_match_index (== 0), rather than in the rest of cases, where we want to capture
+        // the value at the index after the previous match (which should be b','). Therefore, we use
+        // the `next` method to step through the first match and handle it specially, then proceed
+        // to loop through the iterator for all others.
+        let Some(first_match_index) = list_iter.next() else {
+            return Err(AttributeListParsingError::EndOfLineWhileReadingAttributeName);
+        };
+        if self.0[first_match_index] != b'=' {
+            return Err(AttributeListParsingError::UnexpectedCharacterInAttributeName);
+        }
+        previous_match_index = first_match_index;
+        state = AttributeListParsingState::ReadingValue {
+            name: std::str::from_utf8(&self.0[..first_match_index])?,
+        };
+        for i in list_iter {
+            let byte = self.0[i];
+            match state {
+                AttributeListParsingState::ReadingName => {
+                    if byte == b'=' {
+                        // end of name section
+                        let name = std::str::from_utf8(&self.0[(previous_match_index + 1)..i])?;
+                        if name.is_empty() {
+                            return Err(AttributeListParsingError::EmptyAttributeName);
+                        }
+                        state = AttributeListParsingState::ReadingValue { name };
+                    } else {
+                        // b',' and b'"' are both unexpected
+                        return Err(AttributeListParsingError::UnexpectedCharacterInAttributeName);
+                    }
+                    previous_match_index = i;
+                }
+                AttributeListParsingState::ReadingQuotedValue { name } => {
+                    if byte == b'"' {
+                        // only byte that ends the quoted value is b'"'
+                        let value = std::str::from_utf8(&self.0[(previous_match_index + 1)..i])?;
+                        state =
+                            AttributeListParsingState::FinishedReadingQuotedValue { name, value };
+                        previous_match_index = i;
+                    }
+                }
+                AttributeListParsingState::ReadingValue { name } => {
+                    if byte == b'"' {
+                        // must check that this is the first character of the value
+                        if previous_match_index != (i - 1) {
+                            // finding b'"' mid-value is unexpected
+                            return Err(
+                                AttributeListParsingError::UnexpectedCharacterInAttributeValue,
+                            );
+                        }
+                        state = AttributeListParsingState::ReadingQuotedValue { name };
+                    } else if byte == b',' {
+                        let value = UnquotedAttributeValue(&self.0[(previous_match_index + 1)..i]);
+                        if value.0.is_empty() {
+                            // an empty unquoted value is unexpected (only quoted may be empty)
+                            return Err(AttributeListParsingError::EmptyUnquotedValue);
+                        }
+                        attribute_list.insert(name, AttributeValue::Unquoted(value));
+                        state = AttributeListParsingState::ReadingName;
+                    } else {
+                        // b'=' is unexpected while reading value (only b',' or b'"' are expected)
+                        return Err(AttributeListParsingError::UnexpectedCharacterInAttributeValue);
+                    }
+                    previous_match_index = i;
+                }
+                AttributeListParsingState::FinishedReadingQuotedValue { name, value } => {
+                    if byte == b',' {
+                        attribute_list.insert(name, AttributeValue::Quoted(value));
+                        state = AttributeListParsingState::ReadingName;
+                    } else {
+                        // b',' (or end of line) must come after end of quote - all else is invalid
+                        return Err(AttributeListParsingError::UnexpectedCharacterAfterQuoteEnd);
+                    }
+                    previous_match_index = i;
+                }
+            }
+        }
+        // Need to check state at end of line as this will likely not be a match in the above
+        // iteration.
+        match state {
+            AttributeListParsingState::ReadingName => {
+                return Err(AttributeListParsingError::EndOfLineWhileReadingAttributeName);
+            }
+            AttributeListParsingState::ReadingValue { name } => {
+                let value = UnquotedAttributeValue(&self.0[(previous_match_index + 1)..]);
+                if value.0.is_empty() {
+                    // an empty unquoted value is unexpected (only quoted may be empty)
+                    return Err(AttributeListParsingError::EmptyUnquotedValue);
+                }
+                attribute_list.insert(name, AttributeValue::Unquoted(value));
+            }
+            AttributeListParsingState::ReadingQuotedValue { name } => {
+                return Err(AttributeListParsingError::EndOfLineWhileReadingQuotedValue);
+            }
+            AttributeListParsingState::FinishedReadingQuotedValue { name, value } => {
+                attribute_list.insert(name, AttributeValue::Quoted(value));
+            }
+        }
+        Ok(attribute_list)
+    }
+}
+
+enum AttributeListParsingState<'a> {
+    ReadingName,
+    ReadingValue { name: &'a str },
+    ReadingQuotedValue { name: &'a str },
+    FinishedReadingQuotedValue { name: &'a str, value: &'a str },
+}
+
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum AttributeValue<'a> {
+    Unquoted(UnquotedAttributeValue<'a>),
+    Quoted(&'a str),
+}
+
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub struct UnquotedAttributeValue<'a>(pub &'a [u8]);
+impl<'a> UnquotedAttributeValue<'a> {
+    pub fn try_as_decimal_integer(&self) -> Result<u64, ParseNumberError> {
+        parse_u64(self.0)
+    }
+
+    pub fn try_as_decimal_floating_point(&self) -> Result<f64, ParseFloatError> {
+        fast_float2::parse(self.0).map_err(|_| ParseFloatError)
+    }
+
+    pub fn try_as_decimal_resolution(
+        &self,
+    ) -> Result<DecimalResolution, DecimalResolutionParseError> {
+        let mut x_iter = memchr_iter(b'x', self.0);
+        let Some(i) = x_iter.next() else {
+            return Err(DecimalResolutionParseError::MissingHeight);
+        };
+        let width =
+            parse_u64(&self.0[..i]).map_err(|_| DecimalResolutionParseError::InvalidWidth)?;
+        let height = parse_u64(&self.0[(i + 1)..])
+            .map_err(|_| DecimalResolutionParseError::InvalidHeight)?;
+        Ok(DecimalResolution { width, height })
+    }
+
+    pub fn try_as_utf_8(&self) -> Result<&'a str, std::str::Utf8Error> {
+        std::str::from_utf8(self.0)
+    }
+}
 
 /// Describes what the library has been able to parse from the tag value.
 ///
@@ -486,13 +697,13 @@ impl TryFrom<&str> for DecimalResolution {
         };
         let width = width_str
             .parse()
-            .map_err(DecimalResolutionParseError::InvalidWidth)?;
+            .map_err(|_| DecimalResolutionParseError::InvalidWidth)?;
         let Some(height_str) = split.next() else {
             return Err(DecimalResolutionParseError::MissingHeight);
         };
         let height = height_str
             .parse()
-            .map_err(DecimalResolutionParseError::InvalidHeight)?;
+            .map_err(|_| DecimalResolutionParseError::InvalidHeight)?;
         Ok(DecimalResolution { width, height })
     }
 }
@@ -1132,5 +1343,258 @@ mod tests {
         test(str.as_bytes());
         test(format!("{str}\r\n").as_bytes());
         test(format!("{str}\n").as_bytes());
+    }
+}
+
+#[cfg(test)]
+mod new_tests {
+    use crate::date_time;
+
+    use super::*;
+    use pretty_assertions::assert_eq;
+
+    #[test]
+    fn type_enum() {
+        let value = TagValue(b"EVENT");
+        assert_eq!(Ok(HlsPlaylistType::Event), value.try_as_playlist_type());
+
+        let value = TagValue(b"VOD");
+        assert_eq!(Ok(HlsPlaylistType::Vod), value.try_as_playlist_type());
+    }
+
+    #[test]
+    fn decimal_integer() {
+        let value = TagValue(b"42");
+        assert_eq!(Ok(42), value.try_as_decimal_integer());
+    }
+
+    #[test]
+    fn decimal_integer_range() {
+        let value = TagValue(b"42@42");
+        assert_eq!(Ok((42, Some(42))), value.try_as_decimal_integer_range());
+    }
+
+    #[test]
+    fn decimal_floating_point_with_optional_title() {
+        // Positive tests
+        let value = TagValue(b"42.0");
+        assert_eq!(
+            Ok((42.0, "")),
+            value.try_as_decimal_floating_point_with_title()
+        );
+        let value = TagValue(b"42.42");
+        assert_eq!(
+            Ok((42.42, "")),
+            value.try_as_decimal_floating_point_with_title()
+        );
+        let value = TagValue(b"42,");
+        assert_eq!(
+            Ok((42.0, "")),
+            value.try_as_decimal_floating_point_with_title()
+        );
+        let value = TagValue(b"42,=ATTRIBUTE-VALUE");
+        assert_eq!(
+            Ok((42.0, "=ATTRIBUTE-VALUE")),
+            value.try_as_decimal_floating_point_with_title()
+        );
+        // Negative tests
+        let value = TagValue(b"-42.0");
+        assert_eq!(
+            Ok((-42.0, "")),
+            value.try_as_decimal_floating_point_with_title()
+        );
+        let value = TagValue(b"-42.42");
+        assert_eq!(
+            Ok((-42.42, "")),
+            value.try_as_decimal_floating_point_with_title()
+        );
+        let value = TagValue(b"-42,");
+        assert_eq!(
+            Ok((-42.0, "")),
+            value.try_as_decimal_floating_point_with_title()
+        );
+        let value = TagValue(b"-42,=ATTRIBUTE-VALUE");
+        assert_eq!(
+            Ok((-42.0, "=ATTRIBUTE-VALUE")),
+            value.try_as_decimal_floating_point_with_title()
+        );
+    }
+
+    #[test]
+    fn date_time_msec() {
+        let value = TagValue(b"2025-06-03T17:56:42.123Z");
+        assert_eq!(
+            Ok(date_time!(2025-06-03 T 17:56:42.123)),
+            value.try_as_date_time(),
+        );
+        let value = TagValue(b"2025-06-03T17:56:42.123+01:00");
+        assert_eq!(
+            Ok(date_time!(2025-06-03 T 17:56:42.123 01:00)),
+            value.try_as_date_time(),
+        );
+        let value = TagValue(b"2025-06-03T17:56:42.123-05:00");
+        assert_eq!(
+            Ok(date_time!(2025-06-03 T 17:56:42.123 -05:00)),
+            value.try_as_date_time(),
+        );
+    }
+
+    mod attribute_list {
+        use super::*;
+
+        macro_rules! unquoted_value_test {
+            (TagValue is $tag_value:literal $($name_lit:literal=$val:literal expects $exp:literal from $method:ident)+) => {
+                let value = TagValue($tag_value);
+                let list = value.try_as_attribute_list().expect("should be valid list");
+                assert_eq!(
+                    list,
+                    HashMap::from([
+                        $(
+                            ($name_lit, AttributeValue::Unquoted(UnquotedAttributeValue($val))),
+                        )+
+                    ])
+                );
+                $(
+                    assert_eq!(Ok($exp), UnquotedAttributeValue($val).$method());
+                )+
+            };
+        }
+
+        macro_rules! quoted_value_test {
+            (TagValue is $tag_value:literal $($name_lit:literal expects $exp:literal)+) => {
+                let value = TagValue($tag_value);
+                let list = value.try_as_attribute_list().expect("should be valid list");
+                assert_eq!(
+                    list,
+                    HashMap::from([
+                        $(
+                            ($name_lit, AttributeValue::Quoted($exp)),
+                        )+
+                    ])
+                );
+            };
+        }
+
+        mod decimal_integer {
+            use super::*;
+            use pretty_assertions::assert_eq;
+
+            #[test]
+            fn single_attribute() {
+                unquoted_value_test!(
+                    TagValue is b"NAME=123"
+                    "NAME"=b"123" expects 123 from try_as_decimal_integer
+                );
+            }
+
+            #[test]
+            fn multi_attributes() {
+                unquoted_value_test!(
+                    TagValue is b"NAME=123,NEXT-NAME=456"
+                    "NAME"=b"123" expects 123 from try_as_decimal_integer
+                    "NEXT-NAME"=b"456" expects 456 from try_as_decimal_integer
+                );
+            }
+        }
+
+        mod signed_decimal_floating_point {
+            use super::*;
+            use pretty_assertions::assert_eq;
+
+            #[test]
+            fn positive_float_single_attribute() {
+                unquoted_value_test!(
+                    TagValue is b"NAME=42.42"
+                    "NAME"=b"42.42" expects 42.42 from try_as_decimal_floating_point
+                );
+            }
+
+            #[test]
+            fn negative_integer_single_attribute() {
+                unquoted_value_test!(
+                    TagValue is b"NAME=-42"
+                    "NAME"=b"-42" expects -42.0 from try_as_decimal_floating_point
+                );
+            }
+
+            #[test]
+            fn negative_float_single_attribute() {
+                unquoted_value_test!(
+                    TagValue is b"NAME=-42.42"
+                    "NAME"=b"-42.42" expects -42.42 from try_as_decimal_floating_point
+                );
+            }
+
+            #[test]
+            fn positive_float_multi_attributes() {
+                unquoted_value_test!(
+                    TagValue is b"NAME=42.42,NEXT-NAME=84.84"
+                    "NAME"=b"42.42" expects 42.42 from try_as_decimal_floating_point
+                    "NEXT-NAME"=b"84.84" expects 84.84 from try_as_decimal_floating_point
+                );
+            }
+
+            #[test]
+            fn negative_integer_multi_attributes() {
+                unquoted_value_test!(
+                    TagValue is b"NAME=-42,NEXT-NAME=-84"
+                    "NAME"=b"-42" expects -42.0 from try_as_decimal_floating_point
+                    "NEXT-NAME"=b"-84" expects -84.0 from try_as_decimal_floating_point
+                );
+            }
+
+            #[test]
+            fn negative_float_multi_attributes() {
+                unquoted_value_test!(
+                    TagValue is b"NAME=-42.42,NEXT-NAME=-84.84"
+                    "NAME"=b"-42.42" expects -42.42 from try_as_decimal_floating_point
+                    "NEXT-NAME"=b"-84.84" expects -84.84 from try_as_decimal_floating_point
+                );
+            }
+        }
+
+        mod quoted_string {
+            use super::*;
+            use pretty_assertions::assert_eq;
+
+            #[test]
+            fn single_attribute() {
+                quoted_value_test!(
+                    TagValue is b"NAME=\"Hello, World!\""
+                    "NAME" expects "Hello, World!"
+                );
+            }
+
+            #[test]
+            fn multi_attributes() {
+                quoted_value_test!(
+                    TagValue is b"NAME=\"Hello,\",NEXT-NAME=\"World!\""
+                    "NAME" expects "Hello,"
+                    "NEXT-NAME" expects "World!"
+                );
+            }
+        }
+
+        mod unquoted_string {
+            use super::*;
+            use pretty_assertions::assert_eq;
+
+            #[test]
+            fn single_attribute() {
+                unquoted_value_test!(
+                    TagValue is b"NAME=PQ"
+                    "NAME"=b"PQ" expects "PQ" from try_as_utf_8
+                );
+            }
+
+            #[test]
+            fn multi_attributes() {
+                unquoted_value_test!(
+                    TagValue is b"NAME=PQ,NEXT-NAME=HLG"
+                    "NAME"=b"PQ" expects "PQ" from try_as_utf_8
+                    "NEXT-NAME"=b"HLG" expects "HLG" from try_as_utf_8
+                );
+            }
+        }
     }
 }

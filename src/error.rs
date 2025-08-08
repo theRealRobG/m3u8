@@ -9,7 +9,6 @@ use crate::{
 use std::{
     error::Error,
     fmt::{Display, Formatter},
-    num::ParseIntError,
     str::Utf8Error,
 };
 
@@ -535,25 +534,76 @@ impl<'a> Display for UnrecognizedEnumerationError<'a> {
 impl Error for UnrecognizedEnumerationError<'_> {}
 
 /// An error found when trying to parse a decimal resolution (`<width>x<height>`).
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum DecimalResolutionParseError {
     /// The width component was missing.
     MissingWidth,
     /// The width component was not a valid integer.
-    InvalidWidth(ParseIntError),
+    InvalidWidth,
     /// The height component was missing.
     MissingHeight,
     /// The height component was not a valid integer.
-    InvalidHeight(ParseIntError),
+    InvalidHeight,
 }
 impl Display for DecimalResolutionParseError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::MissingWidth => write!(f, "missing width"),
-            Self::InvalidWidth(e) => write!(f, "invalid width: {e}"),
+            Self::InvalidWidth => write!(f, "not a number for width"),
             Self::MissingHeight => write!(f, "missing height"),
-            Self::InvalidHeight(e) => write!(f, "invalid height: {e}"),
+            Self::InvalidHeight => write!(f, "not a number for height"),
         }
     }
 }
 impl Error for DecimalResolutionParseError {}
+
+/// An error found while parsing an attribute list.
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum AttributeListParsingError {
+    /// The line ended while reading an attribute name (before we found `=`).
+    EndOfLineWhileReadingAttributeName,
+    /// There was an unexpected character (`"` or `,`) in the attribute name.
+    UnexpectedCharacterInAttributeName,
+    /// The attribute name was empty (no characters between start and `=`).
+    EmptyAttributeName,
+    /// The unquoted attribute value was empty (no characters between start and `,` or end of line).
+    EmptyUnquotedValue,
+    /// Unexpected character in unquoted attribute value (`=` or `"` after initial index).
+    UnexpectedCharacterInAttributeValue,
+    /// Unexpected character occurring after quote end and before `,`.
+    UnexpectedCharacterAfterQuoteEnd,
+    /// The line ended while reading a quoted string value.
+    EndOfLineWhileReadingQuotedValue,
+    /// There was an error when trying to convert to UTF-8.
+    InvalidUtf8(std::str::Utf8Error),
+}
+impl Display for AttributeListParsingError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::EndOfLineWhileReadingAttributeName => {
+                write!(f, "line ended while reading attribute name")
+            }
+            Self::UnexpectedCharacterInAttributeName => {
+                write!(f, "unexpected character in attribute name")
+            }
+            Self::EmptyAttributeName => write!(f, "attribute name with no characters"),
+            Self::EmptyUnquotedValue => write!(f, "unquoted value with no characters"),
+            Self::UnexpectedCharacterInAttributeValue => {
+                write!(f, "unexpected character in attribute value")
+            }
+            Self::UnexpectedCharacterAfterQuoteEnd => {
+                write!(f, "unexpected character between quoted string end and ','")
+            }
+            Self::EndOfLineWhileReadingQuotedValue => {
+                write!(f, "line ended while reading quoted string value")
+            }
+            Self::InvalidUtf8(e) => write!(f, "invalid utf-8 due to {e}"),
+        }
+    }
+}
+impl std::error::Error for AttributeListParsingError {}
+impl From<std::str::Utf8Error> for AttributeListParsingError {
+    fn from(value: std::str::Utf8Error) -> Self {
+        Self::InvalidUtf8(value)
+    }
+}
