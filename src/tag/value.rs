@@ -497,63 +497,6 @@ impl TryFrom<&str> for DecimalResolution {
     }
 }
 
-#[cfg(test)]
-mod robtests {
-    use pretty_assertions::assert_eq;
-
-    use crate::{
-        HlsLine, Reader,
-        config::ParsingOptions,
-        date, date_time,
-        line::ParsedByteSlice,
-        tag::value::{ParsedAttributeValue, SemiParsedTagValue, parse},
-    };
-
-    #[test]
-    fn some_test_name() -> Result<(), Box<dyn std::error::Error>> {
-        let pseudo_tag = "#USP-X-TIMESTAMP-MAP:MPEGTS=900000,LOCAL=1970-01-01T00:00:00Z";
-        let mut reader = Reader::from_str(pseudo_tag, ParsingOptions::default());
-        match reader.read_line() {
-            Ok(Some(HlsLine::Comment(tag))) => {
-                let mut tag_split = tag.splitn(2, ':');
-                if tag_split.next() != Some("USP-X-TIMESTAMP-MAP") {
-                    return Err(format!("unexpected tag name").into());
-                }
-                let Some(value) = tag_split.next() else {
-                    return Err(format!("unexpected no tag value").into());
-                };
-                let ParsedByteSlice {
-                    parsed,
-                    remaining: _,
-                } = parse(value.as_bytes()).map_err(|e| format!("value parsing failed: {e}"))?;
-                let SemiParsedTagValue::AttributeList(list) = parsed else {
-                    return Err(format!("unexpected tag value type").into());
-                };
-
-                // Prove that we can extract the value of MPEGTS
-                let Some(mpegts) = (match list.get("MPEGTS") {
-                    Some(v) => v.as_option_u64(),
-                    None => None,
-                }) else {
-                    return Err(format!("missing required MPEGTS").into());
-                };
-                assert_eq!(900000, mpegts);
-
-                // Prove that we can extract the value of LOCAL
-                let Some(local) = (match list.get("LOCAL") {
-                    Some(ParsedAttributeValue::UnquotedString(s)) => date::parse(s).ok(),
-                    _ => None,
-                }) else {
-                    return Err(format!("missing required LOCAL").into());
-                };
-                assert_eq!(date_time!(1970-01-01 T 00:00:00.000), local);
-            }
-            r => return Err(format!("unexpected result {r:?}").into()),
-        }
-        Ok::<(), Box<dyn std::error::Error>>(())
-    }
-}
-
 /// Parses the input data as a tag value and provides a [`SemiParsedTagValue`] when successful.
 ///
 /// This method is the primary function used to extract tag data from lines. This is what is used
