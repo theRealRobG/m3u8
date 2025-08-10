@@ -681,6 +681,11 @@ impl<'a, BandwidthStatus> StreamInfBuilder<'a, BandwidthStatus> {
         self
     }
 }
+impl<'a> Default for StreamInfBuilder<'a, StreamInfBandwidthNeedsToBeSet> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 /// Corresponds to the `#EXT-X-STREAM-INF` tag.
 ///

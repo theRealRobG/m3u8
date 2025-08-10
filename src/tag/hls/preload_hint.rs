@@ -162,6 +162,13 @@ impl<'a, TypeStatus, UriStatus> PreloadHintBuilder<'a, TypeStatus, UriStatus> {
         self
     }
 }
+impl<'a> Default
+    for PreloadHintBuilder<'a, PreloadHintTypeNeedsToBeSet, PreloadHintUriNeedsToBeSet>
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 /// Corresponds to the `#EXT-X-PRELOAD-HINT` tag.
 ///

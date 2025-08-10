@@ -70,6 +70,11 @@ impl<'a, UriStatus> MapBuilder<'a, UriStatus> {
         self
     }
 }
+impl<'a> Default for MapBuilder<'a, MapUriNeedsToBeSet> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 /// Corresponds to the `#EXT-X-MAP` tag.
 ///

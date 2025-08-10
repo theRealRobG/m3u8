@@ -73,6 +73,11 @@ impl<TimeOffsetStatus> StartBuilder<TimeOffsetStatus> {
         self
     }
 }
+impl Default for StartBuilder<StartTimeOffsetNeedsToBeSet> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 /// Corresponds to the `#EXT-X-START` tag.
 ///

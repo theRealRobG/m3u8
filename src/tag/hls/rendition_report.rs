@@ -102,6 +102,17 @@ impl<'a, UriStatus, LastMsnStatus> RenditionReportBuilder<'a, UriStatus, LastMsn
         self
     }
 }
+impl<'a> Default
+    for RenditionReportBuilder<
+        'a,
+        RenditionReportUriNeedsToBeSet,
+        RenditionReportLastMsnNeedsToBeSet,
+    >
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 /// Corresponds to the `#EXT-X-RENDITION-REPORT` tag.
 ///

@@ -299,6 +299,17 @@ impl<'a, UriStatus, BandwidthStatus> IFrameStreamInfBuilder<'a, UriStatus, Bandw
         self
     }
 }
+impl<'a> Default
+    for IFrameStreamInfBuilder<
+        'a,
+        IFrameStreamInfUriNeedsToBeSet,
+        IFrameStreamInfBandwidthNeedsToBeSet,
+    >
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 /// Corresponds to the `#EXT-X-I-FRAME-STREAM-INF` tag.
 ///

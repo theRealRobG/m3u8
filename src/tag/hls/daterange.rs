@@ -318,6 +318,11 @@ impl<'a, IdStatus, StartDateStatus> DaterangeBuilder<'a, IdStatus, StartDateStat
         self
     }
 }
+impl<'a> Default for DaterangeBuilder<'a, DaterangeIdNeedsToBeSet, DaterangeStartDateNeedsToBeSet> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 /// Corresponds to the `#EXT-X-DATERANGE` tag.
 ///

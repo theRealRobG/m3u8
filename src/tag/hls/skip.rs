@@ -73,6 +73,11 @@ impl<'a, SkippedSegmentsStatus> SkipBuilder<'a, SkippedSegmentsStatus> {
         self
     }
 }
+impl<'a> Default for SkipBuilder<'a, SkipSkippedSegmentsNeedsToBeSet> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 /// Corresponds to the `#EXT-X-SKIP` tag.
 ///

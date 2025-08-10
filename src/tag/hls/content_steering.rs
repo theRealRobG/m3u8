@@ -77,6 +77,11 @@ impl<'a, ServerUriStatus> ContentSteeringBuilder<'a, ServerUriStatus> {
         self
     }
 }
+impl<'a> Default for ContentSteeringBuilder<'a, ContentSteeringServerUriNeedsToBeSet> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 /// Corresponds to the `#EXT-X-CONTENT-STEERING` tag.
 ///

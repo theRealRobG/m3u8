@@ -122,6 +122,11 @@ impl<'a, UriStatus, DurationStatus> PartBuilder<'a, UriStatus, DurationStatus> {
         self
     }
 }
+impl<'a> Default for PartBuilder<'a, PartUriNeedsToBeSet, PartDurationNeedsToBeSet> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 /// Corresponds to the `#EXT-X-PART` tag.
 ///

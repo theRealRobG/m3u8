@@ -122,6 +122,13 @@ impl<'a, MethodStatus, UriStatus> SessionKeyBuilder<'a, MethodStatus, UriStatus>
         self
     }
 }
+impl<'a> Default
+    for SessionKeyBuilder<'a, SessionKeyMethodNeedsToBeSet, SessionKeyUriNeedsToBeSet>
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 /// Corresponds to the `#EXT-X-SESSION-KEY` tag.
 ///

@@ -128,6 +128,11 @@ impl<AttributeStatus> ServerControlBuilder<AttributeStatus> {
         }
     }
 }
+impl Default for ServerControlBuilder<ServerControlAttributeNeedsToBeSet> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 /// Corresponds to the `#EXT-X-SERVER-CONTROL` tag.
 ///

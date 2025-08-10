@@ -179,6 +179,11 @@ impl<'a, MethodStatus> KeyBuilder<'a, MethodStatus> {
         self
     }
 }
+impl<'a> Default for KeyBuilder<'a, KeyMethodNeedsToBeSet> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 /// Corresponds to the `#EXT-X-KEY` tag.
 ///

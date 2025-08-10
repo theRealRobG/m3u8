@@ -803,6 +803,13 @@ impl<'a, TypeStatus, NameStatus, GroupIdStatus>
         self
     }
 }
+impl<'a> Default
+    for MediaBuilder<'a, MediaTypeNeedsToBeSet, MediaNameNeedsToBeSet, MediaGroupIdNeedsToBeSet>
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 /// Corresponds to the `#EXT-X-MEDIA` tag.
 ///

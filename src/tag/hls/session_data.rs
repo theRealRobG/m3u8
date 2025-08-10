@@ -230,6 +230,18 @@ impl<'a, DataIdStatus, ValueStatus, UriStatus>
         self
     }
 }
+impl<'a> Default
+    for SessionDataBuilder<
+        'a,
+        SessionDataDataIdNeedsToBeSet,
+        SessionDataValueIsNotSet,
+        SessionDataUriIsNotSet,
+    >
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 /// Corresponds to the `#EXT-X-SESSION-DATA` tag.
 ///
