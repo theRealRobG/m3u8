@@ -2,10 +2,7 @@
 //!
 //! The module offers a collection of many error types coming from various operations.
 
-use crate::{
-    line::{ParsedByteSlice, ParsedLineSlice},
-    tag::value::SemiParsedTagValue,
-};
+use crate::line::{ParsedByteSlice, ParsedLineSlice};
 use std::{
     error::Error,
     fmt::{Display, Formatter},
@@ -377,8 +374,6 @@ impl From<Utf8Error> for TagValueSyntaxError {
 pub enum ValidationError {
     /// The tag name did not match expectations for the tag.
     UnexpectedTagName,
-    /// The value of the tag did not match expectations for the tag.
-    UnexpectedValueType(ValidationErrorValueKind),
     /// A required attribute was missing (the associated value should be the required attribute
     /// name).
     MissingRequiredAttribute(&'static str),
@@ -392,6 +387,21 @@ pub enum ValidationError {
     /// [`crate::tag::value::ParsedAttributeValue::UnquotedString`] was not a known value.
     InvalidEnumeratedString,
 }
+impl Display for ValidationError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::UnexpectedTagName => write!(f, "unexpected tag name"),
+            Self::MissingRequiredAttribute(a) => write!(f, "required attribute {a} is missing"),
+            Self::NotImplemented => write!(f, "parsing into this tag is not implemented"),
+            Self::ErrorExtractingTagValue(e) => write!(f, "tag value error - {e}"),
+            Self::ErrorExtractingAttributeListValue(e) => {
+                write!(f, "attribute list value error - {e}")
+            }
+            Self::InvalidEnumeratedString => write!(f, "invalid enumerated string in value"),
+        }
+    }
+}
+impl Error for ValidationError {}
 impl From<ParseTagValueError> for ValidationError {
     fn from(value: ParseTagValueError) -> Self {
         Self::ErrorExtractingTagValue(value)
@@ -438,16 +448,26 @@ impl From<ParseAttributeValueError> for ValidationError {
     }
 }
 
+/// An error found trying to convert a tag value into a different data type needed for the tag.
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum ParseTagValueError {
+    /// The tag value is not empty (`None`) but it should be.
     NotEmpty,
+    /// The tag value is empty (`None`) when it should not be.
     UnexpectedEmpty,
+    /// An issue found trying to convert into a decimal integer.
     DecimalInteger(ParseNumberError),
+    /// An issue fouud trying to convert into a decimal integer range (`<n>[@<o>]`).
     DecimalIntegerRange(ParseDecimalIntegerRangeError),
+    /// An issue found trying to convert into a playlist type enum (`EVENT` or `VOD`).
     PlaylistType(ParsePlaylistTypeError),
+    /// An issue found trying to convert into a decimal floating point number.
     DecimalFloatingPoint(ParseFloatError),
+    /// An issue found trying to convert into a decimal floating point number with a UTF-8 title.
     DecimalFloatingPointWithTitle(ParseDecimalFloatingPointWithTitleError),
+    /// An issue found trying to convert into a date/time.
     DateTime(DateTimeSyntaxError),
+    /// An issue found trying to convert into an attribute list.
     AttributeList(AttributeListParsingError),
 }
 impl Display for ParseTagValueError {
@@ -501,9 +521,12 @@ impl From<AttributeListParsingError> for ParseTagValueError {
     }
 }
 
+/// An error in trying to convert into a decimal float with a title (used in the `EXTINF` tag).
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum ParseDecimalFloatingPointWithTitleError {
+    /// The duration is not a valid number.
     InvalidDuration(ParseFloatError),
+    /// The title is not valid UTF-8.
     InvalidTitle(Utf8Error),
 }
 impl Display for ParseDecimalFloatingPointWithTitleError {
@@ -531,28 +554,46 @@ impl From<fast_float2::Error> for ParseDecimalFloatingPointWithTitleError {
     }
 }
 
+/// An error in trying to convert an attribute value into a different data type as defined for the
+/// attribute in the HLS specification.
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum ParseAttributeValueError {
+    /// The value is wrapped in quotes when it should not be.
     UnexpectedQuoted {
+        /// The name of the attribute.
         attr_name: &'static str,
     },
+    /// The value is not wrapped in quotes when it should be.
     UnexpectedUnquoted {
+        /// The name of the attribute.
         attr_name: &'static str,
     },
+    /// An issue found trying to convert into a decimal integer.
     DecimalInteger {
+        /// The name of the attribute.
         attr_name: &'static str,
+        /// The underlying error.
         error: ParseNumberError,
     },
+    /// An issue found trying to convert into a decimal floating point.
     DecimalFloatingPoint {
+        /// The name of the attribute.
         attr_name: &'static str,
+        /// The underlying error.
         error: ParseFloatError,
     },
+    /// An issue found trying to convert into a decimal resolution.
     DecimalResolution {
+        /// The name of the attribute.
         attr_name: &'static str,
+        /// The underlying error.
         error: DecimalResolutionParseError,
     },
+    /// An issue found trying to convert into a UTF-8 string.
     Utf8 {
+        /// The name of the attribute.
         attr_name: &'static str,
+        /// The underlying error.
         error: Utf8Error,
     },
 }
@@ -585,32 +626,6 @@ impl Display for ParseAttributeValueError {
     }
 }
 impl Error for ParseAttributeValueError {}
-
-/// The kind of value that was found unexpectedly in [`ValidationError::UnexpectedValueType`].
-#[derive(Debug, PartialEq, Clone, Copy)]
-pub enum ValidationErrorValueKind {
-    /// Corresponds to [`crate::tag::value::SemiParsedTagValue::Empty`].
-    Empty,
-    /// Corresponds to
-    /// [`crate::tag::value::SemiParsedTagValue::DecimalFloatingPointWithOptionalTitle`].
-    DecimalFloatingPointWithOptionalTitle,
-    /// Corresponds to [`crate::tag::value::SemiParsedTagValue::AttributeList`].
-    AttributeList,
-    /// Corresponds to [`crate::tag::value::SemiParsedTagValue::Unparsed`].
-    Unparsed,
-}
-impl From<&SemiParsedTagValue<'_>> for ValidationErrorValueKind {
-    fn from(value: &SemiParsedTagValue<'_>) -> Self {
-        match value {
-            SemiParsedTagValue::Empty => Self::Empty,
-            SemiParsedTagValue::DecimalFloatingPointWithOptionalTitle(_, _) => {
-                Self::DecimalFloatingPointWithOptionalTitle
-            }
-            SemiParsedTagValue::AttributeList(_) => Self::AttributeList,
-            SemiParsedTagValue::Unparsed(_) => Self::Unparsed,
-        }
-    }
-}
 
 /// An error found while trying to parse a number.
 #[derive(Debug, PartialEq, Clone, Copy)]

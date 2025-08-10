@@ -21,9 +21,14 @@ use std::fmt::Debug;
 /// if there was an error in parsing the known tag. In the last case, the [`Self::validation_error`]
 /// will provide details on the problem encountered.
 ///
+/// Despite not being "fully parsed", the [`TagValue`] provided in [`Self::value`] provides many
+/// methods useful for extracting more information from the tag value, and is what all the library
+/// defined HLS tags use to parse into more strongly defined data structures.
+///
 /// For example:
 /// ```
-/// # use m3u8::{Reader, HlsLine, config::ParsingOptionsBuilder, error::ValidationError};
+/// # use m3u8::{Reader, HlsLine, config::ParsingOptionsBuilder, error::ValidationError,
+/// # tag::value::TagValue};
 /// let lines = r#"#EXT-X-QUESTION:VALUE="Do you know who I am?"
 /// #EXT-X-PROGRAM-DATE-TIME:2025-08-05T21:59:42.417-05:00
 /// #EXT-X-STREAM-INF:AVERAGE-BANDWIDTH=10000000"#;
@@ -38,14 +43,14 @@ use std::fmt::Debug;
 /// // #EXT-X-QUESTION:VALUE="Do you know who I am?"
 /// let Ok(Some(HlsLine::UnknownTag(tag))) = reader.read_line() else { panic!("unexpected tag") };
 /// assert_eq!("-X-QUESTION", tag.name());
-/// assert_eq!(Some(r#"VALUE="Do you know who I am?""#.as_bytes()), tag.value());
+/// assert_eq!(Some(TagValue(r#"VALUE="Do you know who I am?""#.as_bytes())), tag.value());
 /// assert_eq!(None, tag.validation_error());
 /// assert_eq!(r#"#EXT-X-QUESTION:VALUE="Do you know who I am?""#.as_bytes(), tag.as_bytes());
 ///
 /// // #EXT-X-PROGRAM-DATE-TIME:2025-08-05T21:59:42.417-05:00
 /// let Ok(Some(HlsLine::UnknownTag(tag))) = reader.read_line() else { panic!("unexpected tag") };
 /// assert_eq!("-X-PROGRAM-DATE-TIME", tag.name());
-/// assert_eq!(Some("2025-08-05T21:59:42.417-05:00".as_bytes()), tag.value());
+/// assert_eq!(Some(TagValue("2025-08-05T21:59:42.417-05:00".as_bytes())), tag.value());
 /// assert_eq!(None, tag.validation_error());
 /// assert_eq!(
 ///     "#EXT-X-PROGRAM-DATE-TIME:2025-08-05T21:59:42.417-05:00".as_bytes(),
@@ -55,7 +60,7 @@ use std::fmt::Debug;
 /// // #EXT-X-STREAM-INF:AVERAGE-BANDWIDTH=10000000
 /// let Ok(Some(HlsLine::UnknownTag(tag))) = reader.read_line() else { panic!("unexpected tag") };
 /// assert_eq!("-X-STREAM-INF", tag.name());
-/// assert_eq!(Some("AVERAGE-BANDWIDTH=10000000".as_bytes()), tag.value());
+/// assert_eq!(Some(TagValue("AVERAGE-BANDWIDTH=10000000".as_bytes())), tag.value());
 /// assert_eq!(
 ///     Some(ValidationError::MissingRequiredAttribute("BANDWIDTH")),
 ///     tag.validation_error()
@@ -85,7 +90,9 @@ impl<'a> Tag<'a> {
     /// The value of the unknown tag.
     ///
     /// This will be the entire byte-slice after the first `:` in the line. If there is no `:` then
-    /// this will be `None`.
+    /// this will be `None`. The slice borrow is wrapped in [`TagValue`] which provides many methods
+    /// for converting to a more suitable data structure depending on the tag. See the documentation
+    /// for `TagValue` for more information.
     pub fn value(&self) -> Option<TagValue<'a>> {
         self.value
     }

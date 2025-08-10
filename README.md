@@ -136,7 +136,7 @@ use m3u8::{
         unknown,
         value::{
             DecimalResolution, MutableParsedAttributeValue, MutableSemiParsedTagValue,
-            ParsedAttributeValue, AttributeValue,
+            AttributeValue,
         },
     },
 };

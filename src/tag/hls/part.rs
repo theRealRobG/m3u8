@@ -276,7 +276,7 @@ impl<'a> Part<'a> {
         } else {
             matches!(
                 self.attribute_list.get(INDEPENDENT),
-                Some(AttributeValue::Unquoted(UnquotedAttributeValue(b"YES")))
+                Some(AttributeValue::Unquoted(UnquotedAttributeValue(YES)))
             )
         }
     }
@@ -315,7 +315,7 @@ impl<'a> Part<'a> {
         } else {
             matches!(
                 self.attribute_list.get(GAP),
-                Some(AttributeValue::Unquoted(UnquotedAttributeValue(b"YES")))
+                Some(AttributeValue::Unquoted(UnquotedAttributeValue(YES)))
             )
         }
     }
@@ -388,7 +388,7 @@ const DURATION: &str = "DURATION";
 const INDEPENDENT: &str = "INDEPENDENT";
 const BYTERANGE: &str = "BYTERANGE";
 const GAP: &str = "GAP";
-const YES: &str = "YES";
+const YES: &[u8] = b"YES";
 
 fn calculate_line(attribute_list: &PartAttributeList) -> Vec<u8> {
     let PartAttributeList {
@@ -400,13 +400,13 @@ fn calculate_line(attribute_list: &PartAttributeList) -> Vec<u8> {
     } = attribute_list;
     let mut line = format!("#EXT-X-PART:{URI}=\"{uri}\",{DURATION}={duration}");
     if *independent {
-        line.push_str(format!(",{INDEPENDENT}={YES}").as_str());
+        line.push_str(",INDEPENDENT=YES");
     }
     if let Some(byterange) = byterange {
         line.push_str(format!(",{BYTERANGE}=\"{byterange}\"").as_str());
     }
     if *gap {
-        line.push_str(format!(",{GAP}={YES}").as_str());
+        line.push_str(",GAP=YES");
     }
     line.into_bytes()
 }

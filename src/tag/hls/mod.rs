@@ -558,14 +558,10 @@ mod tests {
         date_time,
         tag::{
             hls::{daterange::ExtensionAttributeValue, map::MapByterange, part::PartByterange},
-            value::{
-                DecimalResolution, HlsPlaylistType, ParsedAttributeValue, SemiParsedTagValue,
-                TagValue, UnparsedTagValue,
-            },
+            value::{DecimalResolution, HlsPlaylistType, TagValue},
         },
     };
     use pretty_assertions::assert_eq;
-    use std::collections::HashMap;
 
     macro_rules! unknown_tag {
         ($name:literal) => {

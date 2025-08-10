@@ -172,7 +172,7 @@ impl<'a> Start<'a> {
         } else {
             matches!(
                 self.attribute_list.get(PRECISE),
-                Some(AttributeValue::Unquoted(UnquotedAttributeValue(b"YES")))
+                Some(AttributeValue::Unquoted(UnquotedAttributeValue(YES)))
             )
         }
     }
@@ -208,7 +208,7 @@ into_inner_tag!(Start);
 
 const TIME_OFFSET: &str = "TIME-OFFSET";
 const PRECISE: &str = "PRECISE";
-const YES: &str = "YES";
+const YES: &[u8] = b"YES";
 
 fn calculate_line(attribute_list: &StartAttributeList) -> Vec<u8> {
     let StartAttributeList {
@@ -216,7 +216,7 @@ fn calculate_line(attribute_list: &StartAttributeList) -> Vec<u8> {
         precise,
     } = attribute_list;
     if *precise {
-        format!("#EXT-X-START:{TIME_OFFSET}={time_offset},{PRECISE}={YES}").into_bytes()
+        format!("#EXT-X-START:{TIME_OFFSET}={time_offset},{PRECISE}=YES").into_bytes()
     } else {
         format!("#EXT-X-START:{TIME_OFFSET}={time_offset}").into_bytes()
     }

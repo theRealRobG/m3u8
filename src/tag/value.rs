@@ -8,25 +8,108 @@ use crate::{
     error::{
         AttributeListParsingError, DateTimeSyntaxError, DecimalResolutionParseError,
         ParseDecimalFloatingPointWithTitleError, ParseDecimalIntegerRangeError, ParseFloatError,
-        ParseNumberError, ParsePlaylistTypeError, TagValueSyntaxError,
+        ParseNumberError, ParsePlaylistTypeError,
     },
-    line::ParsedByteSlice,
-    utils::{f64_to_u64, parse_u64, split_on_new_line},
+    utils::parse_u64,
 };
-use memchr::{memchr, memchr_iter, memchr2, memchr3, memchr3_iter};
+use memchr::{memchr, memchr_iter, memchr3_iter};
 use std::{borrow::Cow, collections::HashMap, fmt::Display};
 
+/// A wrapper struct that provides many convenience methods for converting a tag value into a more
+/// specialized type.
+///
+/// The `TagValue` is intended to wrap the bytes following the `:` and before the end of line (not
+/// including the `\r` or `\n` characters). The constructor remains public (for convenience, as
+/// described below) so bear this in mind if trying to use this struct directly. It is unlikely that
+/// a user will need to construct this directly, and instead, should access this via
+/// [`crate::tag::unknown::Tag::value`] (`Tag` is via [`crate::tag::unknown::parse`]). There may be
+/// exceptions and so the library provides this flexibility.
+///
+/// For example, a (perhaps interesting) use case for using this struct directly can be to parse
+/// information out of comment tags. For example, it has been noticed that the Unified Streaming
+/// Packager seems to output a custom timestamp comment with its live playlists, that looks like a
+/// tag; however, the library will not parse this as a tag because the syntax is
+/// `#USP-X-TIMESTAMP-MAP:<attribute-list>`, so the lack of `#EXT` prefix means it is seen as a
+/// comment only. Despite this, if we split on the `:`, we can use this struct to extract
+/// information about the value.
+/// ```
+/// # use m3u8::{
+/// #     HlsLine, Reader,
+/// #     config::ParsingOptions,
+/// #     date, date_time,
+/// #     line::ParsedByteSlice,
+/// #     tag::value::{TagValue, AttributeValue},
+/// #     error::ValidationError,
+/// # };
+/// let pseudo_tag = "#USP-X-TIMESTAMP-MAP:MPEGTS=900000,LOCAL=1970-01-01T00:00:00Z";
+/// let mut reader = Reader::from_str(pseudo_tag, ParsingOptions::default());
+/// match reader.read_line() {
+///     Ok(Some(HlsLine::Comment(tag))) => {
+///         let mut tag_split = tag.splitn(2, ':');
+///         if tag_split.next() != Some("USP-X-TIMESTAMP-MAP") {
+///             return Err(format!("unexpected tag name").into());
+///         }
+///         let Some(value) = tag_split.next() else {
+///             return Err(format!("unexpected no tag value").into());
+///         };
+///         let tag_value = TagValue(value.trim().as_bytes());
+///         let list = tag_value.try_as_attribute_list()?;
+///
+///         // Prove that we can extract the value of MPEGTS
+///         let mpegts = list
+///             .get("MPEGTS")
+///             .and_then(AttributeValue::unquoted)
+///             .ok_or(ValidationError::MissingRequiredAttribute("MPEGTS"))?
+///             .try_as_decimal_integer()?;
+///         assert_eq!(900000, mpegts);
+///
+///         // Prove that we can extract the value of LOCAL
+///         let local = list
+///             .get("LOCAL")
+///             .and_then(AttributeValue::unquoted)
+///             .and_then(|v| date::parse_bytes(v.0).ok())
+///             .ok_or(ValidationError::MissingRequiredAttribute("LOCAL"))?;
+///         assert_eq!(date_time!(1970-01-01 T 00:00:00.000), local);
+///     }
+///     r => return Err(format!("unexpected result {r:?}").into()),
+/// }
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct TagValue<'a>(pub &'a [u8]);
 impl<'a> TagValue<'a> {
+    /// Indicates whether the value is empty or not.
+    ///
+    /// This is only the case if the tag contained a `:` value separator but had no value content
+    /// afterwards (before the new line). Under all known circumstances this is an error. If a tag
+    /// value is empty then this is indicated via [`crate::tag::unknown::Tag::value`] providing
+    /// `None`.
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
 
+    /// Attempt to convert the tag value bytes into a decimal integer.
+    ///
+    /// For example:
+    /// ```
+    /// let tag = m3u8::tag::unknown::parse("#EXT-X-EXAMPLE:100")?.parsed;
+    /// let value = tag.value().expect("should have value defined");
+    /// assert_eq!(100, value.try_as_decimal_integer()?);
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     pub fn try_as_decimal_integer(&self) -> Result<u64, ParseNumberError> {
         parse_u64(self.0)
     }
 
+    /// Attempt to convert the tag value bytes into a decimal integer range (`<n>[@<o>]`).
+    ///
+    /// For example:
+    /// ```
+    /// let tag = m3u8::tag::unknown::parse("#EXT-X-EXAMPLE:1024@512")?.parsed;
+    /// let value = tag.value().expect("should have value defined");
+    /// assert_eq!((1024, Some(512)), value.try_as_decimal_integer_range()?);
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     pub fn try_as_decimal_integer_range(
         &self,
     ) -> Result<(u64, Option<u64>), ParseDecimalIntegerRangeError> {
@@ -44,6 +127,16 @@ impl<'a> TagValue<'a> {
         }
     }
 
+    /// Attempt to convert the tag value bytes into a playlist type.
+    ///
+    /// For example:
+    /// ```
+    /// # use m3u8::tag::value::HlsPlaylistType;
+    /// let tag = m3u8::tag::unknown::parse("#EXT-X-EXAMPLE:VOD")?.parsed;
+    /// let value = tag.value().expect("should have value defined");
+    /// assert_eq!(HlsPlaylistType::Vod, value.try_as_playlist_type()?);
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     pub fn try_as_playlist_type(&self) -> Result<HlsPlaylistType, ParsePlaylistTypeError> {
         if self.0 == b"VOD" {
             Ok(HlsPlaylistType::Vod)
@@ -54,10 +147,28 @@ impl<'a> TagValue<'a> {
         }
     }
 
+    /// Attempt to convert the tag value bytes into a decimal floating point.
+    ///
+    /// For example:
+    /// ```
+    /// let tag = m3u8::tag::unknown::parse("#EXT-X-EXAMPLE:3.14")?.parsed;
+    /// let value = tag.value().expect("should have value defined");
+    /// assert_eq!(3.14, value.try_as_decimal_floating_point()?);
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     pub fn try_as_decimal_floating_point(&self) -> Result<f64, ParseFloatError> {
         fast_float2::parse(self.0).map_err(|_| ParseFloatError)
     }
 
+    /// Attempt to convert the tag value bytes into a decimal floating point with title.
+    ///
+    /// For example:
+    /// ```
+    /// let tag = m3u8::tag::unknown::parse("#EXT-X-EXAMPLE:3.14,pi")?.parsed;
+    /// let value = tag.value().expect("should have value defined");
+    /// assert_eq!((3.14, "pi"), value.try_as_decimal_floating_point_with_title()?);
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     pub fn try_as_decimal_floating_point_with_title(
         &self,
     ) -> Result<(f64, &'a str), ParseDecimalFloatingPointWithTitleError> {
@@ -74,10 +185,37 @@ impl<'a> TagValue<'a> {
         }
     }
 
+    /// Attempt to convert the tag value bytes into a date time.
+    ///
+    /// For example:
+    /// ```
+    /// # use m3u8::date_time;
+    /// let tag = m3u8::tag::unknown::parse("#EXT-X-EXAMPLE:2025-08-10T17:27:42.213-05:00")?.parsed;
+    /// let value = tag.value().expect("should have value defined");
+    /// assert_eq!(date_time!(2025-08-10 T 17:27:42.213 -05:00), value.try_as_date_time()?);
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     pub fn try_as_date_time(&self) -> Result<DateTime, DateTimeSyntaxError> {
         date::parse_bytes(self.0)
     }
 
+    /// Attempt to convert the tag value bytes into an attribute list.
+    ///
+    /// For example:
+    /// ```
+    /// # use std::collections::HashMap;
+    /// # use m3u8::tag::value::{AttributeValue, UnquotedAttributeValue};
+    /// let tag = m3u8::tag::unknown::parse("#EXT-X-EXAMPLE:TYPE=LIST,VALUE=\"example\"")?.parsed;
+    /// let value = tag.value().expect("should have value defined");
+    /// assert_eq!(
+    ///     HashMap::from([
+    ///         ("TYPE", AttributeValue::Unquoted(UnquotedAttributeValue(b"LIST"))),
+    ///         ("VALUE", AttributeValue::Quoted("example"))
+    ///     ]),
+    ///     value.try_as_attribute_list()?
+    /// );
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     pub fn try_as_attribute_list(
         &self,
     ) -> Result<HashMap<&'a str, AttributeValue<'a>>, AttributeListParsingError> {
@@ -192,18 +330,51 @@ enum AttributeListParsingState<'a> {
     FinishedReadingQuotedValue { name: &'a str, value: &'a str },
 }
 
+/// An attribute value within an attribute list.
+///
+/// Values may be quoted or unquoted. In the case that they are unquoted they may be converted into
+/// several other data types. This is done via use of convenience methods on
+/// [`UnquotedAttributeValue`].
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum AttributeValue<'a> {
+    /// An unquoted value (e.g. `TYPE=AUDIO`, `BANDWIDTH=10000000`, `SCORE=1.5`,
+    /// `RESOLUTION=1920x1080`, `SCTE35-OUT=0xABCD`, etc.).
     Unquoted(UnquotedAttributeValue<'a>),
+    /// A quoted value (e.g. `CODECS="avc1.64002a,mp4a.40.2"`).
     Quoted(&'a str),
 }
 impl<'a> AttributeValue<'a> {
+    /// A convenience method to get the value of the `Unquoted` case.
+    ///
+    /// This can be useful when chaining on optional values. For example:
+    /// ```
+    /// # use std::collections::HashMap;
+    /// # use m3u8::tag::value::AttributeValue;
+    /// fn get_bandwidth(list: &HashMap<&str, AttributeValue>) -> Option<u64> {
+    ///     list
+    ///         .get("BANDWIDTH")
+    ///         .and_then(AttributeValue::unquoted)
+    ///         .and_then(|v| v.try_as_decimal_integer().ok())
+    /// }
+    /// ```
     pub fn unquoted(&self) -> Option<UnquotedAttributeValue<'a>> {
         match self {
             AttributeValue::Unquoted(v) => Some(*v),
             AttributeValue::Quoted(_) => None,
         }
     }
+    /// A convenience method to get the value of the `Quoted` case.
+    ///
+    /// This can be useful when chaining on optional values. For example:
+    /// ```
+    /// # use std::collections::HashMap;
+    /// # use m3u8::tag::value::AttributeValue;
+    /// fn get_codecs<'a>(list: &HashMap<&'a str, AttributeValue<'a>>) -> Option<&'a str> {
+    ///     list
+    ///         .get("CODECS")
+    ///         .and_then(AttributeValue::quoted)
+    /// }
+    /// ```
     pub fn quoted(&self) -> Option<&'a str> {
         match self {
             AttributeValue::Unquoted(_) => None,
@@ -212,17 +383,93 @@ impl<'a> AttributeValue<'a> {
     }
 }
 
+/// A wrapper struct that provides many convenience methods for converting an unquoted attribute
+/// value into a specialized type.
+///
+/// It is very unlikely that this struct will need to be constructed directly. This is more normally
+/// found when taking an attribute list tag value and accessing some of the internal attributes. For
+/// example:
+/// ```
+/// # use std::collections::HashMap;
+/// # use m3u8::tag::value::{AttributeValue, UnquotedAttributeValue};
+/// let tag = m3u8::tag::unknown::parse("#EXT-X-EXAMPLE:TYPE=PI,NUMBER=3.14")?.parsed;
+/// let value = tag.value().expect("should have value defined");
+/// let list = value.try_as_attribute_list()?;
+///
+/// let type_value = list
+///     .get("TYPE")
+///     .and_then(AttributeValue::unquoted)
+///     .expect("should be defined and unquoted");
+/// assert_eq!(UnquotedAttributeValue(b"PI"), type_value);
+/// assert_eq!(Ok("PI"), type_value.try_as_utf_8());
+///
+/// let number_value = list
+///     .get("NUMBER")
+///     .and_then(AttributeValue::unquoted)
+///     .expect("should be defined and unquoted");
+/// assert_eq!(UnquotedAttributeValue(b"3.14"), number_value);
+/// assert_eq!(Ok(3.14), number_value.try_as_decimal_floating_point());
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct UnquotedAttributeValue<'a>(pub &'a [u8]);
 impl<'a> UnquotedAttributeValue<'a> {
+    /// Attempt to convert the attribute value bytes into a decimal integer.
+    ///
+    /// For example:
+    /// ```
+    /// # use m3u8::tag::value::AttributeValue;
+    /// let tag = m3u8::tag::unknown::parse("#EXT-X-TEST:EXAMPLE=42")?.parsed;
+    /// let list = tag.value().expect("should have value defined").try_as_attribute_list()?;
+    /// assert_eq!(
+    ///     Some(42),
+    ///     list
+    ///         .get("EXAMPLE")
+    ///         .and_then(AttributeValue::unquoted)
+    ///         .and_then(|v| v.try_as_decimal_integer().ok())
+    /// );
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     pub fn try_as_decimal_integer(&self) -> Result<u64, ParseNumberError> {
         parse_u64(self.0)
     }
 
+    /// Attempt to convert the attribute value bytes into a decimal floating point.
+    ///
+    /// For example:
+    /// ```
+    /// # use m3u8::tag::value::AttributeValue;
+    /// let tag = m3u8::tag::unknown::parse("#EXT-X-TEST:EXAMPLE=3.14")?.parsed;
+    /// let list = tag.value().expect("should have value defined").try_as_attribute_list()?;
+    /// assert_eq!(
+    ///     Some(3.14),
+    ///     list
+    ///         .get("EXAMPLE")
+    ///         .and_then(AttributeValue::unquoted)
+    ///         .and_then(|v| v.try_as_decimal_floating_point().ok())
+    /// );
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     pub fn try_as_decimal_floating_point(&self) -> Result<f64, ParseFloatError> {
         fast_float2::parse(self.0).map_err(|_| ParseFloatError)
     }
 
+    /// Attempt to convert the attribute value bytes into a decimal resolution.
+    ///
+    /// For example:
+    /// ```
+    /// # use m3u8::tag::value::{AttributeValue, DecimalResolution};
+    /// let tag = m3u8::tag::unknown::parse("#EXT-X-TEST:EXAMPLE=1920x1080")?.parsed;
+    /// let list = tag.value().expect("should have value defined").try_as_attribute_list()?;
+    /// assert_eq!(
+    ///     Some(DecimalResolution { width: 1920, height: 1080 }),
+    ///     list
+    ///         .get("EXAMPLE")
+    ///         .and_then(AttributeValue::unquoted)
+    ///         .and_then(|v| v.try_as_decimal_resolution().ok())
+    /// );
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     pub fn try_as_decimal_resolution(
         &self,
     ) -> Result<DecimalResolution, DecimalResolutionParseError> {
@@ -237,141 +484,24 @@ impl<'a> UnquotedAttributeValue<'a> {
         Ok(DecimalResolution { width, height })
     }
 
+    /// Attempt to convert the attribute value bytes into a UTF-8 string.
+    ///
+    /// For example:
+    /// ```
+    /// # use m3u8::tag::value::AttributeValue;
+    /// let tag = m3u8::tag::unknown::parse("#EXT-X-TEST:EXAMPLE=ENUMERATED-VALUE")?.parsed;
+    /// let list = tag.value().expect("should have value defined").try_as_attribute_list()?;
+    /// assert_eq!(
+    ///     Some("ENUMERATED-VALUE"),
+    ///     list
+    ///         .get("EXAMPLE")
+    ///         .and_then(AttributeValue::unquoted)
+    ///         .and_then(|v| v.try_as_utf_8().ok())
+    /// );
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     pub fn try_as_utf_8(&self) -> Result<&'a str, std::str::Utf8Error> {
         std::str::from_utf8(self.0)
-    }
-}
-
-/// Describes what the library has been able to parse from the tag value.
-///
-/// The library makes a special attempt to parse decimal floats followed by a title (string slice),
-/// which is the value that the `#EXTINF` tag uses, and also the attribute list type, which is used
-/// by many of the HLS tags. Empty is trivially provided and everything else comes under the
-/// `Unparsed` case, which itself provides helper methods for parsing. This design is a tradeoff
-/// between functionality and performance. Internally, when walking through the value data, the
-/// library only checks for a few tokens other than the end of line characters. If the end of line
-/// is found instead of the searched for tokens (`,` and `=`) then the value is left as unparsed and
-/// passed on to the next round of parsing. It is true that the next round will require to read the
-/// value again; however, the [`UnparsedTagValue`] provides dedicated methods for parsing well
-/// defined value types, which can be paired with the better context provided in the
-/// `TryFrom<ParsedTag>` implementation of the tag to avoid needing to attempt several different
-/// conversion strategies. This may change in the future, as per issue [#2].
-///
-/// [#2]: https://github.com/theRealRobG/m3u8/issues/2
-#[derive(Debug, PartialEq)]
-pub enum SemiParsedTagValue<'a> {
-    /// The tag value was empty.
-    ///
-    /// For example, the `#EXTM3U` tag has an `Empty` value.
-    Empty,
-    /// The tag value was a float and a comma separated title.
-    ///
-    /// For example, the `#EXTINF:<duration>,[<title>]` tag has a
-    /// `DecimalFloatingPointWithOptionalTitle` value (e.g. `#EXTINF:3.003,free-form text`).
-    DecimalFloatingPointWithOptionalTitle(f64, &'a str),
-    /// The tag value is an attribute list (that is, a comma separated list of key/value pairs, each
-    /// separated by `=`).
-    ///
-    /// For example, the `#EXT-X-MAP:<attribute-list>` tag has an `AttributeList` value (e.g.
-    /// `#EXT-X-MAP:URI="init.mp4"`).
-    AttributeList(HashMap<&'a str, ParsedAttributeValue<'a>>),
-    /// The tag value is unparsed; however, it is known not to be any of the other cases.
-    ///
-    /// The `UnparsedTagValue` provides methods for extracting known values out of the tag value.
-    /// For example, the `#EXT-X-TARGETDURATION:<s>` tag has an `Unparsed` value (e.g.
-    /// `#EXT-X-TARGETDURATION:10`, which could be accessed via the
-    /// [`UnparsedTagValue::try_as_decimal_integer`] method).
-    Unparsed(UnparsedTagValue<'a>),
-}
-impl<'a, T> From<(f64, T)> for SemiParsedTagValue<'a>
-where
-    T: Into<&'a str>,
-{
-    fn from(value: (f64, T)) -> Self {
-        Self::DecimalFloatingPointWithOptionalTitle(value.0, value.1.into())
-    }
-}
-impl<'a, K, V> From<HashMap<K, V>> for SemiParsedTagValue<'a>
-where
-    K: Into<&'a str>,
-    V: Into<ParsedAttributeValue<'a>>,
-{
-    fn from(mut value: HashMap<K, V>) -> Self {
-        let mut map = HashMap::new();
-        for (key, value) in value.drain() {
-            map.insert(key.into(), value.into());
-        }
-        Self::AttributeList(map)
-    }
-}
-impl<'a, K, V, const N: usize> From<[(K, V); N]> for SemiParsedTagValue<'a>
-where
-    K: Into<&'a str>,
-    V: Into<ParsedAttributeValue<'a>>,
-{
-    fn from(value: [(K, V); N]) -> Self {
-        let mut map = HashMap::new();
-        for (key, value) in value {
-            map.insert(key.into(), value.into());
-        }
-        Self::AttributeList(map)
-    }
-}
-impl<'a> From<&'a [u8]> for SemiParsedTagValue<'a> {
-    fn from(value: &'a [u8]) -> Self {
-        Self::Unparsed(UnparsedTagValue(value))
-    }
-}
-/// A value that was not parsed in the initial round of parsing but does provide methods for
-/// completing the parsing into a well defined type.
-///
-/// The documentation of [`SemiParsedTagValue`] provides more information on the reason that this
-/// exists.
-#[derive(Debug, PartialEq)]
-pub struct UnparsedTagValue<'a>(pub &'a [u8]);
-impl<'a> UnparsedTagValue<'a> {
-    /// Attempts to read the inner data as a [`HlsPlaylistType`].
-    pub fn try_as_hls_playlist_type(&self) -> Result<HlsPlaylistType, ParsePlaylistTypeError> {
-        if self.0 == b"VOD" {
-            Ok(HlsPlaylistType::Vod)
-        } else if self.0 == b"EVENT" {
-            Ok(HlsPlaylistType::Event)
-        } else {
-            Err(ParsePlaylistTypeError::InvalidValue)
-        }
-    }
-
-    /// Attempts to read the inner data as a decimal integer.
-    pub fn try_as_decimal_integer(&self) -> Result<u64, ParseNumberError> {
-        parse_u64(self.0)
-    }
-
-    /// Attempts to read the inner data as a decimal integer range (`<n>[@<o>]`).
-    pub fn try_as_decimal_integer_range(
-        &self,
-    ) -> Result<(u64, Option<u64>), ParseDecimalIntegerRangeError> {
-        match memchr(b'@', self.0) {
-            Some(n) => {
-                let length = parse_u64(&self.0[..n])
-                    .map_err(ParseDecimalIntegerRangeError::InvalidLength)?;
-                let offset = parse_u64(&self.0[(n + 1)..])
-                    .map_err(ParseDecimalIntegerRangeError::InvalidOffset)?;
-                Ok((length, Some(offset)))
-            }
-            None => parse_u64(self.0)
-                .map(|length| (length, None))
-                .map_err(ParseDecimalIntegerRangeError::InvalidLength),
-        }
-    }
-
-    /// Attempts to read the inner data as a float.
-    pub fn try_as_float(&self) -> Result<f64, ParseFloatError> {
-        fast_float2::parse(self.0).map_err(|_| ParseFloatError)
-    }
-
-    /// Attempts to read the inner data as a [`DateTime`].
-    pub fn try_as_date_time(&self) -> Result<DateTime, DateTimeSyntaxError> {
-        date::parse_bytes(self.0)
     }
 }
 
@@ -386,157 +516,6 @@ pub enum HlsPlaylistType {
     /// If the `EXT-X-PLAYLIST-TYPE` value is Video On Demand (VOD), the Media Playlist cannot
     /// change.
     Vod,
-}
-
-/// A parsed attribute list value.
-///
-/// This represents the value of an attribute in an attribute list, as defined in [Section 4.2].
-///
-/// [Section 4.2]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.2
-#[derive(Debug, PartialEq, Clone, Copy)]
-pub enum ParsedAttributeValue<'a> {
-    /// The parsed value "looks like" a decimal integer.
-    ///
-    /// NOTE: the parser does not have the context to determine whether the tag that contains the
-    /// value should interpret this value as a `SignedDecimalFloatingPoint` or if it should be
-    /// interpreted as is (a `DecimalInteger`). If the value is found without any fractional parts
-    /// (no manitissa) then it is parsed as an integer.
-    ///
-    /// The [`ParsedAttributeValue::as_option_f64`] helps resolve this problem by taking both cases
-    /// into consideration when trying to provide a float value.
-    ///
-    /// From [Section 4.2], this represents:
-    /// * decimal-integer
-    ///
-    /// [Section 4.2]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.2
-    DecimalInteger(u64),
-    /// The parsed value is a signed floating point number.
-    ///
-    /// From [Section 4.2], this represents:
-    /// * decimal-floating-point
-    /// * signed-decimal-floating-point
-    ///
-    /// [Section 4.2]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.2
-    SignedDecimalFloatingPoint(f64),
-    /// The parsed value is a quoted string.
-    ///
-    /// From [Section 4.2], this represents:
-    /// * quoted-string
-    /// * enumerated-string-list
-    ///
-    /// [Section 4.2]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.2
-    QuotedString(&'a str),
-    /// The parsed value is an unquoted string.
-    ///
-    /// From [Section 4.2], this represents:
-    /// * hexadecimal-sequence
-    /// * enumerated-string
-    /// * decimal-resolution
-    ///
-    /// [Section 4.2]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.2
-    UnquotedString(&'a str),
-}
-impl From<u64> for ParsedAttributeValue<'_> {
-    fn from(value: u64) -> Self {
-        Self::DecimalInteger(value)
-    }
-}
-impl From<f64> for ParsedAttributeValue<'_> {
-    fn from(value: f64) -> Self {
-        Self::SignedDecimalFloatingPoint(value)
-    }
-}
-
-impl<'a> ParsedAttributeValue<'a> {
-    /// Helper method to extract `DecimalInteger` value.
-    /// ```
-    /// use m3u8::tag::value::ParsedAttributeValue;
-    ///
-    /// assert_eq!(Some(42), ParsedAttributeValue::DecimalInteger(42).as_option_u64());
-    /// assert_eq!(None, ParsedAttributeValue::QuotedString("42").as_option_u64());
-    /// ```
-    pub fn as_option_u64(&self) -> Option<u64> {
-        if let Self::DecimalInteger(d) = self {
-            Some(*d)
-        } else {
-            None
-        }
-    }
-
-    /// Helper method to extract either `DecimalInteger` or `SignedDecimalFloatingPoint` as `f64`.
-    ///
-    /// We consider both enum cases because at time of parsing we do not yet know the context of the
-    /// attribute to understand whether the value MUST be a positive integer or whether it MAY be
-    /// any decimal float. This therefore makes extraction of `f64` values easier.
-    ///
-    /// For example, consider if we had the tag `#EXT-X-START:TIME-OFFSET=6`. When parsing, we would
-    /// consider the value of `TIME-OFFSET` to be `DecimalInteger(6)`; however, the EXT-X-START tag
-    /// considers the value of `TIME-OFFSET` to be "a signed-decimal-floating-point number". So to
-    /// extract the f64, if this method did not consider both `DecimalInteger` and
-    /// `SignedDecimalFloatingPoint` cases, all users of the library would need to know that they
-    /// should check both themselves. Therefore, it seems that the more normal usage pattern would
-    /// be to take both enum cases into account.
-    /// ```
-    /// use m3u8::tag::value::ParsedAttributeValue;
-    ///
-    /// assert_eq!(
-    ///     Some(42.0),
-    ///     ParsedAttributeValue::SignedDecimalFloatingPoint(42.0).as_option_f64()
-    /// );
-    /// assert_eq!(Some(42.0), ParsedAttributeValue::DecimalInteger(42).as_option_f64());
-    /// assert_eq!(None, ParsedAttributeValue::QuotedString("42").as_option_f64());
-    /// ```
-    pub fn as_option_f64(&self) -> Option<f64> {
-        if let Self::SignedDecimalFloatingPoint(f) = self {
-            Some(*f)
-        } else if let Self::DecimalInteger(n) = self {
-            Some(*n as f64)
-        } else {
-            None
-        }
-    }
-
-    /// Helper method to extract `QuotedString` value.
-    /// ```
-    /// use m3u8::tag::value::ParsedAttributeValue;
-    ///
-    /// assert_eq!(
-    ///     Some("Hello, World!"),
-    ///     ParsedAttributeValue::QuotedString("Hello, World!").as_option_quoted_str()
-    /// );
-    /// assert_eq!(
-    ///     None,
-    ///     ParsedAttributeValue::UnquotedString("Hello, World!").as_option_quoted_str()
-    /// );
-    /// ```
-    pub fn as_option_quoted_str(&self) -> Option<&str> {
-        if let Self::QuotedString(s) = self {
-            Some(s)
-        } else {
-            None
-        }
-    }
-
-    /// Helper method to extract `UnquotedString` value.
-    /// ```
-    /// use m3u8::tag::value::ParsedAttributeValue;
-    ///
-    /// assert_eq!(
-    ///     Some("Hello, World!"),
-    ///     ParsedAttributeValue::UnquotedString("Hello, World!").as_option_unquoted_str()
-    /// );
-    /// assert_eq!(
-    ///     None,
-    ///     ParsedAttributeValue::QuotedString("Hello, World!").as_option_unquoted_str()
-    /// );
-    /// ```
-    pub fn as_option_unquoted_str(&self) -> Option<&str> {
-        if let Self::UnquotedString(s) = self {
-            Some(s)
-        } else {
-            None
-        }
-    }
 }
 
 /// Provides a mutable version of [`SemiParsedTagValue`].
@@ -565,24 +544,6 @@ pub enum MutableSemiParsedTagValue<'a> {
     ///
     /// See [`SemiParsedTagValue::Unparsed`] for more information.
     Unparsed(MutableUnparsedTagValue<'a>),
-}
-impl<'a> From<SemiParsedTagValue<'a>> for MutableSemiParsedTagValue<'a> {
-    fn from(value: SemiParsedTagValue<'a>) -> Self {
-        match value {
-            SemiParsedTagValue::Empty => Self::Empty,
-            SemiParsedTagValue::DecimalFloatingPointWithOptionalTitle(f, t) => {
-                Self::DecimalFloatingPointWithOptionalTitle(f, t.into())
-            }
-            SemiParsedTagValue::Unparsed(u) => Self::Unparsed(u.into()),
-            SemiParsedTagValue::AttributeList(mut m) => {
-                let mut map = HashMap::new();
-                for (key, value) in m.drain() {
-                    map.insert(key.into(), value.into());
-                }
-                Self::AttributeList(map)
-            }
-        }
-    }
 }
 impl<'a, T> From<(f64, T)> for MutableSemiParsedTagValue<'a>
 where
@@ -634,11 +595,6 @@ impl<'a> From<Cow<'a, [u8]>> for MutableSemiParsedTagValue<'a> {
 /// than just borrowed references from parsed input data).
 #[derive(Debug, PartialEq)]
 pub struct MutableUnparsedTagValue<'a>(pub Cow<'a, [u8]>);
-impl<'a> From<UnparsedTagValue<'a>> for MutableUnparsedTagValue<'a> {
-    fn from(value: UnparsedTagValue<'a>) -> Self {
-        Self(value.0.into())
-    }
-}
 
 /// Provides a mutable version of [`ParsedAttributeValue`].
 ///
@@ -666,18 +622,6 @@ pub enum MutableParsedAttributeValue<'a> {
     ///
     /// See [ParsedAttributeValue::UnquotedString] for more information.
     UnquotedString(Cow<'a, str>),
-}
-impl<'a> From<ParsedAttributeValue<'a>> for MutableParsedAttributeValue<'a> {
-    fn from(value: ParsedAttributeValue<'a>) -> Self {
-        match value {
-            ParsedAttributeValue::DecimalInteger(d) => Self::DecimalInteger(d),
-            ParsedAttributeValue::SignedDecimalFloatingPoint(d) => {
-                Self::SignedDecimalFloatingPoint(d)
-            }
-            ParsedAttributeValue::QuotedString(s) => Self::QuotedString(s.into()),
-            ParsedAttributeValue::UnquotedString(s) => Self::UnquotedString(s.into()),
-        }
-    }
 }
 impl From<u64> for MutableParsedAttributeValue<'_> {
     fn from(value: u64) -> Self {
@@ -724,646 +668,8 @@ impl TryFrom<&str> for DecimalResolution {
     }
 }
 
-/// Parses the input data as a tag value and provides a [`SemiParsedTagValue`] when successful.
-///
-/// This method is the primary function used to extract tag data from lines. This is what is used
-/// when the [`crate::tag::known::CustomTag::is_known_name`] method returns `true`, and is also used
-/// by all tag implementations offered by the library.
-///
-/// This method is more low level than a user would normally need to have; however, it may have some
-/// use cases. For example, while it is more preferable to define a `CustomTag` implementation, it
-/// is possible to find an `UnknownTag` and then use this method to parse out the value.
-///
-/// Another (perhaps interesting) use case for using this method directly can be to parse
-/// information out of comment tags. For example, it has been noticed that the Unified Streaming
-/// Packager seems to output a custom timestamp comment with its live playlists, that looks like a
-/// tag; however, the library will not parse this as a tag because the syntax is
-/// `#USP-X-TIMESTAMP-MAP:<attribute-list>`, so the lack of `#EXT` prefix means it is seen as a
-/// comment only. Despite this, if we split on the `:`, we can use this method to extract
-/// information about the value.
-/// ```
-/// # use m3u8::{
-/// #     HlsLine, Reader,
-/// #     config::ParsingOptions,
-/// #     date, date_time,
-/// #     line::ParsedByteSlice,
-/// #     tag::value::{ParsedAttributeValue, SemiParsedTagValue, parse},
-/// # };
-/// let pseudo_tag = "#USP-X-TIMESTAMP-MAP:MPEGTS=900000,LOCAL=1970-01-01T00:00:00Z";
-/// let mut reader = Reader::from_str(pseudo_tag, ParsingOptions::default());
-/// match reader.read_line() {
-///     Ok(Some(HlsLine::Comment(tag))) => {
-///         let mut tag_split = tag.splitn(2, ':');
-///         if tag_split.next() != Some("USP-X-TIMESTAMP-MAP") {
-///             return Err(format!("unexpected tag name").into());
-///         }
-///         let Some(value) = tag_split.next() else {
-///             return Err(format!("unexpected no tag value").into());
-///         };
-///         let ParsedByteSlice {
-///             parsed,
-///             remaining: _,
-///         } = parse(value.as_bytes()).map_err(|e| format!("value parsing failed: {e}"))?;
-///         let SemiParsedTagValue::AttributeList(list) = parsed else {
-///             return Err(format!("unexpected tag value type").into());
-///         };
-///
-///         // Prove that we can extract the value of MPEGTS
-///         let Some(mpegts) = (match list.get("MPEGTS") {
-///             Some(v) => v.as_option_u64(),
-///             None => None,
-///         }) else {
-///             return Err(format!("missing required MPEGTS").into());
-///         };
-///         assert_eq!(900000, mpegts);
-///
-///         // Prove that we can extract the value of LOCAL
-///         let Some(local) = (match list.get("LOCAL") {
-///             Some(ParsedAttributeValue::UnquotedString(s)) => date::parse(s).ok(),
-///             _ => None,
-///         }) else {
-///             return Err(format!("missing required LOCAL").into());
-///         };
-///         assert_eq!(date_time!(1970-01-01 T 00:00:00.000), local);
-///     }
-///     r => return Err(format!("unexpected result {r:?}").into()),
-/// }
-/// # Ok::<(), Box<dyn std::error::Error>>(())
-/// ```
-pub fn parse(input: &[u8]) -> Result<ParsedByteSlice<SemiParsedTagValue>, TagValueSyntaxError> {
-    match memchr3(b'\n', b',', b'=', input) {
-        Some(n) => {
-            let needle = input[n];
-            if needle == b'=' {
-                let mut attribute_list = HashMap::new();
-                let name = std::str::from_utf8(&input[..n])?;
-                let (
-                    ParsedByteSlice {
-                        parsed,
-                        mut remaining,
-                    },
-                    mut more,
-                ) = parse_attribute_value(&input[(n + 1)..])?;
-                attribute_list.insert(name, parsed);
-                while more {
-                    let Some(input) = remaining else {
-                        return Err(
-                            TagValueSyntaxError::UnexpectedEndOfLineWhileReadingAttributeName,
-                        );
-                    };
-                    match memchr2(b'=', b'\n', input) {
-                        Some(n) => {
-                            if input[n] == b'=' {
-                                let name = std::str::from_utf8(&input[..n])?;
-                                let (
-                                    ParsedByteSlice {
-                                        parsed,
-                                        remaining: new_remaining,
-                                    },
-                                    new_more,
-                                ) = parse_attribute_value(&input[(n + 1)..])?;
-                                attribute_list.insert(name, parsed);
-                                remaining = new_remaining;
-                                more = new_more;
-                            } else {
-                                return Err(
-                                    TagValueSyntaxError::UnexpectedEndOfLineWhileReadingAttributeName,
-                                );
-                            }
-                        }
-                        None => {
-                            return Err(
-                                TagValueSyntaxError::UnexpectedEndOfLineWhileReadingAttributeName,
-                            );
-                        }
-                    }
-                }
-                Ok(ParsedByteSlice {
-                    parsed: SemiParsedTagValue::AttributeList(attribute_list),
-                    remaining,
-                })
-            } else if needle == b',' {
-                let duration = fast_float2::parse(&input[..n])?;
-                let rest = split_on_new_line(&input[(n + 1)..]);
-                let title = std::str::from_utf8(rest.parsed)?;
-                Ok(ParsedByteSlice {
-                    parsed: SemiParsedTagValue::DecimalFloatingPointWithOptionalTitle(
-                        duration, title,
-                    ),
-                    remaining: rest.remaining,
-                })
-            } else if n > 0 && input[n - 1] == b'\r' {
-                Ok(ParsedByteSlice {
-                    parsed: SemiParsedTagValue::Unparsed(UnparsedTagValue(&input[..(n - 1)])),
-                    remaining: Some(&input[(n + 1)..]),
-                })
-            } else {
-                Ok(ParsedByteSlice {
-                    parsed: SemiParsedTagValue::Unparsed(UnparsedTagValue(&input[..n])),
-                    remaining: Some(&input[(n + 1)..]),
-                })
-            }
-        }
-        None => Ok(ParsedByteSlice {
-            parsed: SemiParsedTagValue::Unparsed(UnparsedTagValue(input)),
-            remaining: None,
-        }),
-    }
-}
-
-/// The Ok value is a tuple with `.0` being the parsed value and `.1` being whether there are more
-/// attributes to parse or false if we have reached the end of the line.
-fn parse_attribute_value(
-    input: &[u8],
-) -> Result<(ParsedByteSlice<ParsedAttributeValue>, bool), TagValueSyntaxError> {
-    if input.is_empty() {
-        return Err(TagValueSyntaxError::UnexpectedEmptyAttributeValue);
-    }
-    if input[0] == b'"' {
-        let input = &input[1..];
-        match memchr2(b'"', b'\n', input) {
-            Some(n) => {
-                if input[n] == b'"' {
-                    let quoted_str = std::str::from_utf8(&input[..n])?;
-                    match input.get(n + 1) {
-                        Some(b',') => ok_quoted(input, quoted_str, Some(n + 2), true),
-                        Some(b'\n') => ok_quoted(input, quoted_str, Some(n + 2), false),
-                        Some(b'\r') => {
-                            if input.get(n + 2) == Some(&b'\n') {
-                                ok_quoted(input, quoted_str, Some(n + 3), false)
-                            } else {
-                                Err(TagValueSyntaxError::UnexpectedWhitespaceInAttributeValue)
-                            }
-                        }
-                        None => ok_quoted(input, quoted_str, None, false),
-                        Some(b) => Err(TagValueSyntaxError::UnexpectedCharacterAfterQuotedString(
-                            *b,
-                        )),
-                    }
-                } else {
-                    Err(TagValueSyntaxError::UnexpectedEndOfLineWithinQuotedString)
-                }
-            }
-            None => Err(TagValueSyntaxError::UnexpectedEndOfLineWithinQuotedString),
-        }
-    } else {
-        match memchr3(b',', b'\n', b'.', input) {
-            Some(n) => {
-                if input[n] == b'.' {
-                    match memchr2(b',', b'\n', &input[(n + 1)..]) {
-                        Some(m) => {
-                            if input[n + 1 + m] == b',' {
-                                try_float(input, &input[..(n + 1 + m)], Some(n + 2 + m), true)
-                            } else if input[n + m] == b'\r' {
-                                try_float(input, &input[..(n + m)], Some(n + 2 + m), false)
-                            } else {
-                                try_float(input, &input[..(n + 1 + m)], Some(n + 2 + m), false)
-                            }
-                        }
-                        None => try_float(input, input, None, false),
-                    }
-                } else if input[n] == b',' {
-                    try_any(input, &input[..n], Some(n + 1), true)
-                } else if n > 0 && input[n - 1] == b'\r' {
-                    try_any(input, &input[..(n - 1)], Some(n + 1), false)
-                } else {
-                    try_any(input, &input[..n], Some(n + 1), false)
-                }
-            }
-            None => try_any(input, input, None, false),
-        }
-    }
-}
-
-fn try_any<'a>(
-    whole_input: &'a [u8],
-    subrange: &'a [u8],
-    remaining_start_index: Option<usize>,
-    remaining: bool,
-) -> Result<(ParsedByteSlice<'a, ParsedAttributeValue<'a>>, bool), TagValueSyntaxError> {
-    if let Ok(number) = fast_float2::parse::<f64, &[u8]>(subrange) {
-        if let Some(uint) = f64_to_u64(number) {
-            ok_int(whole_input, uint, remaining_start_index, remaining)
-        } else {
-            ok_float(whole_input, number, remaining_start_index, remaining)
-        }
-    } else {
-        let unquoted_str = std::str::from_utf8(subrange)?;
-        ok_unquoted(whole_input, unquoted_str, remaining_start_index, remaining)
-    }
-}
-fn try_float<'a>(
-    whole_input: &'a [u8],
-    float_input: &'a [u8],
-    remaining_start_index: Option<usize>,
-    remaining: bool,
-) -> Result<(ParsedByteSlice<'a, ParsedAttributeValue<'a>>, bool), TagValueSyntaxError> {
-    if let Ok(float) = fast_float2::parse(float_input) {
-        ok_float(whole_input, float, remaining_start_index, remaining)
-    } else {
-        Err(TagValueSyntaxError::InvalidFloatInAttributeValue)
-    }
-}
-fn ok_quoted<'a>(
-    input: &'a [u8],
-    quoted_str: &'a str,
-    remaining_start_index: Option<usize>,
-    remaining: bool,
-) -> Result<(ParsedByteSlice<'a, ParsedAttributeValue<'a>>, bool), TagValueSyntaxError> {
-    Ok((
-        ParsedByteSlice {
-            parsed: ParsedAttributeValue::QuotedString(quoted_str),
-            remaining: remaining_start_index.map(|start| &input[start..]),
-        },
-        remaining,
-    ))
-}
-fn ok_int<'a>(
-    input: &'a [u8],
-    int: u64,
-    remaining_start_index: Option<usize>,
-    remaining: bool,
-) -> Result<(ParsedByteSlice<'a, ParsedAttributeValue<'a>>, bool), TagValueSyntaxError> {
-    Ok((
-        ParsedByteSlice {
-            parsed: ParsedAttributeValue::DecimalInteger(int),
-            remaining: remaining_start_index.map(|start| &input[start..]),
-        },
-        remaining,
-    ))
-}
-fn ok_float<'a>(
-    input: &'a [u8],
-    float: f64,
-    remaining_start_index: Option<usize>,
-    remaining: bool,
-) -> Result<(ParsedByteSlice<'a, ParsedAttributeValue<'a>>, bool), TagValueSyntaxError> {
-    Ok((
-        ParsedByteSlice {
-            parsed: ParsedAttributeValue::SignedDecimalFloatingPoint(float),
-            remaining: remaining_start_index.map(|start| &input[start..]),
-        },
-        remaining,
-    ))
-}
-fn ok_unquoted<'a>(
-    input: &'a [u8],
-    unquoted_str: &'a str,
-    remaining_start_index: Option<usize>,
-    remaining: bool,
-) -> Result<(ParsedByteSlice<'a, ParsedAttributeValue<'a>>, bool), TagValueSyntaxError> {
-    Ok((
-        ParsedByteSlice {
-            parsed: ParsedAttributeValue::UnquotedString(unquoted_str),
-            remaining: remaining_start_index.map(|start| &input[start..]),
-        },
-        remaining,
-    ))
-}
-
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use pretty_assertions::assert_eq;
-
-    #[test]
-    fn type_enum() {
-        test_str_and_with_crlf_and_with_lf("EVENT", |str| {
-            assert_eq!(
-                Ok(SemiParsedTagValue::Unparsed(UnparsedTagValue(b"EVENT"))),
-                parse(str).map(|p| p.parsed)
-            );
-        });
-        test_str_and_with_crlf_and_with_lf("VOD", |str| {
-            assert_eq!(
-                Ok(SemiParsedTagValue::Unparsed(UnparsedTagValue(b"VOD"))),
-                parse(str).map(|p| p.parsed)
-            );
-        });
-    }
-
-    #[test]
-    fn decimal_integer() {
-        test_str_and_with_crlf_and_with_lf("42", |str| {
-            assert_eq!(
-                Ok(SemiParsedTagValue::Unparsed(UnparsedTagValue(b"42"))),
-                parse(str).map(|p| p.parsed)
-            );
-        });
-    }
-
-    #[test]
-    fn decimal_integer_range() {
-        test_str_and_with_crlf_and_with_lf("42@42", |str| {
-            assert_eq!(
-                Ok(SemiParsedTagValue::Unparsed(UnparsedTagValue(b"42@42"))),
-                parse(str).map(|p| p.parsed)
-            );
-        });
-    }
-
-    #[test]
-    fn decimal_floating_point_with_optional_title() {
-        // Positive tests
-        test_str_and_with_crlf_and_with_lf("42.0", |str| {
-            assert_eq!(
-                Ok(SemiParsedTagValue::Unparsed(UnparsedTagValue(b"42.0"))),
-                parse(str).map(|p| p.parsed)
-            );
-        });
-        test_str_and_with_crlf_and_with_lf("42.42", |str| {
-            assert_eq!(
-                Ok(SemiParsedTagValue::Unparsed(UnparsedTagValue(b"42.42"))),
-                parse(str).map(|p| p.parsed)
-            );
-        });
-        test_str_and_with_crlf_and_with_lf("42,", |str| {
-            assert_eq!(
-                Ok(SemiParsedTagValue::DecimalFloatingPointWithOptionalTitle(
-                    42.0, ""
-                )),
-                parse(str).map(|p| p.parsed)
-            );
-        });
-        test_str_and_with_crlf_and_with_lf("42,=ATTRIBUTE-VALUE", |str| {
-            assert_eq!(
-                Ok(SemiParsedTagValue::DecimalFloatingPointWithOptionalTitle(
-                    42.0,
-                    "=ATTRIBUTE-VALUE"
-                )),
-                parse(str).map(|p| p.parsed)
-            );
-        });
-        // Negative tests
-        test_str_and_with_crlf_and_with_lf("-42.0", |str| {
-            assert_eq!(
-                Ok(SemiParsedTagValue::Unparsed(UnparsedTagValue(b"-42.0"))),
-                parse(str).map(|p| p.parsed)
-            );
-        });
-        test_str_and_with_crlf_and_with_lf("-42.42", |str| {
-            assert_eq!(
-                Ok(SemiParsedTagValue::Unparsed(UnparsedTagValue(b"-42.42"))),
-                parse(str).map(|p| p.parsed)
-            );
-        });
-        test_str_and_with_crlf_and_with_lf("-42,", |str| {
-            assert_eq!(
-                Ok(SemiParsedTagValue::DecimalFloatingPointWithOptionalTitle(
-                    -42.0, ""
-                )),
-                parse(str).map(|p| p.parsed)
-            );
-        });
-        test_str_and_with_crlf_and_with_lf("-42,=ATTRIBUTE-VALUE", |str| {
-            assert_eq!(
-                Ok(SemiParsedTagValue::DecimalFloatingPointWithOptionalTitle(
-                    -42.0,
-                    "=ATTRIBUTE-VALUE"
-                )),
-                parse(str).map(|p| p.parsed)
-            );
-        });
-    }
-
-    #[test]
-    fn date_time_msec() {
-        test_str_and_with_crlf_and_with_lf("2025-06-03T17:56:42.123Z", |str| {
-            assert_eq!(
-                Ok(SemiParsedTagValue::Unparsed(UnparsedTagValue(
-                    b"2025-06-03T17:56:42.123Z"
-                ))),
-                parse(str).map(|p| p.parsed)
-            );
-        });
-        test_str_and_with_crlf_and_with_lf("2025-06-03T17:56:42.123+01:00", |str| {
-            assert_eq!(
-                Ok(SemiParsedTagValue::Unparsed(UnparsedTagValue(
-                    b"2025-06-03T17:56:42.123+01:00"
-                ))),
-                parse(str).map(|p| p.parsed)
-            );
-        });
-        test_str_and_with_crlf_and_with_lf("2025-06-03T17:56:42.123-05:00", |str| {
-            assert_eq!(
-                Ok(SemiParsedTagValue::Unparsed(UnparsedTagValue(
-                    b"2025-06-03T17:56:42.123-05:00"
-                ))),
-                parse(str).map(|p| p.parsed)
-            );
-        });
-    }
-
-    mod attribute_list {
-        use super::*;
-
-        mod decimal_integer {
-            use super::*;
-            use pretty_assertions::assert_eq;
-
-            #[test]
-            fn single_attribute() {
-                test_str_and_with_crlf_and_with_lf("NAME=123", |str| {
-                    assert_eq!(
-                        Ok(SemiParsedTagValue::AttributeList(HashMap::from([(
-                            "NAME",
-                            ParsedAttributeValue::DecimalInteger(123)
-                        )]))),
-                        parse(str).map(|p| p.parsed)
-                    );
-                });
-            }
-
-            #[test]
-            fn multi_attributes() {
-                test_str_and_with_crlf_and_with_lf("NAME=123,NEXT-NAME=456", |str| {
-                    assert_eq!(
-                        Ok(SemiParsedTagValue::AttributeList(HashMap::from([
-                            ("NAME", ParsedAttributeValue::DecimalInteger(123)),
-                            ("NEXT-NAME", ParsedAttributeValue::DecimalInteger(456))
-                        ]))),
-                        parse(str).map(|p| p.parsed)
-                    );
-                });
-            }
-        }
-
-        mod signed_decimal_floating_point {
-            use super::*;
-            use pretty_assertions::assert_eq;
-
-            #[test]
-            fn positive_float_single_attribute() {
-                test_str_and_with_crlf_and_with_lf("NAME=42.42", |str| {
-                    assert_eq!(
-                        Ok(SemiParsedTagValue::AttributeList(HashMap::from([(
-                            "NAME",
-                            ParsedAttributeValue::SignedDecimalFloatingPoint(42.42)
-                        )]))),
-                        parse(str).map(|p| p.parsed)
-                    );
-                });
-            }
-
-            #[test]
-            fn negative_integer_single_attribute() {
-                test_str_and_with_crlf_and_with_lf("NAME=-42", |str| {
-                    assert_eq!(
-                        Ok(SemiParsedTagValue::AttributeList(HashMap::from([(
-                            "NAME",
-                            ParsedAttributeValue::SignedDecimalFloatingPoint(-42.0)
-                        )]))),
-                        parse(str).map(|p| p.parsed)
-                    );
-                });
-            }
-
-            #[test]
-            fn negative_float_single_attribute() {
-                test_str_and_with_crlf_and_with_lf("NAME=-42.42", |str| {
-                    assert_eq!(
-                        Ok(SemiParsedTagValue::AttributeList(HashMap::from([(
-                            "NAME",
-                            ParsedAttributeValue::SignedDecimalFloatingPoint(-42.42)
-                        )]))),
-                        parse(str).map(|p| p.parsed)
-                    );
-                });
-            }
-
-            #[test]
-            fn positive_float_multi_attributes() {
-                test_str_and_with_crlf_and_with_lf("NAME=42.42,NEXT-NAME=84.84", |str| {
-                    assert_eq!(
-                        Ok(SemiParsedTagValue::AttributeList(HashMap::from([
-                            (
-                                "NAME",
-                                ParsedAttributeValue::SignedDecimalFloatingPoint(42.42)
-                            ),
-                            (
-                                "NEXT-NAME",
-                                ParsedAttributeValue::SignedDecimalFloatingPoint(84.84)
-                            )
-                        ]))),
-                        parse(str).map(|p| p.parsed)
-                    );
-                });
-            }
-
-            #[test]
-            fn negative_integer_multi_attributes() {
-                test_str_and_with_crlf_and_with_lf("NAME=-42,NEXT-NAME=-42", |str| {
-                    assert_eq!(
-                        Ok(SemiParsedTagValue::AttributeList(HashMap::from([
-                            (
-                                "NAME",
-                                ParsedAttributeValue::SignedDecimalFloatingPoint(-42.0)
-                            ),
-                            (
-                                "NEXT-NAME",
-                                ParsedAttributeValue::SignedDecimalFloatingPoint(-42.0)
-                            )
-                        ]))),
-                        parse(str).map(|p| p.parsed)
-                    );
-                });
-            }
-
-            #[test]
-            fn negative_float_multi_attributes() {
-                test_str_and_with_crlf_and_with_lf("NAME=-42.42,NEXT-NAME=-84.84", |str| {
-                    assert_eq!(
-                        Ok(SemiParsedTagValue::AttributeList(HashMap::from([
-                            (
-                                "NAME",
-                                ParsedAttributeValue::SignedDecimalFloatingPoint(-42.42)
-                            ),
-                            (
-                                "NEXT-NAME",
-                                ParsedAttributeValue::SignedDecimalFloatingPoint(-84.84)
-                            )
-                        ]))),
-                        parse(str).map(|p| p.parsed)
-                    );
-                });
-            }
-        }
-
-        mod quoted_string {
-            use super::*;
-            use pretty_assertions::assert_eq;
-
-            #[test]
-            fn single_attribute() {
-                test_str_and_with_crlf_and_with_lf("NAME=\"Hello, World!\"", |str| {
-                    assert_eq!(
-                        Ok(SemiParsedTagValue::AttributeList(HashMap::from([(
-                            "NAME",
-                            ParsedAttributeValue::QuotedString("Hello, World!")
-                        )]))),
-                        parse(str).map(|p| p.parsed)
-                    );
-                });
-            }
-
-            #[test]
-            fn multi_attributes() {
-                test_str_and_with_crlf_and_with_lf("NAME=\"Hello,\",NEXT-NAME=\"World!\"", |str| {
-                    assert_eq!(
-                        Ok(SemiParsedTagValue::AttributeList(HashMap::from([
-                            ("NAME", ParsedAttributeValue::QuotedString("Hello,")),
-                            ("NEXT-NAME", ParsedAttributeValue::QuotedString("World!"))
-                        ]))),
-                        parse(str).map(|p| p.parsed)
-                    );
-                });
-            }
-        }
-
-        mod unquoted_string {
-            use super::*;
-            use pretty_assertions::assert_eq;
-
-            #[test]
-            fn single_attribute() {
-                test_str_and_with_crlf_and_with_lf("NAME=PQ", |str| {
-                    assert_eq!(
-                        Ok(SemiParsedTagValue::AttributeList(HashMap::from([(
-                            "NAME",
-                            ParsedAttributeValue::UnquotedString("PQ")
-                        )]))),
-                        parse(str).map(|p| p.parsed)
-                    );
-                });
-            }
-
-            #[test]
-            fn multi_attributes() {
-                test_str_and_with_crlf_and_with_lf("NAME=PQ,NEXT-NAME=HLG", |str| {
-                    assert_eq!(
-                        Ok(SemiParsedTagValue::AttributeList(HashMap::from([
-                            ("NAME", ParsedAttributeValue::UnquotedString("PQ")),
-                            ("NEXT-NAME", ParsedAttributeValue::UnquotedString("HLG"))
-                        ]))),
-                        parse(str).map(|p| p.parsed)
-                    );
-                });
-            }
-        }
-    }
-
-    fn test_str_and_with_crlf_and_with_lf<F>(str: &'static str, test: F)
-    where
-        F: Fn(&[u8]) -> (),
-    {
-        test(str.as_bytes());
-        test(format!("{str}\r\n").as_bytes());
-        test(format!("{str}\n").as_bytes());
-    }
-}
-
-#[cfg(test)]
-mod new_tests {
     use crate::date_time;
 
     use super::*;

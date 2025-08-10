@@ -4,7 +4,7 @@ use crate::{
     tag::{
         hls::{EnumeratedString, EnumeratedStringList, TagName, into_inner_tag},
         unknown,
-        value::{AttributeValue, ParsedAttributeValue, UnquotedAttributeValue},
+        value::{AttributeValue, UnquotedAttributeValue},
     },
     utils::AsStaticCow,
 };
@@ -697,7 +697,7 @@ impl<'a> Daterange<'a> {
         } else {
             matches!(
                 self.attribute_list.get(END_ON_NEXT),
-                Some(AttributeValue::Unquoted(UnquotedAttributeValue(b"YES")))
+                Some(AttributeValue::Unquoted(UnquotedAttributeValue(YES)))
             )
         }
     }
@@ -1093,26 +1093,6 @@ impl<'a> TryFrom<AttributeValue<'a>> for ExtensionAttributeValue<'a> {
     }
 }
 
-impl<'a> TryFrom<ParsedAttributeValue<'a>> for ExtensionAttributeValue<'a> {
-    type Error = &'static str;
-
-    fn try_from(value: ParsedAttributeValue<'a>) -> Result<Self, Self::Error> {
-        match value {
-            ParsedAttributeValue::DecimalInteger(n) => {
-                Ok(Self::SignedDecimalFloatingPoint(n as f64))
-            }
-            ParsedAttributeValue::SignedDecimalFloatingPoint(n) => {
-                Ok(Self::SignedDecimalFloatingPoint(n))
-            }
-            ParsedAttributeValue::QuotedString(s) => Ok(Self::QuotedString(Cow::Borrowed(s))),
-            ParsedAttributeValue::UnquotedString(s) if is_hexadecimal_sequence(s) => {
-                Ok(Self::HexadecimalSequence(Cow::Borrowed(s)))
-            }
-            ParsedAttributeValue::UnquotedString(_) => Err("Invalid extension attribute value"),
-        }
-    }
-}
-
 impl<'a> From<&'a ExtensionAttributeValue<'a>> for ExtensionAttributeValue<'a> {
     fn from(value: &'a ExtensionAttributeValue<'a>) -> Self {
         match value {
@@ -1149,7 +1129,7 @@ const SCTE35_CMD: &str = "SCTE35-CMD";
 const SCTE35_OUT: &str = "SCTE35-OUT";
 const SCTE35_IN: &str = "SCTE35-IN";
 const END_ON_NEXT: &str = "END-ON-NEXT";
-const YES: &str = "YES";
+const YES: &[u8] = b"YES";
 
 fn calculate_line(attribute_list: &DaterangeAttributeList) -> Vec<u8> {
     let DaterangeAttributeList {

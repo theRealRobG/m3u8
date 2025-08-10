@@ -7,7 +7,7 @@ use crate::{
     error::ValidationError,
     tag::{
         hls, unknown,
-        value::{MutableParsedAttributeValue, MutableSemiParsedTagValue, SemiParsedTagValue},
+        value::{MutableParsedAttributeValue, MutableSemiParsedTagValue},
     },
     utils::split_on_new_line,
 };
@@ -164,12 +164,10 @@ pub trait IntoInnerTag<'a> {
 /// ```
 /// # use m3u8::{
 /// #     tag::{
-/// #         known::{ParsedTag},
-/// #         value::{
-/// #             SemiParsedTagValue, ParsedAttributeValue
-/// #         }
+/// #         unknown,
+/// #         value::AttributeValue,
 /// #     },
-/// #     error::{ValidationError, ValidationErrorValueKind}
+/// #     error::{ValidationError, ParseTagValueError, ParseAttributeValueError}
 /// # };
 /// #
 /// # #[derive(Debug, PartialEq, Clone)]
@@ -186,29 +184,35 @@ pub trait IntoInnerTag<'a> {
 /// #     Story,
 /// #     KnockKnock,
 /// # }
-/// impl<'a> TryFrom<ParsedTag<'a>> for JokeTag<'a> {
+/// impl<'a> TryFrom<unknown::Tag<'a>> for JokeTag<'a> {
 ///     type Error = ValidationError;
 ///
-///     fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
+///     fn try_from(tag: unknown::Tag<'a>) -> Result<Self, Self::Error> {
 ///         // Ensure that the value of the tag corresponds to `<attribute-list>`
-///         let SemiParsedTagValue::AttributeList(list) = tag.value else {
-///             return Err(ValidationError::UnexpectedValueType(
-///                 ValidationErrorValueKind::from(&tag.value),
-///             ));
-///         };
+///         let list = tag
+///             .value()
+///             .ok_or(ParseTagValueError::UnexpectedEmpty)?
+///             .try_as_attribute_list()?;
 ///         // Ensure that the `JOKE` attribute exists and is of the correct type.
-///         let Some(ParsedAttributeValue::QuotedString(joke)) = list.get("JOKE") else {
-///             return Err(ValidationError::MissingRequiredAttribute("JOKE"));
-///         };
+///         let joke = list
+///             .get("JOKE")
+///             .and_then(AttributeValue::quoted)
+///             .ok_or(ValidationError::MissingRequiredAttribute("JOKE"))?;
 ///         // Ensure that the `TYPE` attribute exists and is of the correct type. Note the
-///         // difference that this type is `UnquotedString` instead of `QuotedString`, signifying
-///         // the use of the HLS defined `enumerated-string` attribute value type.
-///         let Some(ParsedAttributeValue::UnquotedString(joke_type_str)) = list.get("TYPE") else {
-///             return Err(ValidationError::MissingRequiredAttribute("TYPE"));
-///         };
+///         // difference that this type is `Unquoted` instead of `Quoted`, and so we use the helper
+///         // method `unquoted` rather than `quoted`. This signifies the use of the HLS defined
+///         // `enumerated-string` attribute value type.
+///         let joke_type_str = list
+///             .get("TYPE")
+///             .and_then(AttributeValue::unquoted)
+///             .ok_or(ValidationError::MissingRequiredAttribute("TYPE"))?
+///             .try_as_utf_8()
+///             .map_err(|e| ValidationError::from(
+///                 ParseAttributeValueError::Utf8 { attr_name: "TYPE", error: e }
+///             ))?;
 ///         // Translate the enumerated string value into the enum cases we support, otherwise,
 ///         // return an error.
-///         let Some(joke_type) = (match *joke_type_str {
+///         let Some(joke_type) = (match joke_type_str {
 ///             "DAD" => Some(JokeType::Dad),
 ///             "PUN" => Some(JokeType::Pun),
 ///             "BAR" => Some(JokeType::Bar),
@@ -229,12 +233,11 @@ pub trait IntoInnerTag<'a> {
 /// ```
 /// # use m3u8::{
 /// #     tag::{
-/// #         known::{ParsedTag, CustomTag},
-/// #         value::{
-/// #             SemiParsedTagValue, ParsedAttributeValue
-/// #         }
+/// #         known::CustomTag,
+/// #         unknown,
+/// #         value::AttributeValue,
 /// #     },
-/// #     error::{ValidationError, ValidationErrorValueKind}
+/// #     error::{ValidationError, ParseTagValueError, ParseAttributeValueError}
 /// # };
 /// #
 /// # #[derive(Debug, PartialEq, Clone)]
@@ -251,29 +254,35 @@ pub trait IntoInnerTag<'a> {
 /// #     Story,
 /// #     KnockKnock,
 /// # }
-/// # impl<'a> TryFrom<ParsedTag<'a>> for JokeTag<'a> {
+/// # impl<'a> TryFrom<unknown::Tag<'a>> for JokeTag<'a> {
 /// #     type Error = ValidationError;
 /// #
-/// #     fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
+/// #     fn try_from(tag: unknown::Tag<'a>) -> Result<Self, Self::Error> {
 /// #         // Ensure that the value of the tag corresponds to `<attribute-list>`
-/// #         let SemiParsedTagValue::AttributeList(list) = tag.value else {
-/// #             return Err(ValidationError::UnexpectedValueType(
-/// #                 ValidationErrorValueKind::from(&tag.value),
-/// #             ));
-/// #         };
+/// #         let list = tag
+/// #             .value()
+/// #             .ok_or(ParseTagValueError::UnexpectedEmpty)?
+/// #             .try_as_attribute_list()?;
 /// #         // Ensure that the `JOKE` attribute exists and is of the correct type.
-/// #         let Some(ParsedAttributeValue::QuotedString(joke)) = list.get("JOKE") else {
-/// #             return Err(ValidationError::MissingRequiredAttribute("JOKE"));
-/// #         };
+/// #         let joke = list
+/// #             .get("JOKE")
+/// #             .and_then(AttributeValue::quoted)
+/// #             .ok_or(ValidationError::MissingRequiredAttribute("JOKE"))?;
 /// #         // Ensure that the `TYPE` attribute exists and is of the correct type. Note the
-/// #         // difference that this type is `UnquotedString` instead of `QuotedString`, signifying
-/// #         // the use of the HLS defined `enumerated-string` attribute value type.
-/// #         let Some(ParsedAttributeValue::UnquotedString(joke_type_str)) = list.get("TYPE") else {
-/// #             return Err(ValidationError::MissingRequiredAttribute("TYPE"));
-/// #         };
+/// #         // difference that this type is `Unquoted` instead of `Quoted`, and so we use the helper
+/// #         // method `unquoted` rather than `quoted`. This signifies the use of the HLS defined
+/// #         // `enumerated-string` attribute value type.
+/// #         let joke_type_str = list
+/// #             .get("TYPE")
+/// #             .and_then(AttributeValue::unquoted)
+/// #             .ok_or(ValidationError::MissingRequiredAttribute("TYPE"))?
+/// #             .try_as_utf_8()
+/// #             .map_err(|e| ValidationError::from(
+/// #                 ParseAttributeValueError::Utf8 { attr_name: "TYPE", error: e }
+/// #             ))?;
 /// #         // Translate the enumerated string value into the enum cases we support, otherwise,
 /// #         // return an error.
-/// #         let Some(joke_type) = (match *joke_type_str {
+/// #         let Some(joke_type) = (match joke_type_str {
 /// #             "DAD" => Some(JokeType::Dad),
 /// #             "PUN" => Some(JokeType::Pun),
 /// #             "BAR" => Some(JokeType::Bar),
@@ -302,13 +311,12 @@ pub trait IntoInnerTag<'a> {
 /// #     Reader, HlsLine,
 /// #     config::ParsingOptions,
 /// #     tag::{
-/// #         known::{ParsedTag, CustomTag, Tag},
-/// #         value::{
-/// #             SemiParsedTagValue, ParsedAttributeValue
-/// #         },
+/// #         known::{CustomTag, Tag},
+/// #         unknown,
+/// #         value::AttributeValue,
 /// #         hls::{Version, Targetduration, M3u}
 /// #     },
-/// #     error::{ValidationError, ValidationErrorValueKind}
+/// #     error::{ValidationError, ParseTagValueError, ParseAttributeValueError},
 /// # };
 /// # use std::marker::PhantomData;
 /// #
@@ -326,29 +334,35 @@ pub trait IntoInnerTag<'a> {
 /// #     Story,
 /// #     KnockKnock,
 /// # }
-/// # impl<'a> TryFrom<ParsedTag<'a>> for JokeTag<'a> {
+/// # impl<'a> TryFrom<unknown::Tag<'a>> for JokeTag<'a> {
 /// #     type Error = ValidationError;
 /// #
-/// #     fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
+/// #     fn try_from(tag: unknown::Tag<'a>) -> Result<Self, Self::Error> {
 /// #         // Ensure that the value of the tag corresponds to `<attribute-list>`
-/// #         let SemiParsedTagValue::AttributeList(list) = tag.value else {
-/// #             return Err(ValidationError::UnexpectedValueType(
-/// #                 ValidationErrorValueKind::from(&tag.value),
-/// #             ));
-/// #         };
+/// #         let list = tag
+/// #             .value()
+/// #             .ok_or(ParseTagValueError::UnexpectedEmpty)?
+/// #             .try_as_attribute_list()?;
 /// #         // Ensure that the `JOKE` attribute exists and is of the correct type.
-/// #         let Some(ParsedAttributeValue::QuotedString(joke)) = list.get("JOKE") else {
-/// #             return Err(ValidationError::MissingRequiredAttribute("JOKE"));
-/// #         };
+/// #         let joke = list
+/// #             .get("JOKE")
+/// #             .and_then(AttributeValue::quoted)
+/// #             .ok_or(ValidationError::MissingRequiredAttribute("JOKE"))?;
 /// #         // Ensure that the `TYPE` attribute exists and is of the correct type. Note the
-/// #         // difference that this type is `UnquotedString` instead of `QuotedString`, signifying
-/// #         // the use of the HLS defined `enumerated-string` attribute value type.
-/// #         let Some(ParsedAttributeValue::UnquotedString(joke_type_str)) = list.get("TYPE") else {
-/// #             return Err(ValidationError::MissingRequiredAttribute("TYPE"));
-/// #         };
+/// #         // difference that this type is `Unquoted` instead of `Quoted`, and so we use the helper
+/// #         // method `unquoted` rather than `quoted`. This signifies the use of the HLS defined
+/// #         // `enumerated-string` attribute value type.
+/// #         let joke_type_str = list
+/// #             .get("TYPE")
+/// #             .and_then(AttributeValue::unquoted)
+/// #             .ok_or(ValidationError::MissingRequiredAttribute("TYPE"))?
+/// #             .try_as_utf_8()
+/// #             .map_err(|e| ValidationError::from(
+/// #                 ParseAttributeValueError::Utf8 { attr_name: "TYPE", error: e }
+/// #             ))?;
 /// #         // Translate the enumerated string value into the enum cases we support, otherwise,
 /// #         // return an error.
-/// #         let Some(joke_type) = (match *joke_type_str {
+/// #         let Some(joke_type) = (match joke_type_str {
 /// #             "DAD" => Some(JokeType::Dad),
 /// #             "PUN" => Some(JokeType::Pun),
 /// #             "BAR" => Some(JokeType::Bar),
@@ -411,8 +425,8 @@ pub trait IntoInnerTag<'a> {
 /// ```
 /// # use m3u8::{HlsLine, Reader, config::ParsingOptions, tag::known::Tag, tag::hls::{M3u, Version,
 /// # Targetduration, MediaSequence, DiscontinuitySequence, Inf, ProgramDateTime}, date_time,
-/// # tag::known::{ParsedTag, CustomTag}, error::{ValidationError, ValidationErrorValueKind},
-/// # tag::value::SemiParsedTagValue};
+/// # tag::known::CustomTag, error::{ValidationError, ParseTagValueError}, tag::unknown,
+/// # tag::value::TagValue};
 /// # use std::marker::PhantomData;
 /// #[derive(Debug, PartialEq, Clone)]
 /// enum LHlsTag<'a> {
@@ -421,27 +435,23 @@ pub trait IntoInnerTag<'a> {
 /// }
 ///
 /// impl<'a> LHlsTag<'a> {
-///     fn try_from_discontinuity(value: SemiParsedTagValue) -> Result<Self, ValidationError> {
+///     fn try_from_discontinuity(value: Option<TagValue>) -> Result<Self, ValidationError> {
 ///         match value {
-///             SemiParsedTagValue::Empty => Ok(Self::Discontinuity),
-///             value => Err(ValidationError::UnexpectedValueType(
-///                 ValidationErrorValueKind::from(&value),
-///             )),
+///             Some(_) => Err(ValidationError::from(ParseTagValueError::NotEmpty)),
+///             None => Ok(Self::Discontinuity)
 ///         }
 ///     }
 ///
-///     fn try_from_prefetch(value: SemiParsedTagValue<'a>) -> Result<Self, ValidationError> {
-///         // Note that not all value types are parsed up front within `SemiParsedTagValue`. The
-///         // attribute list is, as is the (float, title) tuple used in `EXTINF`, but most other
-///         // types of value are not (this is a convenience/performance tradeoff). We can still
-///         // access the unparsed data and it comes with some helper methods for getting to useful
-///         // data types; however, in this case, we just need the whole value tranlated into UTF-8,
-///         // and so we need to do that ourselves.
-///         let SemiParsedTagValue::Unparsed(unparsed) = value else {
-///             return Err(ValidationError::UnexpectedValueType(
-///                 ValidationErrorValueKind::from(&value),
-///             ));
-///         };
+///     fn try_from_prefetch(value: Option<TagValue<'a>>) -> Result<Self, ValidationError> {
+///         // Note that the `TagValue` provides methods for parsing value data as defined in the
+///         // HLS specification, as extracted from the existing tag definitions (there is specific
+///         // definition for possible attribute-list value types; however, for general tag values,
+///         // this has to be inferred from what tags are defined). `TagValue` does not provide a
+///         // `try_as_utf_8` method, since the only tag that defines a text value is the
+///         // `EXT-X-PLAYLIST-TYPE` tag, but this is an enumerated string (`EVENT` or `VOD`), and
+///         // so we just offer `try_as_playlist_type`. Nevertheless, the inner data of `TagValue`
+///         // is accessible, and so we can convert to UTF-8 ourselves here, as shown below.
+///         let unparsed = value.ok_or(ParseTagValueError::UnexpectedEmpty)?;
 ///         let Ok(uri) = std::str::from_utf8(unparsed.0) else {
 ///             return Err(ValidationError::MissingRequiredAttribute("<URI>"));
 ///         };
@@ -449,13 +459,13 @@ pub trait IntoInnerTag<'a> {
 ///     }
 /// }
 ///
-/// impl<'a> TryFrom<ParsedTag<'a>> for LHlsTag<'a> {
+/// impl<'a> TryFrom<unknown::Tag<'a>> for LHlsTag<'a> {
 ///     type Error = ValidationError;
 ///
-///     fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
-///         match tag.name {
-///             "-X-PREFETCH-DISCONTINUITY" => Self::try_from_discontinuity(tag.value),
-///             "-X-PREFETCH" => Self::try_from_prefetch(tag.value),
+///     fn try_from(tag: unknown::Tag<'a>) -> Result<Self, Self::Error> {
+///         match tag.name() {
+///             "-X-PREFETCH-DISCONTINUITY" => Self::try_from_discontinuity(tag.value()),
+///             "-X-PREFETCH" => Self::try_from_prefetch(tag.value()),
 ///             _ => Err(ValidationError::UnexpectedTagName),
 ///         }
 ///     }
@@ -564,14 +574,14 @@ pub trait CustomTag<'a>:
 /// #     Reader, HlsLine, Writer,
 /// #     config::ParsingOptions,
 /// #     tag::{
-/// #         known::{ParsedTag, CustomTag, Tag, WritableTag, WritableCustomTag},
+/// #         known::{CustomTag, Tag, WritableTag, WritableCustomTag},
+/// #         unknown,
 /// #         value::{
-/// #             SemiParsedTagValue, ParsedAttributeValue, MutableParsedAttributeValue,
-/// #             MutableSemiParsedTagValue,
+/// #             MutableParsedAttributeValue, MutableSemiParsedTagValue, AttributeValue
 /// #         },
 /// #         hls::{Version, Targetduration, M3u}
 /// #     },
-/// #     error::{ValidationError, ValidationErrorValueKind}
+/// #     error::{ValidationError, ParseTagValueError, ParseAttributeValueError}
 /// # };
 /// # use std::{marker::PhantomData, borrow::Cow, collections::HashMap};
 /// #
@@ -589,29 +599,35 @@ pub trait CustomTag<'a>:
 /// #     Story,
 /// #     KnockKnock,
 /// # }
-/// # impl<'a> TryFrom<ParsedTag<'a>> for JokeTag<'a> {
+/// # impl<'a> TryFrom<unknown::Tag<'a>> for JokeTag<'a> {
 /// #     type Error = ValidationError;
 /// #
-/// #     fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
+/// #     fn try_from(tag: unknown::Tag<'a>) -> Result<Self, Self::Error> {
 /// #         // Ensure that the value of the tag corresponds to `<attribute-list>`
-/// #         let SemiParsedTagValue::AttributeList(list) = tag.value else {
-/// #             return Err(ValidationError::UnexpectedValueType(
-/// #                 ValidationErrorValueKind::from(&tag.value),
-/// #             ));
-/// #         };
+/// #         let list = tag
+/// #             .value()
+/// #             .ok_or(ParseTagValueError::UnexpectedEmpty)?
+/// #             .try_as_attribute_list()?;
 /// #         // Ensure that the `JOKE` attribute exists and is of the correct type.
-/// #         let Some(ParsedAttributeValue::QuotedString(joke)) = list.get("JOKE") else {
-/// #             return Err(ValidationError::MissingRequiredAttribute("JOKE"));
-/// #         };
+/// #         let joke = list
+/// #             .get("JOKE")
+/// #             .and_then(AttributeValue::quoted)
+/// #             .ok_or(ValidationError::MissingRequiredAttribute("JOKE"))?;
 /// #         // Ensure that the `TYPE` attribute exists and is of the correct type. Note the
-/// #         // difference that this type is `UnquotedString` instead of `QuotedString`, signifying
-/// #         // the use of the HLS defined `enumerated-string` attribute value type.
-/// #         let Some(ParsedAttributeValue::UnquotedString(joke_type_str)) = list.get("TYPE") else {
-/// #             return Err(ValidationError::MissingRequiredAttribute("TYPE"));
-/// #         };
+/// #         // difference that this type is `Unquoted` instead of `Quoted`, and so we use the helper
+/// #         // method `unquoted` rather than `quoted`. This signifies the use of the HLS defined
+/// #         // `enumerated-string` attribute value type.
+/// #         let joke_type_str = list
+/// #             .get("TYPE")
+/// #             .and_then(AttributeValue::unquoted)
+/// #             .ok_or(ValidationError::MissingRequiredAttribute("TYPE"))?
+/// #             .try_as_utf_8()
+/// #             .map_err(|e| ValidationError::from(
+/// #                 ParseAttributeValueError::Utf8 { attr_name: "TYPE", error: e }
+/// #             ))?;
 /// #         // Translate the enumerated string value into the enum cases we support, otherwise,
 /// #         // return an error.
-/// #         let Some(joke_type) = (match *joke_type_str {
+/// #         let Some(joke_type) = (match joke_type_str {
 /// #             "DAD" => Some(JokeType::Dad),
 /// #             "PUN" => Some(JokeType::Pun),
 /// #             "BAR" => Some(JokeType::Bar),
@@ -719,9 +735,9 @@ pub trait CustomTag<'a>:
 /// ```
 /// # use m3u8::{HlsLine, Reader, config::ParsingOptions, tag::known::Tag, tag::hls::{M3u, Version,
 /// # Targetduration, MediaSequence, DiscontinuitySequence, Inf, ProgramDateTime}, date_time,
-/// # tag::known::{ParsedTag, CustomTag}, error::{ValidationError, ValidationErrorValueKind},
-/// # tag::value::SemiParsedTagValue, tag::known::{WritableCustomTag, WritableTag},
-/// # tag::value::{MutableSemiParsedTagValue, MutableUnparsedTagValue}, Writer};
+/// # tag::known::CustomTag, error::{ValidationError, ParseTagValueError}, tag::unknown,
+/// # tag::known::{WritableCustomTag, WritableTag}, tag::value::{TagValue,
+/// # MutableSemiParsedTagValue, MutableUnparsedTagValue}, Writer};
 /// # use std::{marker::PhantomData, io::Write};
 /// #[derive(Debug, PartialEq, Clone)]
 /// # enum LHlsTag<'a> {
@@ -730,27 +746,23 @@ pub trait CustomTag<'a>:
 /// # }
 /// #
 /// # impl<'a> LHlsTag<'a> {
-/// #     fn try_from_discontinuity(value: SemiParsedTagValue) -> Result<Self, ValidationError> {
+/// #     fn try_from_discontinuity(value: Option<TagValue>) -> Result<Self, ValidationError> {
 /// #         match value {
-/// #             SemiParsedTagValue::Empty => Ok(Self::Discontinuity),
-/// #             value => Err(ValidationError::UnexpectedValueType(
-/// #                 ValidationErrorValueKind::from(&value),
-/// #             )),
+/// #             Some(_) => Err(ValidationError::from(ParseTagValueError::NotEmpty)),
+/// #             None => Ok(Self::Discontinuity)
 /// #         }
 /// #     }
 /// #
-/// #     fn try_from_prefetch(value: SemiParsedTagValue<'a>) -> Result<Self, ValidationError> {
-/// #         // Note that not all value types are parsed up front within `SemiParsedTagValue`. The
-/// #         // attribute list is, as is the (float, title) tuple used in `EXTINF`, but most other
-/// #         // types of value are not (this is a convenience/performance tradeoff). We can still
-/// #         // access the unparsed data and it comes with some helper methods for getting to useful
-/// #         // data types; however, in this case, we just need the whole value tranlated into UTF-8,
-/// #         // and so we need to do that ourselves.
-/// #         let SemiParsedTagValue::Unparsed(unparsed) = value else {
-/// #             return Err(ValidationError::UnexpectedValueType(
-/// #                 ValidationErrorValueKind::from(&value),
-/// #             ));
-/// #         };
+/// #     fn try_from_prefetch(value: Option<TagValue<'a>>) -> Result<Self, ValidationError> {
+/// #         // Note that the `TagValue` provides methods for parsing value data as defined in the
+/// #         // HLS specification, as extracted from the existing tag definitions (there is specific
+/// #         // definition for possible attribute-list value types; however, for general tag values,
+/// #         // this has to be inferred from what tags are defined). `TagValue` does not provide a
+/// #         // `try_as_utf_8` method, since the only tag that defines a text value is the
+/// #         // `EXT-X-PLAYLIST-TYPE` tag, but this is an enumerated string (`EVENT` or `VOD`), and
+/// #         // so we just offer `try_as_playlist_type`. Nevertheless, the inner data of `TagValue`
+/// #         // is accessible, and so we can convert to UTF-8 ourselves here, as shown below.
+/// #         let unparsed = value.ok_or(ParseTagValueError::UnexpectedEmpty)?;
 /// #         let Ok(uri) = std::str::from_utf8(unparsed.0) else {
 /// #             return Err(ValidationError::MissingRequiredAttribute("<URI>"));
 /// #         };
@@ -758,13 +770,13 @@ pub trait CustomTag<'a>:
 /// #     }
 /// # }
 /// #
-/// # impl<'a> TryFrom<ParsedTag<'a>> for LHlsTag<'a> {
+/// # impl<'a> TryFrom<unknown::Tag<'a>> for LHlsTag<'a> {
 /// #     type Error = ValidationError;
 /// #
-/// #     fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
-/// #         match tag.name {
-/// #             "-X-PREFETCH-DISCONTINUITY" => Self::try_from_discontinuity(tag.value),
-/// #             "-X-PREFETCH" => Self::try_from_prefetch(tag.value),
+/// #     fn try_from(tag: unknown::Tag<'a>) -> Result<Self, Self::Error> {
+/// #         match tag.name() {
+/// #             "-X-PREFETCH-DISCONTINUITY" => Self::try_from_discontinuity(tag.value()),
+/// #             "-X-PREFETCH" => Self::try_from_prefetch(tag.value()),
 /// #             _ => Err(ValidationError::UnexpectedTagName),
 /// #         }
 /// #     }
@@ -1000,35 +1012,6 @@ pub(crate) fn calculate_output<'a, Custom: WritableCustomTag<'a>>(custom_tag: Cu
     }
 }
 
-/// Generic information about a known tag that has been parsed.
-///
-/// This struct is used as an interim type to then construct the strongly typed tag instance,
-/// whether it is a [`hls::Tag`], or a user defined [`CustomTag`] implementation. This allows the
-/// library to do some amount of heavy lifting that would be common amongst any tag implementation,
-/// but still leaves the piecing together of parsed information to the implementation of the tag
-/// type.
-#[derive(Debug, PartialEq)]
-pub struct ParsedTag<'a> {
-    /// The name of the tag that was parsed from the input data.
-    ///
-    /// This includes everything after the `#EXT` prefix and before the `:` or new line. For
-    /// example, `#EXTM3U` has name `M3U`, `#EXT-X-VERSION:3` has name `-X-VERSION`, etc.
-    pub name: &'a str,
-    /// A value that the library was able to parse out of the line data.
-    ///
-    /// This value should be used to further parse the gathered information into a more strongly
-    /// typed tag definition. See [`SemiParsedTagValue`] for more information on what possible
-    /// values exist.
-    pub value: SemiParsedTagValue<'a>,
-    /// The original input data (e.g. the playlist).
-    ///
-    /// This will always start at the beginning of the line where the tag was found; however, the
-    /// end of the byte-slice may extend until the end of the playlist (so well beyond the end of
-    /// the line). Internally the library ensures that when writing the data, the line is cut to the
-    /// appropriate end point where the new line (either `CRLF` or `LF`) is found.
-    pub original_input: &'a [u8],
-}
-
 /// A writable version of [`ParsedTag`].
 ///
 /// This is provided so that custom tag implementations may provide an output that does not depend
@@ -1132,7 +1115,7 @@ impl CustomTag<'_> for NoCustomTag {
 }
 impl WritableCustomTag<'_> for NoCustomTag {
     fn into_writable_tag(self) -> WritableTag<'static> {
-        WritableTag::new("-NO-TAG", SemiParsedTagValue::Empty)
+        WritableTag::new("-NO-TAG", MutableSemiParsedTagValue::Empty)
     }
 }
 

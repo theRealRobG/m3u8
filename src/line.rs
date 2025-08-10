@@ -322,24 +322,23 @@ pub fn parse<'a>(
 /// # use m3u8::{
 /// # config::ParsingOptions,
 /// # line::{HlsLine, ParsedLineSlice, parse_with_custom},
-/// # error::{ParseLineStrError, ValidationError, ValidationErrorValueKind},
-/// # tag::known::{Tag, CustomTag, ParsedTag},
-/// # tag::value::{ParsedAttributeValue, SemiParsedTagValue},
+/// # error::{ParseLineStrError, ValidationError, ParseTagValueError},
+/// # tag::known::{Tag, CustomTag},
 /// # tag::hls::{M3u, Targetduration, Version},
+/// # tag::unknown,
 /// # };
 /// #[derive(Debug, Clone, PartialEq)]
 /// struct UserDefinedTag<'a> {
 ///     message: &'a str,
 /// }
-/// impl<'a> TryFrom<ParsedTag<'a>> for UserDefinedTag<'a> { // --snip--
+/// impl<'a> TryFrom<unknown::Tag<'a>> for UserDefinedTag<'a> { // --snip--
 /// #    type Error = ValidationError;
-/// #    fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
-/// #        let SemiParsedTagValue::AttributeList(mut list) = tag.value else {
-/// #            return Err(ValidationError::UnexpectedValueType(
-/// #                ValidationErrorValueKind::from(&tag.value),
-/// #            ));
-/// #        };
-/// #        let Some(ParsedAttributeValue::QuotedString(message)) = list.remove("MESSAGE") else {
+/// #    fn try_from(tag: unknown::Tag<'a>) -> Result<Self, Self::Error> {
+/// #        let mut list = tag
+/// #            .value()
+/// #            .ok_or(ParseTagValueError::UnexpectedEmpty)?
+/// #            .try_as_attribute_list()?;
+/// #        let Some(message) = list.remove("MESSAGE").and_then(|v| v.quoted()) else {
 /// #            return Err(ValidationError::MissingRequiredAttribute("MESSAGE"));
 /// #        };
 /// #        Ok(Self { message })

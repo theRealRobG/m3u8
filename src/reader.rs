@@ -222,7 +222,8 @@ use std::marker::PhantomData;
 /// # Reader, HlsLine, Writer,
 /// # config::ParsingOptionsBuilder,
 /// # date::DateTime,
-/// # tag::known::{self, ParsedTag, CustomTag, WritableCustomTag},
+/// # tag::known::{self, CustomTag, WritableCustomTag},
+/// # tag::unknown,
 /// # tag::hls::{self, Cue, Daterange, ExtensionAttributeValue},
 /// # error::ValidationError,
 /// # };
@@ -259,9 +260,9 @@ use std::marker::PhantomData;
 ///     No,
 ///     Cont,
 /// }
-/// impl<'a> TryFrom<ParsedTag<'a>> for Scte35Tag<'a> { // --snip--
+/// impl<'a> TryFrom<unknown::Tag<'a>> for Scte35Tag<'a> { // --snip--
 /// #    type Error = ValidationError;
-/// #    fn try_from(value: ParsedTag<'a>) -> Result<Self, Self::Error> {
+/// #    fn try_from(value: unknown::Tag<'a>) -> Result<Self, Self::Error> {
 /// #        todo!()
 /// #    }
 /// }

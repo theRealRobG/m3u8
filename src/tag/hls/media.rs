@@ -1084,7 +1084,7 @@ impl<'a> Media<'a> {
         } else {
             matches!(
                 self.attribute_list.get(DEFAULT),
-                Some(AttributeValue::Unquoted(UnquotedAttributeValue(b"YES")))
+                Some(AttributeValue::Unquoted(UnquotedAttributeValue(YES)))
             )
         }
     }
@@ -1097,7 +1097,7 @@ impl<'a> Media<'a> {
         } else {
             matches!(
                 self.attribute_list.get(AUTOSELECT),
-                Some(AttributeValue::Unquoted(UnquotedAttributeValue(b"YES")))
+                Some(AttributeValue::Unquoted(UnquotedAttributeValue(YES)))
             )
         }
     }
@@ -1110,7 +1110,7 @@ impl<'a> Media<'a> {
         } else {
             matches!(
                 self.attribute_list.get(FORCED),
-                Some(AttributeValue::Unquoted(UnquotedAttributeValue(b"YES")))
+                Some(AttributeValue::Unquoted(UnquotedAttributeValue(YES)))
             )
         }
     }
@@ -1533,7 +1533,7 @@ const BIT_DEPTH: &str = "BIT-DEPTH";
 const SAMPLE_RATE: &str = "SAMPLE-RATE";
 const CHARACTERISTICS: &str = "CHARACTERISTICS";
 const CHANNELS: &str = "CHANNELS";
-const YES: &str = "YES";
+const YES: &[u8] = b"YES";
 
 fn calculate_line(attribute_list: &MediaAttributeList) -> Vec<u8> {
     let MediaAttributeList {
@@ -1568,13 +1568,13 @@ fn calculate_line(attribute_list: &MediaAttributeList) -> Vec<u8> {
         line.push_str(format!(",{STABLE_RENDITION_ID}=\"{stable_rendition_id}\"").as_str());
     }
     if *default {
-        line.push_str(format!(",{DEFAULT}={YES}").as_str());
+        line.push_str(",DEFAULT=YES");
     }
     if *autoselect {
-        line.push_str(format!(",{AUTOSELECT}={YES}").as_str());
+        line.push_str(",AUTOSELECT=YES");
     }
     if *forced {
-        line.push_str(format!(",{FORCED}={YES}").as_str());
+        line.push_str(",FORCED=YES");
     }
     if let Some(instream_id) = instream_id {
         line.push_str(format!(",{INSTREAM_ID}=\"{instream_id}\"").as_str());

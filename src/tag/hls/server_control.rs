@@ -241,7 +241,7 @@ impl<'a> ServerControl<'a> {
         } else {
             matches!(
                 self.attribute_list.get(CAN_SKIP_DATERANGES),
-                Some(AttributeValue::Unquoted(UnquotedAttributeValue(b"YES")))
+                Some(AttributeValue::Unquoted(UnquotedAttributeValue(YES)))
             )
         }
     }
@@ -282,7 +282,7 @@ impl<'a> ServerControl<'a> {
         } else {
             matches!(
                 self.attribute_list.get(CAN_BLOCK_RELOAD),
-                Some(AttributeValue::Unquoted(UnquotedAttributeValue(b"YES")))
+                Some(AttributeValue::Unquoted(UnquotedAttributeValue(YES)))
             )
         }
     }
@@ -378,7 +378,7 @@ const CAN_SKIP_DATERANGES: &str = "CAN-SKIP-DATERANGES";
 const HOLD_BACK: &str = "HOLD-BACK";
 const PART_HOLD_BACK: &str = "PART-HOLD-BACK";
 const CAN_BLOCK_RELOAD: &str = "CAN-BLOCK-RELOAD";
-const YES: &str = "YES";
+const YES: &[u8] = b"YES";
 
 fn calculate_line(attribute_list: &ServerControlAttributeList) -> Vec<u8> {
     let ServerControlAttributeList {
@@ -395,7 +395,7 @@ fn calculate_line(attribute_list: &ServerControlAttributeList) -> Vec<u8> {
         separator = ",";
     }
     if *can_skip_dateranges {
-        line.push_str(format!("{separator}{CAN_SKIP_DATERANGES}={YES}").as_str());
+        line.push_str(format!("{separator}{CAN_SKIP_DATERANGES}=YES").as_str());
         separator = ",";
     }
     if let Some(hold_back) = hold_back {
@@ -407,7 +407,7 @@ fn calculate_line(attribute_list: &ServerControlAttributeList) -> Vec<u8> {
         separator = ",";
     }
     if *can_block_reload {
-        line.push_str(format!("{separator}{CAN_BLOCK_RELOAD}={YES}").as_str());
+        line.push_str(format!("{separator}{CAN_BLOCK_RELOAD}=YES").as_str());
     }
     line.into_bytes()
 }

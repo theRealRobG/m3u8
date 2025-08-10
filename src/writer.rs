@@ -231,30 +231,26 @@ where
     /// Example:
     /// ```
     /// # use m3u8::Writer;
-    /// # use m3u8::tag::known::{CustomTag, ParsedTag, WritableCustomTag, WritableTag};
-    /// # use m3u8::tag::value::{SemiParsedTagValue, UnparsedTagValue};
-    /// # use m3u8::error::{ValidationError, ValidationErrorValueKind};
+    /// # use m3u8::tag::known::{CustomTag, WritableCustomTag, WritableTag};
+    /// # use m3u8::tag::unknown;
+    /// # use m3u8::error::{ValidationError, ParseTagValueError};
     /// # use std::borrow::Cow;
     /// #[derive(Debug, PartialEq, Clone)]
     /// struct ExampleCustomTag {
     ///     answer: u64,
     /// }
-    /// impl TryFrom<ParsedTag<'_>> for ExampleCustomTag {
+    /// impl TryFrom<unknown::Tag<'_>> for ExampleCustomTag {
     ///     type Error = ValidationError;
-    ///     fn try_from(tag: ParsedTag) -> Result<Self, Self::Error> {
-    ///         if tag.name != "-X-MEANING-OF-LIFE" {
+    ///     fn try_from(tag: unknown::Tag) -> Result<Self, Self::Error> {
+    ///         if tag.name() != "-X-MEANING-OF-LIFE" {
     ///             return Err(ValidationError::UnexpectedTagName)
     ///         }
-    ///         match tag.value {
-    ///             SemiParsedTagValue::Unparsed(value) => {
-    ///                 Ok(Self {
-    ///                     answer: value.try_as_decimal_integer()?,
-    ///                 })
-    ///             }
-    ///             _ => Err(ValidationError::UnexpectedValueType(
-    ///                 ValidationErrorValueKind::from(&tag.value)
-    ///             )),
-    ///         }
+    ///         Ok(Self {
+    ///             answer: tag
+    ///                 .value()
+    ///                 .ok_or(ParseTagValueError::UnexpectedEmpty)?
+    ///                 .try_as_decimal_integer()?
+    ///         })
     ///     }
     /// }
     /// impl CustomTag<'_> for ExampleCustomTag {
@@ -299,15 +295,16 @@ where
     /// # use m3u8::{
     /// # Reader,
     /// # config::ParsingOptions,
-    /// # tag::known::{ParsedTag, CustomTag, WritableCustomTag, WritableTag},
+    /// # tag::known::{CustomTag, WritableCustomTag, WritableTag},
+    /// # tag::unknown,
     /// # error::ValidationError
     /// # };
     /// # use std::marker::PhantomData;
     /// # #[derive(Debug, PartialEq, Clone)]
     /// # struct SomeCustomTag;
-    /// # impl TryFrom<ParsedTag<'_>> for SomeCustomTag {
+    /// # impl TryFrom<unknown::Tag<'_>> for SomeCustomTag {
     /// #     type Error = ValidationError;
-    /// #     fn try_from(_: ParsedTag) -> Result<Self, Self::Error> { todo!() }
+    /// #     fn try_from(_: unknown::Tag) -> Result<Self, Self::Error> { todo!() }
     /// # }
     /// # impl CustomTag<'_> for SomeCustomTag {
     /// #     fn is_known_name(_: &str) -> bool { todo!() }
@@ -333,15 +330,16 @@ where
     /// # use m3u8::{
     /// # Reader, Writer,
     /// # config::ParsingOptions,
-    /// # tag::known::{ParsedTag, CustomTag, WritableCustomTag, WritableTag},
+    /// # tag::known::{CustomTag, WritableCustomTag, WritableTag},
+    /// # tag::unknown,
     /// # error::ValidationError
     /// # };
     /// # use std::{error::Error, marker::PhantomData};
     /// # #[derive(Debug, PartialEq, Clone)]
     /// # struct SomeCustomTag;
-    /// # impl TryFrom<ParsedTag<'_>> for SomeCustomTag {
+    /// # impl TryFrom<unknown::Tag<'_>> for SomeCustomTag {
     /// #     type Error = ValidationError;
-    /// #     fn try_from(_: ParsedTag) -> Result<Self, Self::Error> { todo!() }
+    /// #     fn try_from(_: unknown::Tag) -> Result<Self, Self::Error> { todo!() }
     /// # }
     /// # impl CustomTag<'_> for SomeCustomTag {
     /// #     fn is_known_name(_: &str) -> bool { todo!() }
