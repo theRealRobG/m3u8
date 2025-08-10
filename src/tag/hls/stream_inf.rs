@@ -1,8 +1,5 @@
 use crate::{
-    error::{
-        AttributeListParsingError, ParseAttributeValueError, ParseTagValueError,
-        UnrecognizedEnumerationError, ValidationError,
-    },
+    error::{ParseTagValueError, UnrecognizedEnumerationError, ValidationError},
     tag::{
         hls::{EnumeratedString, EnumeratedStringList, into_inner_tag},
         unknown,
@@ -918,22 +915,6 @@ impl<'a> StreamInf<'a> {
                 .and_then(AttributeValue::unquoted)
                 .and_then(|v| v.try_as_decimal_resolution().ok())
         }
-    }
-
-    pub fn test_resolution(&self) -> Result<DecimalResolution, ValidationError> {
-        let resolution = self
-            .attribute_list
-            .get(RESOLUTION)
-            .and_then(AttributeValue::unquoted)
-            .ok_or(ValidationError::MissingRequiredAttribute("RESOLUTION"))?
-            .try_as_decimal_resolution()
-            .map_err(|e| {
-                ValidationError::from(ParseAttributeValueError::DecimalResolution {
-                    attr_name: "RESOLUTION",
-                    error: e,
-                })
-            })?;
-        Ok(resolution)
     }
 
     /// Corresponds to the `FRAME-RATE` attribute.
