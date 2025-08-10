@@ -7,8 +7,8 @@ use crate::{
     date::{self, DateTime},
     error::{
         AttributeListParsingError, DateTimeSyntaxError, DecimalResolutionParseError,
-        ParseDecimalIntegerRangeError, ParseFloatError, ParseNumberError, ParsePlaylistTypeError,
-        TagValueSyntaxError,
+        ParseDecimalFloatingPointWithTitleError, ParseDecimalIntegerRangeError, ParseFloatError,
+        ParseNumberError, ParsePlaylistTypeError, TagValueSyntaxError,
     },
     line::ParsedByteSlice,
     utils::{f64_to_u64, parse_u64, split_on_new_line},
@@ -19,6 +19,10 @@ use std::{borrow::Cow, collections::HashMap, fmt::Display};
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct TagValue<'a>(pub &'a [u8]);
 impl<'a> TagValue<'a> {
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
     pub fn try_as_decimal_integer(&self) -> Result<u64, ParseNumberError> {
         parse_u64(self.0)
     }
@@ -56,7 +60,7 @@ impl<'a> TagValue<'a> {
 
     pub fn try_as_decimal_floating_point_with_title(
         &self,
-    ) -> Result<(f64, &'a str), TagValueSyntaxError> {
+    ) -> Result<(f64, &'a str), ParseDecimalFloatingPointWithTitleError> {
         match memchr(b',', self.0) {
             Some(n) => {
                 let duration = fast_float2::parse(&self.0[..n])?;
@@ -78,8 +82,6 @@ impl<'a> TagValue<'a> {
         &self,
     ) -> Result<HashMap<&'a str, AttributeValue<'a>>, AttributeListParsingError> {
         let mut attribute_list = HashMap::new();
-        let mut state = AttributeListParsingState::ReadingName;
-        let mut previous_match_index = 0;
         let mut list_iter = memchr3_iter(b'=', b',', b'"', self.0);
         // Name in first position is special because we want to capture the whole value from the
         // previous_match_index (== 0), rather than in the rest of cases, where we want to capture
@@ -92,8 +94,8 @@ impl<'a> TagValue<'a> {
         if self.0[first_match_index] != b'=' {
             return Err(AttributeListParsingError::UnexpectedCharacterInAttributeName);
         }
-        previous_match_index = first_match_index;
-        state = AttributeListParsingState::ReadingValue {
+        let mut previous_match_index = first_match_index;
+        let mut state = AttributeListParsingState::ReadingValue {
             name: std::str::from_utf8(&self.0[..first_match_index])?,
         };
         for i in list_iter {
@@ -172,7 +174,7 @@ impl<'a> TagValue<'a> {
                 }
                 attribute_list.insert(name, AttributeValue::Unquoted(value));
             }
-            AttributeListParsingState::ReadingQuotedValue { name } => {
+            AttributeListParsingState::ReadingQuotedValue { name: _ } => {
                 return Err(AttributeListParsingError::EndOfLineWhileReadingQuotedValue);
             }
             AttributeListParsingState::FinishedReadingQuotedValue { name, value } => {
@@ -194,6 +196,20 @@ enum AttributeListParsingState<'a> {
 pub enum AttributeValue<'a> {
     Unquoted(UnquotedAttributeValue<'a>),
     Quoted(&'a str),
+}
+impl<'a> AttributeValue<'a> {
+    pub fn unquoted(&self) -> Option<UnquotedAttributeValue<'a>> {
+        match self {
+            AttributeValue::Unquoted(v) => Some(*v),
+            AttributeValue::Quoted(_) => None,
+        }
+    }
+    pub fn quoted(&self) -> Option<&'a str> {
+        match self {
+            AttributeValue::Unquoted(_) => None,
+            AttributeValue::Quoted(s) => Some(*s),
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]

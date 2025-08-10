@@ -1,9 +1,9 @@
 use crate::{
-    error::{UnrecognizedEnumerationError, ValidationError, ValidationErrorValueKind},
+    error::{ParseTagValueError, UnrecognizedEnumerationError, ValidationError},
     tag::{
         hls::{EnumeratedString, into_inner_tag},
-        known::ParsedTag,
-        value::{ParsedAttributeValue, SemiParsedTagValue},
+        unknown,
+        value::AttributeValue,
     },
     utils::AsStaticCow,
 };
@@ -172,9 +172,9 @@ pub struct PreloadHint<'a> {
     uri: Cow<'a, str>,
     byterange_start: Option<u64>,
     byterange_length: Option<u64>,
-    attribute_list: HashMap<&'a str, ParsedAttributeValue<'a>>, // Original attribute list
-    output_line: Cow<'a, [u8]>,                                 // Used with Writer
-    output_line_is_dirty: bool,                                 // If should recalculate output_line
+    attribute_list: HashMap<&'a str, AttributeValue<'a>>, // Original attribute list
+    output_line: Cow<'a, [u8]>,                           // Used with Writer
+    output_line_is_dirty: bool,                           // If should recalculate output_line
 }
 
 impl<'a> PartialEq for PreloadHint<'a> {
@@ -186,19 +186,22 @@ impl<'a> PartialEq for PreloadHint<'a> {
     }
 }
 
-impl<'a> TryFrom<ParsedTag<'a>> for PreloadHint<'a> {
+impl<'a> TryFrom<unknown::Tag<'a>> for PreloadHint<'a> {
     type Error = ValidationError;
 
-    fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
-        let SemiParsedTagValue::AttributeList(attribute_list) = tag.value else {
-            return Err(ValidationError::UnexpectedValueType(
-                ValidationErrorValueKind::from(&tag.value),
-            ));
-        };
-        let Some(ParsedAttributeValue::UnquotedString(hint_type)) = attribute_list.get(TYPE) else {
+    fn try_from(tag: unknown::Tag<'a>) -> Result<Self, Self::Error> {
+        let attribute_list = tag
+            .value()
+            .ok_or(ParseTagValueError::UnexpectedEmpty)?
+            .try_as_attribute_list()?;
+        let Some(hint_type) = attribute_list
+            .get(TYPE)
+            .and_then(AttributeValue::unquoted)
+            .and_then(|v| v.try_as_utf_8().ok())
+        else {
             return Err(ValidationError::MissingRequiredAttribute(TYPE));
         };
-        let Some(ParsedAttributeValue::QuotedString(uri)) = attribute_list.get(URI) else {
+        let Some(uri) = attribute_list.get(URI).and_then(AttributeValue::quoted) else {
             return Err(ValidationError::MissingRequiredAttribute(URI));
         };
         Ok(Self {
@@ -286,10 +289,11 @@ impl<'a> PreloadHint<'a> {
         if let Some(byterange_start) = self.byterange_start {
             byterange_start
         } else {
-            match self.attribute_list.get(BYTERANGE_START) {
-                Some(ParsedAttributeValue::DecimalInteger(start)) => *start,
-                _ => 0,
-            }
+            self.attribute_list
+                .get(BYTERANGE_START)
+                .and_then(AttributeValue::unquoted)
+                .and_then(|v| v.try_as_decimal_integer().ok())
+                .unwrap_or(0)
         }
     }
 
@@ -300,10 +304,10 @@ impl<'a> PreloadHint<'a> {
         if let Some(byterange_length) = self.byterange_length {
             Some(byterange_length)
         } else {
-            match self.attribute_list.get(BYTERANGE_LENGTH) {
-                Some(ParsedAttributeValue::DecimalInteger(length)) => Some(*length),
-                _ => None,
-            }
+            self.attribute_list
+                .get(BYTERANGE_LENGTH)
+                .and_then(AttributeValue::unquoted)
+                .and_then(|v| v.try_as_decimal_integer().ok())
         }
     }
 

@@ -1,10 +1,6 @@
 use crate::{
-    error::{ValidationError, ValidationErrorValueKind},
-    tag::{
-        hls::into_inner_tag,
-        known::ParsedTag,
-        value::{ParsedAttributeValue, SemiParsedTagValue},
-    },
+    error::{ParseTagValueError, ValidationError},
+    tag::{hls::into_inner_tag, unknown, value::AttributeValue},
 };
 use std::{borrow::Cow, collections::HashMap, marker::PhantomData};
 
@@ -115,9 +111,9 @@ pub struct RenditionReport<'a> {
     uri: Cow<'a, str>,
     last_msn: u64,
     last_part: Option<u64>,
-    attribute_list: HashMap<&'a str, ParsedAttributeValue<'a>>, // Original attribute list
-    output_line: Cow<'a, [u8]>,                                 // Used with Writer
-    output_line_is_dirty: bool,                                 // If should recalculate output_line
+    attribute_list: HashMap<&'a str, AttributeValue<'a>>, // Original attribute list
+    output_line: Cow<'a, [u8]>,                           // Used with Writer
+    output_line_is_dirty: bool,                           // If should recalculate output_line
 }
 
 impl<'a> PartialEq for RenditionReport<'a> {
@@ -128,25 +124,27 @@ impl<'a> PartialEq for RenditionReport<'a> {
     }
 }
 
-impl<'a> TryFrom<ParsedTag<'a>> for RenditionReport<'a> {
+impl<'a> TryFrom<unknown::Tag<'a>> for RenditionReport<'a> {
     type Error = ValidationError;
 
-    fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
-        let SemiParsedTagValue::AttributeList(attribute_list) = tag.value else {
-            return Err(super::ValidationError::UnexpectedValueType(
-                ValidationErrorValueKind::from(&tag.value),
-            ));
-        };
-        let Some(ParsedAttributeValue::QuotedString(uri)) = attribute_list.get(URI) else {
+    fn try_from(tag: unknown::Tag<'a>) -> Result<Self, Self::Error> {
+        let attribute_list = tag
+            .value()
+            .ok_or(ParseTagValueError::UnexpectedEmpty)?
+            .try_as_attribute_list()?;
+        let Some(uri) = attribute_list.get(URI).and_then(AttributeValue::quoted) else {
             return Err(super::ValidationError::MissingRequiredAttribute(URI));
         };
-        let Some(ParsedAttributeValue::DecimalInteger(last_msn)) = attribute_list.get(LAST_MSN)
+        let Some(last_msn) = attribute_list
+            .get(LAST_MSN)
+            .and_then(AttributeValue::unquoted)
+            .and_then(|v| v.try_as_decimal_integer().ok())
         else {
             return Err(super::ValidationError::MissingRequiredAttribute(LAST_MSN));
         };
         Ok(Self {
             uri: Cow::Borrowed(uri),
-            last_msn: *last_msn,
+            last_msn,
             last_part: None,
             attribute_list,
             output_line: Cow::Borrowed(tag.original_input),
@@ -228,10 +226,10 @@ impl<'a> RenditionReport<'a> {
         if let Some(last_part) = self.last_part {
             Some(last_part)
         } else {
-            match self.attribute_list.get(LAST_PART) {
-                Some(ParsedAttributeValue::DecimalInteger(part)) => Some(*part),
-                _ => None,
-            }
+            self.attribute_list
+                .get(LAST_PART)
+                .and_then(AttributeValue::unquoted)
+                .and_then(|v| v.try_as_decimal_integer().ok())
         }
     }
 

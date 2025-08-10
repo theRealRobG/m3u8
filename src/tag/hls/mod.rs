@@ -5,7 +5,10 @@
 
 use crate::{
     error::ValidationError,
-    tag::known::{IntoInnerTag, ParsedTag, TagInner},
+    tag::{
+        known::{IntoInnerTag, TagInner},
+        unknown,
+    },
 };
 use std::fmt::Debug;
 
@@ -153,10 +156,10 @@ pub enum Tag<'a> {
     ContentSteering(ContentSteering<'a>),
 }
 
-impl<'a> TryFrom<ParsedTag<'a>> for Tag<'a> {
+impl<'a> TryFrom<unknown::Tag<'a>> for Tag<'a> {
     type Error = ValidationError;
 
-    fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
+    fn try_from(tag: unknown::Tag<'a>) -> Result<Self, Self::Error> {
         let tag_name = TagName::try_from(tag.name)?;
         match tag_name {
             TagName::M3u => Ok(Self::M3u(M3u::try_from(tag)?)),
@@ -557,34 +560,42 @@ mod tests {
             hls::{daterange::ExtensionAttributeValue, map::MapByterange, part::PartByterange},
             value::{
                 DecimalResolution, HlsPlaylistType, ParsedAttributeValue, SemiParsedTagValue,
-                UnparsedTagValue,
+                TagValue, UnparsedTagValue,
             },
         },
     };
     use pretty_assertions::assert_eq;
     use std::collections::HashMap;
 
+    macro_rules! unknown_tag {
+        ($name:literal) => {
+            Tag::try_from(unknown::Tag {
+                name: $name,
+                value: None,
+                original_input: format!("#EXT{}", $name).as_bytes(),
+                validation_error: None,
+            })
+        };
+        ($name:literal $($value:literal)+) => {
+            Tag::try_from(unknown::Tag {
+                name: $name,
+                value: Some(TagValue([$($value,)+].join("").as_bytes())),
+                original_input: format!("#EXT{}:{}", $name, [$($value,)+].join("")).as_bytes(),
+                validation_error: None,
+            })
+        };
+    }
+
     #[test]
     fn m3u() {
-        assert_eq!(
-            Ok(Tag::M3u(M3u)),
-            Tag::try_from(ParsedTag {
-                name: "M3U",
-                value: SemiParsedTagValue::Empty,
-                original_input: b"#EXTM3U"
-            })
-        )
+        assert_eq!(Ok(Tag::M3u(M3u)), unknown_tag!("M3U"))
     }
 
     #[test]
     fn version() {
         assert_eq!(
             Ok(Tag::Version(Version::new(9))),
-            Tag::try_from(ParsedTag {
-                name: "-X-VERSION",
-                value: SemiParsedTagValue::Unparsed(UnparsedTagValue(b"9")),
-                original_input: b"#EXT-X-VERSION:9"
-            })
+            unknown_tag!("-X-VERSION" "9")
         )
     }
 
@@ -592,11 +603,7 @@ mod tests {
     fn independent_segments() {
         assert_eq!(
             Ok(Tag::IndependentSegments(IndependentSegments)),
-            Tag::try_from(ParsedTag {
-                name: "-X-INDEPENDENT-SEGMENTS",
-                value: SemiParsedTagValue::Empty,
-                original_input: b"#EXT-X-INDEPENDENT-SEGMENTS"
-            })
+            unknown_tag!("-X-INDEPENDENT-SEGMENTS")
         )
     }
 
@@ -604,14 +611,7 @@ mod tests {
     fn start() {
         assert_eq!(
             Ok(Tag::Start(Start::builder().with_time_offset(10.5).finish())),
-            Tag::try_from(ParsedTag {
-                name: "-X-START",
-                value: SemiParsedTagValue::AttributeList(HashMap::from([(
-                    "TIME-OFFSET",
-                    ParsedAttributeValue::SignedDecimalFloatingPoint(10.5)
-                )])),
-                original_input: b"#EXT-X-START:TIME-OFFSET=10.5"
-            })
+            unknown_tag!("-X-START" "TIME-OFFSET=10.5")
         );
         let expected = Tag::Start(
             Start::builder()
@@ -619,13 +619,11 @@ mod tests {
                 .with_precise()
                 .finish(),
         );
-        let actual = Tag::try_from(ParsedTag {
+        let actual = Tag::try_from(unknown::Tag {
             name: "-X-START",
-            value: SemiParsedTagValue::AttributeList(HashMap::from([
-                ("TIME-OFFSET", ParsedAttributeValue::DecimalInteger(10)),
-                ("PRECISE", ParsedAttributeValue::UnquotedString("YES")),
-            ])),
-            original_input: b"#EXT-X-START:TIME-OFFSET=10.5,PRECISE=YES",
+            value: Some(TagValue(b"TIME-OFFSET=10,PRECISE=YES")),
+            original_input: b"#EXT-X-START:TIME-OFFSET=10,PRECISE=YES",
+            validation_error: None,
         })
         .unwrap();
         match (expected, actual) {
@@ -644,38 +642,17 @@ mod tests {
                 "TEST".to_string(),
                 "GOOD".to_string()
             ))),
-            Tag::try_from(ParsedTag {
-                name: "-X-DEFINE",
-                value: SemiParsedTagValue::AttributeList(HashMap::from([
-                    ("NAME", ParsedAttributeValue::QuotedString("TEST")),
-                    ("VALUE", ParsedAttributeValue::QuotedString("GOOD"))
-                ])),
-                original_input: b"#EXT-X-DEFINE:NAME=\"TEST\",VALUE=\"GOOD\""
-            })
+            unknown_tag!("-X-DEFINE" "NAME=\"TEST\",VALUE=\"GOOD\"")
         );
         assert_eq!(
             Ok(Tag::Define(Define::new_import("TEST".to_string()))),
-            Tag::try_from(ParsedTag {
-                name: "-X-DEFINE",
-                value: SemiParsedTagValue::AttributeList(HashMap::from([(
-                    "IMPORT",
-                    ParsedAttributeValue::QuotedString("TEST")
-                )])),
-                original_input: b"#EXT-X-DEFINE:IMPORT=\"TEST\""
-            })
+            unknown_tag!("-X-DEFINE" r#"IMPORT="TEST""#)
         );
         assert_eq!(
             Ok(Tag::Define(Define::new_queryparam(
                 "testQueryParam".to_string()
             ))),
-            Tag::try_from(ParsedTag {
-                name: "-X-DEFINE",
-                value: SemiParsedTagValue::AttributeList(HashMap::from([(
-                    "QUERYPARAM",
-                    ParsedAttributeValue::QuotedString("testQueryParam")
-                )])),
-                original_input: b"#EXT-X-DEFINE:QUERYPARAM=\"testQueryParam\""
-            })
+            unknown_tag!("-X-DEFINE" r#"QUERYPARAM="testQueryParam""#)
         );
     }
 
@@ -683,11 +660,7 @@ mod tests {
     fn targetduration() {
         assert_eq!(
             Ok(Tag::Targetduration(Targetduration::new(6))),
-            Tag::try_from(ParsedTag {
-                name: "-X-TARGETDURATION",
-                value: SemiParsedTagValue::Unparsed(UnparsedTagValue(b"6")),
-                original_input: b"#EXT-X-TARGETDURATION:6"
-            }),
+            unknown_tag!("-X-TARGETDURATION" "6")
         );
     }
 
@@ -695,11 +668,7 @@ mod tests {
     fn media_sequence() {
         assert_eq!(
             Ok(Tag::MediaSequence(MediaSequence::new(100))),
-            Tag::try_from(ParsedTag {
-                name: "-X-MEDIA-SEQUENCE",
-                value: SemiParsedTagValue::Unparsed(UnparsedTagValue(b"100")),
-                original_input: b"#EXT-X-MEDIA-SEQUENCE:100"
-            })
+            unknown_tag!("-X-MEDIA-SEQUENCE" "100")
         );
     }
 
@@ -707,43 +676,24 @@ mod tests {
     fn discontinuity_sequencee() {
         assert_eq!(
             Ok(Tag::DiscontinuitySequence(DiscontinuitySequence::new(100))),
-            Tag::try_from(ParsedTag {
-                name: "-X-DISCONTINUITY-SEQUENCE",
-                value: SemiParsedTagValue::Unparsed(UnparsedTagValue(b"100")),
-                original_input: b"#EXT-X-DISCONTINUITY-SEQUENCE:100"
-            })
+            unknown_tag!("-X-DISCONTINUITY-SEQUENCE" "100")
         );
     }
 
     #[test]
     fn endlist() {
-        assert_eq!(
-            Ok(Tag::Endlist(Endlist)),
-            Tag::try_from(ParsedTag {
-                name: "-X-ENDLIST",
-                value: SemiParsedTagValue::Empty,
-                original_input: b"#EXT-X-ENDLIST"
-            })
-        )
+        assert_eq!(Ok(Tag::Endlist(Endlist)), unknown_tag!("-X-ENDLIST"))
     }
 
     #[test]
     fn playlist_type() {
         assert_eq!(
             Ok(Tag::PlaylistType(PlaylistType::new(HlsPlaylistType::Event))),
-            Tag::try_from(ParsedTag {
-                name: "-X-PLAYLIST-TYPE",
-                value: SemiParsedTagValue::Unparsed(UnparsedTagValue(b"EVENT")),
-                original_input: b"#EXT-X-PLAYLIST-TYPE:EVENT"
-            })
+            unknown_tag!("-X-PLAYLIST-TYPE" "EVENT")
         );
         assert_eq!(
             Ok(Tag::PlaylistType(PlaylistType::new(HlsPlaylistType::Vod))),
-            Tag::try_from(ParsedTag {
-                name: "-X-PLAYLIST-TYPE",
-                value: SemiParsedTagValue::Unparsed(UnparsedTagValue(b"VOD")),
-                original_input: b"#EXT-X-PLAYLIST-TYPE:VOD"
-            })
+            unknown_tag!("-X-PLAYLIST-TYPE" "VOD")
         );
     }
 
@@ -751,11 +701,7 @@ mod tests {
     fn i_frames_only() {
         assert_eq!(
             Ok(Tag::IFramesOnly(IFramesOnly)),
-            Tag::try_from(ParsedTag {
-                name: "-X-I-FRAMES-ONLY",
-                value: SemiParsedTagValue::Empty,
-                original_input: b"#EXT-X-I-FRAMES-ONLY"
-            })
+            unknown_tag!("-X-I-FRAMES-ONLY")
         )
     }
 
@@ -763,54 +709,27 @@ mod tests {
     fn part_inf() {
         assert_eq!(
             Ok(Tag::PartInf(PartInf::new(0.5))),
-            Tag::try_from(ParsedTag {
-                name: "-X-PART-INF",
-                value: SemiParsedTagValue::AttributeList(HashMap::from([(
-                    "PART-TARGET",
-                    ParsedAttributeValue::SignedDecimalFloatingPoint(0.5)
-                )])),
-                original_input: b"#EXT-X-PART-INF:PART-TARGET=0.5"
-            })
+            unknown_tag!("-X-PART-INF" "PART-TARGET=0.5")
         )
     }
 
     #[test]
     fn server_control() {
         assert_eq!(
-            Ok(Tag::ServerControl(ServerControl::builder()
-                .with_can_skip_until(36.0)
-                .with_can_skip_dateranges()
-                .with_can_block_reload()
-                .with_hold_back(12.0)
-                .with_part_hold_back(1.5)
-                .finish()
+            Ok(Tag::ServerControl(
+                ServerControl::builder()
+                    .with_can_skip_until(36.0)
+                    .with_can_skip_dateranges()
+                    .with_can_block_reload()
+                    .with_hold_back(12.0)
+                    .with_part_hold_back(1.5)
+                    .finish()
             )),
-            Tag::try_from(ParsedTag {
-                name: "-X-SERVER-CONTROL",
-                value: SemiParsedTagValue::AttributeList(HashMap::from([
-                    (
-                        "CAN-SKIP-UNTIL",
-                        ParsedAttributeValue::SignedDecimalFloatingPoint(36.0)
-                    ),
-                    (
-                        "CAN-SKIP-DATERANGES",
-                        ParsedAttributeValue::UnquotedString("YES")
-                    ),
-                    (
-                        "HOLD-BACK",
-                        ParsedAttributeValue::SignedDecimalFloatingPoint(12.0)
-                    ),
-                    (
-                        "PART-HOLD-BACK",
-                        ParsedAttributeValue::SignedDecimalFloatingPoint(1.5)
-                    ),
-                    (
-                        "CAN-BLOCK-RELOAD",
-                        ParsedAttributeValue::UnquotedString("YES")
-                    ),
-                ])),
-                original_input: b"#EXT-X-SERVER-CONTROL:CAN-SKIP-UNTIL=36,CAN-SKIP-DATERANGES=YES,HOLD-BACK=12,PART-HOLD-BACK=1.5,CAN-BLOCK-RELOAD=YES"
-            })
+            unknown_tag!(
+                "-X-SERVER-CONTROL"
+                "CAN-SKIP-UNTIL=36,CAN-SKIP-DATERANGES=YES,HOLD-BACK=12,PART-HOLD-BACK=1.5,"
+                "CAN-BLOCK-RELOAD=YES"
+            )
         );
     }
 
@@ -818,30 +737,15 @@ mod tests {
     fn inf() {
         assert_eq!(
             Ok(Tag::Inf(Inf::new(6.0, "".to_string()))),
-            Tag::try_from(ParsedTag {
-                name: "INF",
-                value: SemiParsedTagValue::Unparsed(UnparsedTagValue(b"6")),
-                original_input: b"#EXTINF:6"
-            })
+            unknown_tag!("INF" "6")
         );
         assert_eq!(
             Ok(Tag::Inf(Inf::new(6.006, "".to_string()))),
-            Tag::try_from(ParsedTag {
-                name: "INF",
-                value: SemiParsedTagValue::DecimalFloatingPointWithOptionalTitle(6.006, ""),
-                original_input: b"#EXTINF:6.006,"
-            })
+            unknown_tag!("INF" "6.006,")
         );
         assert_eq!(
             Ok(Tag::Inf(Inf::new(6.006, "A useful title".to_string()))),
-            Tag::try_from(ParsedTag {
-                name: "INF",
-                value: SemiParsedTagValue::DecimalFloatingPointWithOptionalTitle(
-                    6.006,
-                    "A useful title"
-                ),
-                original_input: b"#EXTINF:6.006,A useful title"
-            })
+            unknown_tag!("INF" "6.006,A useful title")
         );
     }
 
@@ -849,19 +753,11 @@ mod tests {
     fn byterange() {
         assert_eq!(
             Ok(Tag::Byterange(Byterange::new(1024, Some(512)))),
-            Tag::try_from(ParsedTag {
-                name: "-X-BYTERANGE",
-                value: SemiParsedTagValue::Unparsed(UnparsedTagValue(b"1024@512")),
-                original_input: b"#EXT-X-BYTERANGE:1024@512"
-            })
+            unknown_tag!("-X-BYTERANGE" "1024@512")
         );
         assert_eq!(
             Ok(Tag::Byterange(Byterange::new(1024, None))),
-            Tag::try_from(ParsedTag {
-                name: "-X-BYTERANGE",
-                value: SemiParsedTagValue::Unparsed(UnparsedTagValue(b"1024")),
-                original_input: b"#EXT-X-BYTERANGE:1024"
-            })
+            unknown_tag!("-X-BYTERANGE" "1024")
         );
     }
 
@@ -869,55 +765,33 @@ mod tests {
     fn discontinuity() {
         assert_eq!(
             Ok(Tag::Discontinuity(Discontinuity)),
-            Tag::try_from(ParsedTag {
-                name: "-X-DISCONTINUITY",
-                value: SemiParsedTagValue::Empty,
-                original_input: b"#EXT-X-DISCONTINUITY"
-            })
+            unknown_tag!("-X-DISCONTINUITY")
         );
     }
 
     #[test]
     fn key() {
         assert_eq!(
-            Ok(Tag::Key(Key::builder()
-                .with_method(key::Method::SampleAes)
-                .with_uri("skd://some-key-id")
-                .with_iv("0xABCD")
-                .with_keyformat("com.apple.streamingkeydelivery")
-                .with_keyformatversions("1")
-                .finish()
+            Ok(Tag::Key(
+                Key::builder()
+                    .with_method(key::Method::SampleAes)
+                    .with_uri("skd://some-key-id")
+                    .with_iv("0xABCD")
+                    .with_keyformat("com.apple.streamingkeydelivery")
+                    .with_keyformatversions("1")
+                    .finish()
             )),
-            Tag::try_from(ParsedTag {
-                name: "-X-KEY",
-                value: SemiParsedTagValue::AttributeList(HashMap::from([
-                    ("METHOD", ParsedAttributeValue::UnquotedString("SAMPLE-AES")),
-                    (
-                        "URI",
-                        ParsedAttributeValue::QuotedString("skd://some-key-id")
-                    ),
-                    ("IV", ParsedAttributeValue::UnquotedString("0xABCD")),
-                    (
-                        "KEYFORMAT",
-                        ParsedAttributeValue::QuotedString("com.apple.streamingkeydelivery")
-                    ),
-                    ("KEYFORMATVERSIONS", ParsedAttributeValue::QuotedString("1")),
-                ])),
-                original_input: b"#EXT-X-KEY:METHOD=SAMPLE-AES,URI=\"skd://some-key-id\",IV=0xABCD,KEYFORMAT=\"com.apple.streamingkeydelivery\",KEYFORMATVERSIONS=\"1\""
-            })
+            unknown_tag!(
+                "-X-KEY"
+                "METHOD=SAMPLE-AES,URI=\"skd://some-key-id\",IV=0xABCD,"
+                "KEYFORMAT=\"com.apple.streamingkeydelivery\",KEYFORMATVERSIONS=\"1\""
+            )
         );
         assert_eq!(
             Ok(Tag::Key(
                 Key::builder().with_method(key::Method::None).finish()
             )),
-            Tag::try_from(ParsedTag {
-                name: "-X-KEY",
-                value: SemiParsedTagValue::AttributeList(HashMap::from([(
-                    "METHOD",
-                    ParsedAttributeValue::UnquotedString("NONE")
-                )])),
-                original_input: b"#EXT-X-KEY:METHOD=NONE"
-            })
+            unknown_tag!("-X-KEY" "METHOD=NONE")
         );
     }
 
@@ -933,25 +807,11 @@ mod tests {
                     })
                     .finish()
             )),
-            Tag::try_from(ParsedTag {
-                name: "-X-MAP",
-                value: SemiParsedTagValue::AttributeList(HashMap::from([
-                    ("URI", ParsedAttributeValue::QuotedString("init.mp4")),
-                    ("BYTERANGE", ParsedAttributeValue::QuotedString("1024@0")),
-                ])),
-                original_input: b"#EXT-X-MAP:URI=\"init.mp4\",BYTERANGE=\"1024@0\""
-            })
+            unknown_tag!("-X-MAP" r#"URI="init.mp4",BYTERANGE="1024@0""#)
         );
         assert_eq!(
             Ok(Tag::Map(Map::builder().with_uri("init.mp4").finish())),
-            Tag::try_from(ParsedTag {
-                name: "-X-MAP",
-                value: SemiParsedTagValue::AttributeList(HashMap::from([(
-                    "URI",
-                    ParsedAttributeValue::QuotedString("init.mp4")
-                )])),
-                original_input: b"#EXT-X-MAP:URI=\"init.mp4\""
-            })
+            unknown_tag!("-X-MAP" "URI=\"init.mp4\"")
         );
     }
 
@@ -961,13 +821,7 @@ mod tests {
             Ok(Tag::ProgramDateTime(ProgramDateTime::new(
                 date_time!(2025-06-05 T 16:46:42.123 -05:00)
             ))),
-            Tag::try_from(ParsedTag {
-                name: "-X-PROGRAM-DATE-TIME",
-                value: SemiParsedTagValue::Unparsed(UnparsedTagValue(
-                    b"2025-06-05T16:46:42.123-05:00"
-                )),
-                original_input: b"#EXT-X-PROGRAM-DATE-TIME:2025-06-05T16:46:42.123-05:00"
-            })
+            unknown_tag!("-X-PROGRAM-DATE-TIME" "2025-06-05T16:46:42.123-05:00")
         );
     }
 
@@ -975,10 +829,11 @@ mod tests {
     fn gap() {
         assert_eq!(
             Ok(Tag::Gap(Gap)),
-            Tag::try_from(ParsedTag {
+            Tag::try_from(unknown::Tag {
                 name: "-X-GAP",
-                value: SemiParsedTagValue::Empty,
-                original_input: b"#EXT-X-GAP"
+                value: None,
+                original_input: b"#EXT-X-GAP",
+                validation_error: None,
             })
         );
     }
@@ -987,11 +842,7 @@ mod tests {
     fn bitrate() {
         assert_eq!(
             Ok(Tag::Bitrate(Bitrate::new(10000000))),
-            Tag::try_from(ParsedTag {
-                name: "-X-BITRATE",
-                value: SemiParsedTagValue::Unparsed(UnparsedTagValue(b"10000000")),
-                original_input: b"#EXT-X-BITRATE:10000000"
-            })
+            unknown_tag!("-X-BITRATE" "10000000")
         );
     }
 
@@ -1003,24 +854,17 @@ mod tests {
                     .with_uri("part.1.mp4")
                     .with_duration(0.5)
                     .with_independent()
-                    .with_byterange(PartByterange { length: 1024, offset: Some(512) })
+                    .with_byterange(PartByterange {
+                        length: 1024,
+                        offset: Some(512)
+                    })
                     .with_gap()
                     .finish()
             )),
-            Tag::try_from(ParsedTag {
-                name: "-X-PART",
-                value: SemiParsedTagValue::AttributeList(HashMap::from([
-                    ("URI", ParsedAttributeValue::QuotedString("part.1.mp4")),
-                    (
-                        "DURATION",
-                        ParsedAttributeValue::SignedDecimalFloatingPoint(0.5)
-                    ),
-                    ("INDEPENDENT", ParsedAttributeValue::UnquotedString("YES")),
-                    ("BYTERANGE", ParsedAttributeValue::QuotedString("1024@512")),
-                    ("GAP", ParsedAttributeValue::UnquotedString("YES"))
-                ])),
-                original_input: b"#EXT-X-PART:URI=\"part.1.mp4\",DURATION=0.5,INDEPENDENT=YES,BYTERANGE=\"1024@512\",GAP=YES"
-            })
+            unknown_tag!(
+                "-X-PART"
+                "URI=\"part.1.mp4\",DURATION=0.5,INDEPENDENT=YES,BYTERANGE=\"1024@512\",GAP=YES"
+            )
         );
         assert_eq!(
             Ok(Tag::Part(
@@ -1033,18 +877,7 @@ mod tests {
                     })
                     .finish()
             )),
-            Tag::try_from(ParsedTag {
-                name: "-X-PART",
-                value: SemiParsedTagValue::AttributeList(HashMap::from([
-                    ("URI", ParsedAttributeValue::QuotedString("part.1.mp4")),
-                    (
-                        "DURATION",
-                        ParsedAttributeValue::SignedDecimalFloatingPoint(0.5)
-                    ),
-                    ("BYTERANGE", ParsedAttributeValue::QuotedString("1024")),
-                ])),
-                original_input: b"#EXT-X-PART:URI=\"part.1.mp4\",DURATION=0.5,BYTERANGE=\"1024\""
-            })
+            unknown_tag!("-X-PART" "URI=\"part.1.mp4\",DURATION=0.5,BYTERANGE=\"1024\"")
         );
         assert_eq!(
             Ok(Tag::Part(
@@ -1053,17 +886,7 @@ mod tests {
                     .with_duration(0.5)
                     .finish()
             )),
-            Tag::try_from(ParsedTag {
-                name: "-X-PART",
-                value: SemiParsedTagValue::AttributeList(HashMap::from([
-                    ("URI", ParsedAttributeValue::QuotedString("part.1.mp4")),
-                    (
-                        "DURATION",
-                        ParsedAttributeValue::SignedDecimalFloatingPoint(0.5)
-                    ),
-                ])),
-                original_input: b"#EXT-X-PART:URI=\"part.1.mp4\",DURATION=0.5"
-            })
+            unknown_tag!("-X-PART" "URI=\"part.1.mp4\",DURATION=0.5")
         );
     }
 
@@ -1089,51 +912,12 @@ mod tests {
                     .with_end_on_next()
                     .finish()
             )),
-            Tag::try_from(ParsedTag {
-                name: "-X-DATERANGE",
-                value: SemiParsedTagValue::AttributeList(HashMap::from([
-                    ("ID", ParsedAttributeValue::QuotedString("test")),
-                    ("CLASS", ParsedAttributeValue::QuotedString("com.m3u8.test")),
-                    (
-                        "START-DATE",
-                        ParsedAttributeValue::QuotedString("2025-06-05T20:38:42.149-05:00")
-                    ),
-                    ("CUE", ParsedAttributeValue::QuotedString("ONCE")),
-                    (
-                        "END-DATE",
-                        ParsedAttributeValue::QuotedString("2025-06-05T20:40:42.149-05:00")
-                    ),
-                    (
-                        "DURATION",
-                        ParsedAttributeValue::SignedDecimalFloatingPoint(120.0)
-                    ),
-                    (
-                        "PLANNED-DURATION",
-                        ParsedAttributeValue::SignedDecimalFloatingPoint(180.0)
-                    ),
-                    ("X-COM-M3U8-TEST", ParsedAttributeValue::QuotedString("YES")),
-                    ("SCTE35-CMD", ParsedAttributeValue::UnquotedString("0xABCD")),
-                    ("SCTE35-OUT", ParsedAttributeValue::UnquotedString("0xABCD")),
-                    ("SCTE35-IN", ParsedAttributeValue::UnquotedString("0xABCD")),
-                    ("END-ON-NEXT", ParsedAttributeValue::UnquotedString("YES")),
-                ])),
-                original_input: concat!(
-                    "#EXT-X-DATERANGE:",
-                    "ID=\"test\",",
-                    "CLASS=\"com.m3u8.test\",",
-                    "START-DATE=\"2025-06-05T20:38:42.149-05:00\",",
-                    "CUE=\"ONCE\",",
-                    "END-DATE=\"2025-06-05T20:40:42.149-05:00\",",
-                    "DURATION=120,",
-                    "PLANNED-DURATION=180,",
-                    "X-COM-M3U8-TEST=\"YES\",",
-                    "SCTE35-CMD=0xABCD,",
-                    "SCTE35-OUT=0xABCD,",
-                    "SCTE35-IN=0xABCD,",
-                    "END-ON-NEXT=YES",
-                )
-                .as_bytes()
-            })
+            unknown_tag!(
+                "-X-DATERANGE"
+                r#"ID="test",CLASS="com.m3u8.test",START-DATE="2025-06-05T20:38:42.149-05:00","#
+                r#"CUE="ONCE",END-DATE="2025-06-05T20:40:42.149-05:00",DURATION=120,"#
+                r#"PLANNED-DURATION=180,X-COM-M3U8-TEST="YES",SCTE35-CMD=0xABCD,SCTE35-OUT=0xABCD,"#
+                r#"SCTE35-IN=0xABCD,END-ON-NEXT=YES"#)
         );
         assert_eq!(
             Ok(Tag::Daterange(
@@ -1142,18 +926,7 @@ mod tests {
                     .with_start_date(date_time!(2025-06-05 T 20:38:42.149 -05:00))
                     .finish()
             )),
-            Tag::try_from(ParsedTag {
-                name: "-X-DATERANGE",
-                value: SemiParsedTagValue::AttributeList(HashMap::from([
-                    ("ID", ParsedAttributeValue::QuotedString("test")),
-                    (
-                        "START-DATE",
-                        ParsedAttributeValue::QuotedString("2025-06-05T20:38:42.149-05:00")
-                    ),
-                ])),
-                original_input:
-                    b"#EXT-X-DATERANGE:ID=\"test\",START-DATE=\"2025-06-05T20:38:42.149-05:00\""
-            })
+            unknown_tag!("-X-DATERANGE" r#"ID="test",START-DATE="2025-06-05T20:38:42.149-05:00""#)
         );
     }
 
@@ -1166,34 +939,16 @@ mod tests {
                     .with_recently_removed_dateranges("1234\tabcd")
                     .finish()
             )),
-            Tag::try_from(ParsedTag {
-                name: "-X-SKIP",
-                value: SemiParsedTagValue::AttributeList(HashMap::from([
-                    (
-                        "SKIPPED-SEGMENTS",
-                        ParsedAttributeValue::DecimalInteger(100)
-                    ),
-                    (
-                        "RECENTLY-REMOVED-DATERANGES",
-                        ParsedAttributeValue::QuotedString("1234\tabcd")
-                    ),
-                ])),
-                original_input:
-                    b"#EXT-X-SKIP:SKIPPED-SEGMENTS=100,RECENTLY-REMOVED-DATERANGES=\"1234\tabcd\""
-            })
+            unknown_tag!(
+                "-X-SKIP"
+                "SKIPPED-SEGMENTS=100,RECENTLY-REMOVED-DATERANGES=\"1234\tabcd\""
+            )
         );
         assert_eq!(
             Ok(Tag::Skip(
                 Skip::builder().with_skipped_segments(100).finish()
             )),
-            Tag::try_from(ParsedTag {
-                name: "-X-SKIP",
-                value: SemiParsedTagValue::AttributeList(HashMap::from([(
-                    "SKIPPED-SEGMENTS",
-                    ParsedAttributeValue::DecimalInteger(100)
-                )])),
-                original_input: b"#EXT-X-SKIP:SKIPPED-SEGMENTS=100"
-            })
+            unknown_tag!("-X-SKIP" "SKIPPED-SEGMENTS=100")
         );
     }
 
@@ -1208,19 +963,10 @@ mod tests {
                     .with_byterange_length(1024)
                     .finish()
             )),
-            Tag::try_from(ParsedTag {
-                name: "-X-PRELOAD-HINT",
-                value: SemiParsedTagValue::AttributeList(HashMap::from([
-                    ("TYPE", ParsedAttributeValue::UnquotedString("PART")),
-                    ("URI", ParsedAttributeValue::QuotedString("part.2.mp4")),
-                    ("BYTERANGE-START", ParsedAttributeValue::DecimalInteger(512)),
-                    (
-                        "BYTERANGE-LENGTH",
-                        ParsedAttributeValue::DecimalInteger(1024)
-                    ),
-                ])),
-                original_input: b"#EXT-X-PRELOAD-HINT:TYPE=PART,URI=\"part.2.mp4\",BYTERANGE-START=512,BYTERANGE-LENGTH=1024"
-            })
+            unknown_tag!(
+                "-X-PRELOAD-HINT"
+                "TYPE=PART,URI=\"part.2.mp4\",BYTERANGE-START=512,BYTERANGE-LENGTH=1024"
+            )
         );
         assert_eq!(
             Ok(Tag::PreloadHint(
@@ -1229,14 +975,10 @@ mod tests {
                     .with_uri("part.2.mp4")
                     .finish()
             )),
-            Tag::try_from(ParsedTag {
-                name: "-X-PRELOAD-HINT",
-                value: SemiParsedTagValue::AttributeList(HashMap::from([
-                    ("TYPE", ParsedAttributeValue::UnquotedString("PART")),
-                    ("URI", ParsedAttributeValue::QuotedString("part.2.mp4")),
-                ])),
-                original_input: b"#EXT-X-PRELOAD-HINT:TYPE=PART,URI=\"part.2.mp4\""
-            })
+            unknown_tag!(
+                "-X-PRELOAD-HINT"
+                "TYPE=PART,URI=\"part.2.mp4\""
+            )
         );
     }
 
@@ -1250,16 +992,7 @@ mod tests {
                     .with_last_part(2)
                     .finish()
             )),
-            Tag::try_from(ParsedTag {
-                name: "-X-RENDITION-REPORT",
-                value: SemiParsedTagValue::AttributeList(HashMap::from([
-                    ("URI", ParsedAttributeValue::QuotedString("high.m3u8")),
-                    ("LAST-MSN", ParsedAttributeValue::DecimalInteger(1000)),
-                    ("LAST-PART", ParsedAttributeValue::DecimalInteger(2)),
-                ])),
-                original_input:
-                    b"#EXT-X-RENDITION-REPORT:URI=\"high.m3u8\",LAST-MSN=1000,LAST-PART=2"
-            })
+            unknown_tag!("-X-RENDITION-REPORT" "URI=\"high.m3u8\",LAST-MSN=1000,LAST-PART=2")
         );
         assert_eq!(
             Ok(Tag::RenditionReport(
@@ -1268,14 +1001,7 @@ mod tests {
                     .with_last_msn(1000)
                     .finish()
             )),
-            Tag::try_from(ParsedTag {
-                name: "-X-RENDITION-REPORT",
-                value: SemiParsedTagValue::AttributeList(HashMap::from([
-                    ("URI", ParsedAttributeValue::QuotedString("high.m3u8")),
-                    ("LAST-MSN", ParsedAttributeValue::DecimalInteger(1000)),
-                ])),
-                original_input: b"#EXT-X-RENDITION-REPORT:URI=\"high.m3u8\",LAST-MSN=1000"
-            })
+            unknown_tag!("-X-RENDITION-REPORT" "URI=\"high.m3u8\",LAST-MSN=1000")
         );
     }
 
@@ -1300,52 +1026,13 @@ mod tests {
                     .with_channels("2")
                     .finish()
             )),
-            Tag::try_from(ParsedTag {
-                name: "-X-MEDIA",
-                value: SemiParsedTagValue::AttributeList(HashMap::from([
-                    ("TYPE", ParsedAttributeValue::UnquotedString("AUDIO")),
-                    (
-                        "URI",
-                        ParsedAttributeValue::QuotedString("audio/en/stereo.m3u8")
-                    ),
-                    ("GROUP-ID", ParsedAttributeValue::QuotedString("stereo")),
-                    ("LANGUAGE", ParsedAttributeValue::QuotedString("en")),
-                    ("ASSOC-LANGUAGE", ParsedAttributeValue::QuotedString("en")),
-                    ("NAME", ParsedAttributeValue::QuotedString("English")),
-                    (
-                        "STABLE-RENDITION-ID",
-                        ParsedAttributeValue::QuotedString("1234")
-                    ),
-                    ("DEFAULT", ParsedAttributeValue::UnquotedString("YES")),
-                    ("AUTOSELECT", ParsedAttributeValue::UnquotedString("YES")),
-                    ("FORCED", ParsedAttributeValue::UnquotedString("YES")),
-                    ("BIT-DEPTH", ParsedAttributeValue::DecimalInteger(8)),
-                    ("SAMPLE-RATE", ParsedAttributeValue::DecimalInteger(48000)),
-                    (
-                        "CHARACTERISTICS",
-                        ParsedAttributeValue::QuotedString("public.accessibility.describes-video")
-                    ),
-                    ("CHANNELS", ParsedAttributeValue::QuotedString("2")),
-                ])),
-                original_input: concat!(
-                    "#EXT-X-MEDIA:",
-                    "TYPE=AUDIO,",
-                    "NAME=\"English\",",
-                    "GROUP-ID=\"stereo\",",
-                    "URI=\"audio/en/stereo.m3u8\",",
-                    "LANGUAGE=\"en\",",
-                    "ASSOC-LANGUAGE=\"en\",",
-                    "STABLE-RENDITION-ID=\"1234\",",
-                    "DEFAULT=YES,",
-                    "AUTOSELECT=YES,",
-                    "FORCED=YES,",
-                    "BIT-DEPTH=8,",
-                    "SAMPLE-RATE=48000,",
-                    "CHARACTERISTICS=\"public.accessibility.describes-video\",",
-                    "CHANNELS=\"2\"",
-                )
-                .as_bytes()
-            })
+            unknown_tag!(
+                "-X-MEDIA"
+                "TYPE=AUDIO,URI=\"audio/en/stereo.m3u8\",GROUP-ID=\"stereo\",LANGUAGE=\"en\","
+                "ASSOC-LANGUAGE=\"en\",NAME=\"English\",STABLE-RENDITION-ID=\"1234\",DEFAULT=YES,"
+                "AUTOSELECT=YES,FORCED=YES,BIT-DEPTH=8,SAMPLE-RATE=48000,"
+                "CHARACTERISTICS=\"public.accessibility.describes-video\",CHANNELS=\"2\""
+            )
         );
         assert_eq!(
             Ok(Tag::Media(
@@ -1356,26 +1043,10 @@ mod tests {
                     .with_instream_id("CC1")
                     .finish()
             )),
-            Tag::try_from(ParsedTag {
-                name: "-X-MEDIA",
-                value: SemiParsedTagValue::AttributeList(HashMap::from([
-                    (
-                        "TYPE",
-                        ParsedAttributeValue::UnquotedString("CLOSED-CAPTIONS")
-                    ),
-                    ("GROUP-ID", ParsedAttributeValue::QuotedString("cc")),
-                    ("NAME", ParsedAttributeValue::QuotedString("English")),
-                    ("INSTREAM-ID", ParsedAttributeValue::QuotedString("CC1")),
-                ])),
-                original_input: concat!(
-                    "#EXT-X-MEDIA:",
-                    "TYPE=CLOSED-CAPTIONS,",
-                    "NAME=\"English\",",
-                    "GROUP-ID=\"cc\",",
-                    "INSTREAM-ID=\"CC1\""
-                )
-                .as_bytes()
-            })
+            unknown_tag!(
+                "-X-MEDIA"
+                "TYPE=CLOSED-CAPTIONS,GROUP-ID=\"cc\",NAME=\"English\",INSTREAM-ID=\"CC1\""
+            )
         );
     }
 
@@ -1406,79 +1077,16 @@ mod tests {
                     .with_pathway_id("1234")
                     .finish()
             )),
-            Tag::try_from(ParsedTag {
-                name: "-X-STREAM-INF",
-                value: SemiParsedTagValue::AttributeList(HashMap::from([
-                    ("BANDWIDTH", ParsedAttributeValue::DecimalInteger(10000000)),
-                    (
-                        "AVERAGE-BANDWIDTH",
-                        ParsedAttributeValue::DecimalInteger(9000000)
-                    ),
-                    (
-                        "SCORE",
-                        ParsedAttributeValue::SignedDecimalFloatingPoint(2.0)
-                    ),
-                    (
-                        "CODECS",
-                        ParsedAttributeValue::QuotedString("hvc1.2.4.L153.b0,ec-3")
-                    ),
-                    (
-                        "SUPPLEMENTAL-CODECS",
-                        ParsedAttributeValue::QuotedString("dvh1.08.07/db4h")
-                    ),
-                    (
-                        "RESOLUTION",
-                        ParsedAttributeValue::UnquotedString("3840x2160")
-                    ),
-                    (
-                        "FRAME-RATE",
-                        ParsedAttributeValue::SignedDecimalFloatingPoint(23.976)
-                    ),
-                    ("HDCP-LEVEL", ParsedAttributeValue::UnquotedString("TYPE-1")),
-                    (
-                        "ALLOWED-CPC",
-                        ParsedAttributeValue::QuotedString("com.example.drm1:SMART-TV/PC")
-                    ),
-                    ("VIDEO-RANGE", ParsedAttributeValue::UnquotedString("PQ")),
-                    (
-                        "REQ-VIDEO-LAYOUT",
-                        ParsedAttributeValue::QuotedString("CH-STEREO,CH-MONO")
-                    ),
-                    (
-                        "STABLE-VARIANT-ID",
-                        ParsedAttributeValue::QuotedString("1234")
-                    ),
-                    ("AUDIO", ParsedAttributeValue::QuotedString("surround")),
-                    (
-                        "VIDEO",
-                        ParsedAttributeValue::QuotedString("alternate-view")
-                    ),
-                    ("SUBTITLES", ParsedAttributeValue::QuotedString("subs")),
-                    ("CLOSED-CAPTIONS", ParsedAttributeValue::QuotedString("cc")),
-                    ("PATHWAY-ID", ParsedAttributeValue::QuotedString("1234")),
-                ])),
-                original_input: concat!(
-                    "#EXT-X-STREAM-INF:",
-                    "BANDWIDTH=10000000,",
-                    "AVERAGE-BANDWIDTH=9000000,",
-                    "SCORE=2.0,",
-                    "CODECS=\"hvc1.2.4.L153.b0,ec-3\",",
-                    "SUPPLEMENTAL-CODECS=\"dvh1.08.07/db4h\",",
-                    "RESOLUTION=3840x2160,",
-                    "FRAME-RATE=23.976,",
-                    "HDCP-LEVEL=TYPE-1,",
-                    "ALLOWED-CPC=\"com.example.drm1:SMART-TV/PC\",",
-                    "VIDEO-RANGE=PQ,",
-                    "REQ-VIDEO-LAYOUT=\"CH-STEREO,CH-MONO\",",
-                    "STABLE-VARIANT-ID=\"1234\",",
-                    "AUDIO=\"surround\",",
-                    "VIDEO=\"alternate-view\",",
-                    "SUBTITLES=\"subs\",",
-                    "CLOSED-CAPTIONS=\"cc\",",
-                    "PATHWAY-ID=\"1234\"",
-                )
-                .as_bytes()
-            })
+            unknown_tag!(
+                "-X-STREAM-INF"
+                "BANDWIDTH=10000000,AVERAGE-BANDWIDTH=9000000,SCORE=2.0,"
+                "CODECS=\"hvc1.2.4.L153.b0,ec-3\",SUPPLEMENTAL-CODECS=\"dvh1.08.07/db4h\","
+                "RESOLUTION=3840x2160,FRAME-RATE=23.976,HDCP-LEVEL=TYPE-1,"
+                "ALLOWED-CPC=\"com.example.drm1:SMART-TV/PC\",VIDEO-RANGE=PQ,"
+                "REQ-VIDEO-LAYOUT=\"CH-STEREO,CH-MONO\",STABLE-VARIANT-ID=\"1234\","
+                "AUDIO=\"surround\",VIDEO=\"alternate-view\",SUBTITLES=\"subs\","
+                "CLOSED-CAPTIONS=\"cc\",PATHWAY-ID=\"1234\""
+            )
         );
         // One more test to check that integer frame rate parses well
         assert_eq!(
@@ -1488,28 +1096,14 @@ mod tests {
                     .with_frame_rate(25.0)
                     .finish()
             )),
-            Tag::try_from(ParsedTag {
-                name: "-X-STREAM-INF",
-                value: SemiParsedTagValue::AttributeList(HashMap::from([
-                    ("BANDWIDTH", ParsedAttributeValue::DecimalInteger(10000000)),
-                    ("FRAME-RATE", ParsedAttributeValue::DecimalInteger(25)),
-                ])),
-                original_input: b"#EXT-X-STREAM-INF:BANDWIDTH=10000000,FRAME-RATE=25"
-            })
+            unknown_tag!("-X-STREAM-INF" "BANDWIDTH=10000000,FRAME-RATE=25")
         );
         // Final check with all options unset
         assert_eq!(
             Ok(Tag::StreamInf(
                 StreamInf::builder().with_bandwidth(10000000).finish()
             )),
-            Tag::try_from(ParsedTag {
-                name: "-X-STREAM-INF",
-                value: SemiParsedTagValue::AttributeList(HashMap::from([(
-                    "BANDWIDTH",
-                    ParsedAttributeValue::DecimalInteger(10000000)
-                )])),
-                original_input: b"#EXT-X-STREAM-INF:BANDWIDTH=10000000"
-            })
+            unknown_tag!("-X-STREAM-INF" "BANDWIDTH=10000000")
         );
     }
 
@@ -1537,73 +1131,15 @@ mod tests {
                     .with_pathway_id("1234")
                     .finish()
             )),
-            Tag::try_from(ParsedTag {
-                name: "-X-I-FRAME-STREAM-INF",
-                value: SemiParsedTagValue::AttributeList(HashMap::from([
-                    (
-                        "URI",
-                        ParsedAttributeValue::QuotedString("iframe.high.m3u8")
-                    ),
-                    ("BANDWIDTH", ParsedAttributeValue::DecimalInteger(10000000)),
-                    (
-                        "AVERAGE-BANDWIDTH",
-                        ParsedAttributeValue::DecimalInteger(9000000)
-                    ),
-                    (
-                        "SCORE",
-                        ParsedAttributeValue::SignedDecimalFloatingPoint(2.0)
-                    ),
-                    (
-                        "CODECS",
-                        ParsedAttributeValue::QuotedString("hvc1.2.4.L153.b0,ec-3")
-                    ),
-                    (
-                        "SUPPLEMENTAL-CODECS",
-                        ParsedAttributeValue::QuotedString("dvh1.08.07/db4h")
-                    ),
-                    (
-                        "RESOLUTION",
-                        ParsedAttributeValue::UnquotedString("3840x2160")
-                    ),
-                    ("HDCP-LEVEL", ParsedAttributeValue::UnquotedString("TYPE-1")),
-                    (
-                        "ALLOWED-CPC",
-                        ParsedAttributeValue::QuotedString("com.example.drm1:SMART-TV/PC")
-                    ),
-                    ("VIDEO-RANGE", ParsedAttributeValue::UnquotedString("PQ")),
-                    (
-                        "REQ-VIDEO-LAYOUT",
-                        ParsedAttributeValue::QuotedString("CH-STEREO,CH-MONO")
-                    ),
-                    (
-                        "STABLE-VARIANT-ID",
-                        ParsedAttributeValue::QuotedString("1234")
-                    ),
-                    (
-                        "VIDEO",
-                        ParsedAttributeValue::QuotedString("alternate-view")
-                    ),
-                    ("PATHWAY-ID", ParsedAttributeValue::QuotedString("1234")),
-                ])),
-                original_input: concat!(
-                    "#EXT-X-I-FRAME-STREAM-INF:",
-                    "URI=\"iframe.high.m3u8\",",
-                    "BANDWIDTH=10000000,",
-                    "AVERAGE-BANDWIDTH=9000000,",
-                    "SCORE=2.0,",
-                    "CODECS=\"hvc1.2.4.L153.b0,ec-3\",",
-                    "SUPPLEMENTAL-CODECS=\"dvh1.08.07/db4h\",",
-                    "RESOLUTION=3840x2160,",
-                    "HDCP-LEVEL=TYPE-1",
-                    "ALLOWED-CPC=\"com.example.drm1:SMART-TV/PC\",",
-                    "VIDEO-RANGE=PQ,",
-                    "REQ-VIDEO-LAYOUT=\"CH-STEREO,CH-MONO\",",
-                    "STABLE-VARIANT-ID=\"1234\",",
-                    "VIDEO=\"alternate-view\",",
-                    "PATHWAY-ID=\"1234\"",
-                )
-                .as_bytes()
-            })
+            unknown_tag!(
+                "-X-I-FRAME-STREAM-INF"
+                "URI=\"iframe.high.m3u8\",BANDWIDTH=10000000,AVERAGE-BANDWIDTH=9000000,SCORE=2.0,"
+                "CODECS=\"hvc1.2.4.L153.b0,ec-3\",SUPPLEMENTAL-CODECS=\"dvh1.08.07/db4h\","
+                "RESOLUTION=3840x2160,HDCP-LEVEL=TYPE-1,"
+                "ALLOWED-CPC=\"com.example.drm1:SMART-TV/PC\",VIDEO-RANGE=PQ,"
+                "REQ-VIDEO-LAYOUT=\"CH-STEREO,CH-MONO\",STABLE-VARIANT-ID=\"1234\","
+                "VIDEO=\"alternate-view\",PATHWAY-ID=\"1234\""
+            )
         );
         assert_eq!(
             Ok(Tag::IFrameStreamInf(
@@ -1612,22 +1148,7 @@ mod tests {
                     .with_bandwidth(10000000)
                     .finish()
             )),
-            Tag::try_from(ParsedTag {
-                name: "-X-I-FRAME-STREAM-INF",
-                value: SemiParsedTagValue::AttributeList(HashMap::from([
-                    (
-                        "URI",
-                        ParsedAttributeValue::QuotedString("iframe.high.m3u8")
-                    ),
-                    ("BANDWIDTH", ParsedAttributeValue::DecimalInteger(10000000))
-                ])),
-                original_input: concat!(
-                    "#EXT-X-I-FRAME-STREAM-INF:",
-                    "URI=\"iframe.high.m3u8\",",
-                    "BANDWIDTH=10000000",
-                )
-                .as_bytes()
-            })
+            unknown_tag!("-X-I-FRAME-STREAM-INF" "URI=\"iframe.high.m3u8\",BANDWIDTH=10000000")
         );
     }
 
@@ -1641,16 +1162,7 @@ mod tests {
                     .with_language("en")
                     .finish()
             )),
-            Tag::try_from(ParsedTag {
-                name: "-X-SESSION-DATA",
-                value: SemiParsedTagValue::AttributeList(HashMap::from([
-                    ("DATA-ID", ParsedAttributeValue::QuotedString("1234")),
-                    ("VALUE", ParsedAttributeValue::QuotedString("test")),
-                    ("LANGUAGE", ParsedAttributeValue::QuotedString("en")),
-                ])),
-                original_input:
-                    b"#EXT-X-SESSION-DATA:DATA-ID=\"1234\",VALUE=\"test\",LANGUAGE=\"en\""
-            })
+            unknown_tag!("-X-SESSION-DATA" "DATA-ID=\"1234\",VALUE=\"test\",LANGUAGE=\"en\"")
         );
         assert_eq!(
             Ok(Tag::SessionData(
@@ -1660,46 +1172,27 @@ mod tests {
                     .with_format("RAW")
                     .finish()
             )),
-            Tag::try_from(ParsedTag {
-                name: "-X-SESSION-DATA",
-                value: SemiParsedTagValue::AttributeList(HashMap::from([
-                    ("DATA-ID", ParsedAttributeValue::QuotedString("1234")),
-                    ("URI", ParsedAttributeValue::QuotedString("test.bin")),
-                    ("FORMAT", ParsedAttributeValue::UnquotedString("RAW")),
-                ])),
-                original_input: b"#EXT-X-SESSION-DATA:DATA-ID=\"1234\",URI=\"test.bin\",FORMAT=RAW"
-            })
+            unknown_tag!("-X-SESSION-DATA" "DATA-ID=\"1234\",URI=\"test.bin\",FORMAT=RAW")
         );
     }
 
     #[test]
     fn session_key() {
         assert_eq!(
-            Ok(Tag::SessionKey(SessionKey::builder()
-                .with_method("SAMPLE-AES")
-                .with_uri("skd://some-key-id")
-                .with_iv("0xABCD")
-                .with_keyformat("com.apple.streamingkeydelivery")
-                .with_keyformatversions("1")
-                .finish()
+            Ok(Tag::SessionKey(
+                SessionKey::builder()
+                    .with_method("SAMPLE-AES")
+                    .with_uri("skd://some-key-id")
+                    .with_iv("0xABCD")
+                    .with_keyformat("com.apple.streamingkeydelivery")
+                    .with_keyformatversions("1")
+                    .finish()
             )),
-            Tag::try_from(ParsedTag {
-                name: "-X-SESSION-KEY",
-                value: SemiParsedTagValue::AttributeList(HashMap::from([
-                    ("METHOD", ParsedAttributeValue::UnquotedString("SAMPLE-AES")),
-                    (
-                        "URI",
-                        ParsedAttributeValue::QuotedString("skd://some-key-id")
-                    ),
-                    ("IV", ParsedAttributeValue::UnquotedString("0xABCD")),
-                    (
-                        "KEYFORMAT",
-                        ParsedAttributeValue::QuotedString("com.apple.streamingkeydelivery")
-                    ),
-                    ("KEYFORMATVERSIONS", ParsedAttributeValue::QuotedString("1")),
-                ])),
-                original_input: b"#EXT-X-SESSION-KEY:METHOD=SAMPLE-AES,URI=\"skd://some-key-id\",IV=0xABCD,KEYFORMAT=\"com.apple.streamingkeydelivery\",KEYFORMATVERSIONS=\"1\""
-            })
+            unknown_tag!(
+                "-X-SESSION-KEY"
+                "METHOD=SAMPLE-AES,URI=\"skd://some-key-id\",IV=0xABCD,"
+                "KEYFORMAT=\"com.apple.streamingkeydelivery\",KEYFORMATVERSIONS=\"1\""
+            )
         );
         assert_eq!(
             Ok(Tag::SessionKey(
@@ -1708,17 +1201,7 @@ mod tests {
                     .with_uri("skd://some-key-id")
                     .finish()
             )),
-            Tag::try_from(ParsedTag {
-                name: "-X-SESSION-KEY",
-                value: SemiParsedTagValue::AttributeList(HashMap::from([
-                    ("METHOD", ParsedAttributeValue::UnquotedString("AES-128")),
-                    (
-                        "URI",
-                        ParsedAttributeValue::QuotedString("skd://some-key-id")
-                    ),
-                ])),
-                original_input: b"#EXT-X-SESSION-KEY:METHOD=AES-128,URI=\"skd://some-key-id\""
-            })
+            unknown_tag!("-X-SESSION-KEY" "METHOD=AES-128,URI=\"skd://some-key-id\"")
         );
     }
 
@@ -1731,17 +1214,10 @@ mod tests {
                     .with_pathway_id("1234")
                     .finish()
             )),
-            Tag::try_from(ParsedTag {
-                name: "-X-CONTENT-STEERING",
-                value: SemiParsedTagValue::AttributeList(HashMap::from([
-                    (
-                        "SERVER-URI",
-                        ParsedAttributeValue::QuotedString("content-steering.json")
-                    ),
-                    ("PATHWAY-ID", ParsedAttributeValue::QuotedString("1234")),
-                ])),
-                original_input: b"#EXT-X-CONTENT-STEERING:SERVER-URI=\"content-steering.json\",PATHWAY-ID=\"1234\""
-            })
+            unknown_tag!(
+                "-X-CONTENT-STEERING"
+                "SERVER-URI=\"content-steering.json\",PATHWAY-ID=\"1234\""
+            )
         );
         assert_eq!(
             Ok(Tag::ContentSteering(
@@ -1749,14 +1225,7 @@ mod tests {
                     .with_server_uri("content-steering.json")
                     .finish()
             )),
-            Tag::try_from(ParsedTag {
-                name: "-X-CONTENT-STEERING",
-                value: SemiParsedTagValue::AttributeList(HashMap::from([(
-                    "SERVER-URI",
-                    ParsedAttributeValue::QuotedString("content-steering.json")
-                )])),
-                original_input: b"#EXT-X-CONTENT-STEERING:SERVER-URI=\"content-steering.json\""
-            })
+            unknown_tag!("-X-CONTENT-STEERING" "SERVER-URI=\"content-steering.json\"")
         );
     }
 }

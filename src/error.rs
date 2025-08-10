@@ -384,45 +384,207 @@ pub enum ValidationError {
     MissingRequiredAttribute(&'static str),
     /// Parsing for this tag is not implemented.
     NotImplemented,
-    /// A playlist type value was expected but could not be parsed.
-    InvalidPlaylistType(ParsePlaylistTypeError),
-    /// A decimal integer value was expected but could not be parsed.
-    InvalidDecimalInteger(ParseNumberError),
-    /// A decimal integer range value was expected but could not be parsed.
-    InvalidDecimalIntegerRange(ParseDecimalIntegerRangeError),
-    /// A [`crate::date::DateTime`] value was expected but could not be parsed.
-    InvalidDateTime(DateTimeSyntaxError),
-    /// A float value was expected but could not be parsed.
-    InvalidFloat(ParseFloatError),
+    /// The expected value of the tag could not be obtained.
+    ErrorExtractingTagValue(ParseTagValueError),
+    /// An attribute value within an attribute list could not be parsed.
+    ErrorExtractingAttributeListValue(ParseAttributeValueError),
     /// The enumerated string extracted from
     /// [`crate::tag::value::ParsedAttributeValue::UnquotedString`] was not a known value.
     InvalidEnumeratedString,
 }
-impl From<ParsePlaylistTypeError> for ValidationError {
-    fn from(error: ParsePlaylistTypeError) -> Self {
-        Self::InvalidPlaylistType(error)
+impl From<ParseTagValueError> for ValidationError {
+    fn from(value: ParseTagValueError) -> Self {
+        Self::ErrorExtractingTagValue(value)
     }
 }
 impl From<ParseNumberError> for ValidationError {
-    fn from(error: ParseNumberError) -> Self {
-        Self::InvalidDecimalInteger(error)
+    fn from(value: ParseNumberError) -> Self {
+        Self::ErrorExtractingTagValue(From::from(value))
     }
 }
 impl From<ParseDecimalIntegerRangeError> for ValidationError {
-    fn from(error: ParseDecimalIntegerRangeError) -> Self {
-        Self::InvalidDecimalIntegerRange(error)
+    fn from(value: ParseDecimalIntegerRangeError) -> Self {
+        Self::ErrorExtractingTagValue(From::from(value))
     }
 }
-impl From<DateTimeSyntaxError> for ValidationError {
-    fn from(error: DateTimeSyntaxError) -> Self {
-        Self::InvalidDateTime(error)
+impl From<ParsePlaylistTypeError> for ValidationError {
+    fn from(value: ParsePlaylistTypeError) -> Self {
+        Self::ErrorExtractingTagValue(From::from(value))
     }
 }
 impl From<ParseFloatError> for ValidationError {
-    fn from(error: ParseFloatError) -> Self {
-        Self::InvalidFloat(error)
+    fn from(value: ParseFloatError) -> Self {
+        Self::ErrorExtractingTagValue(From::from(value))
     }
 }
+impl From<ParseDecimalFloatingPointWithTitleError> for ValidationError {
+    fn from(value: ParseDecimalFloatingPointWithTitleError) -> Self {
+        Self::ErrorExtractingTagValue(From::from(value))
+    }
+}
+impl From<DateTimeSyntaxError> for ValidationError {
+    fn from(value: DateTimeSyntaxError) -> Self {
+        Self::ErrorExtractingTagValue(From::from(value))
+    }
+}
+impl From<AttributeListParsingError> for ValidationError {
+    fn from(value: AttributeListParsingError) -> Self {
+        Self::ErrorExtractingTagValue(From::from(value))
+    }
+}
+impl From<ParseAttributeValueError> for ValidationError {
+    fn from(value: ParseAttributeValueError) -> Self {
+        Self::ErrorExtractingAttributeListValue(value)
+    }
+}
+
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum ParseTagValueError {
+    NotEmpty,
+    UnexpectedEmpty,
+    DecimalInteger(ParseNumberError),
+    DecimalIntegerRange(ParseDecimalIntegerRangeError),
+    PlaylistType(ParsePlaylistTypeError),
+    DecimalFloatingPoint(ParseFloatError),
+    DecimalFloatingPointWithTitle(ParseDecimalFloatingPointWithTitleError),
+    DateTime(DateTimeSyntaxError),
+    AttributeList(AttributeListParsingError),
+}
+impl Display for ParseTagValueError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NotEmpty => write!(f, "tag value was unexpectedly not empty"),
+            Self::UnexpectedEmpty => write!(f, "tag value was unexpectedly empty"),
+            Self::DecimalInteger(e) => e.fmt(f),
+            Self::DecimalIntegerRange(e) => e.fmt(f),
+            Self::PlaylistType(e) => e.fmt(f),
+            Self::DecimalFloatingPoint(e) => e.fmt(f),
+            Self::DecimalFloatingPointWithTitle(e) => e.fmt(f),
+            Self::DateTime(e) => e.fmt(f),
+            Self::AttributeList(e) => e.fmt(f),
+        }
+    }
+}
+impl From<ParseNumberError> for ParseTagValueError {
+    fn from(value: ParseNumberError) -> Self {
+        Self::DecimalInteger(value)
+    }
+}
+impl From<ParseDecimalIntegerRangeError> for ParseTagValueError {
+    fn from(value: ParseDecimalIntegerRangeError) -> Self {
+        Self::DecimalIntegerRange(value)
+    }
+}
+impl From<ParsePlaylistTypeError> for ParseTagValueError {
+    fn from(value: ParsePlaylistTypeError) -> Self {
+        Self::PlaylistType(value)
+    }
+}
+impl From<ParseFloatError> for ParseTagValueError {
+    fn from(value: ParseFloatError) -> Self {
+        Self::DecimalFloatingPoint(value)
+    }
+}
+impl From<ParseDecimalFloatingPointWithTitleError> for ParseTagValueError {
+    fn from(value: ParseDecimalFloatingPointWithTitleError) -> Self {
+        Self::DecimalFloatingPointWithTitle(value)
+    }
+}
+impl From<DateTimeSyntaxError> for ParseTagValueError {
+    fn from(value: DateTimeSyntaxError) -> Self {
+        Self::DateTime(value)
+    }
+}
+impl From<AttributeListParsingError> for ParseTagValueError {
+    fn from(value: AttributeListParsingError) -> Self {
+        Self::AttributeList(value)
+    }
+}
+
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum ParseDecimalFloatingPointWithTitleError {
+    InvalidDuration(ParseFloatError),
+    InvalidTitle(Utf8Error),
+}
+impl Display for ParseDecimalFloatingPointWithTitleError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::InvalidDuration(e) => write!(f, "invalid duration due to {e}"),
+            Self::InvalidTitle(e) => write!(f, "invalid title due to {e}"),
+        }
+    }
+}
+impl Error for ParseDecimalFloatingPointWithTitleError {}
+impl From<ParseFloatError> for ParseDecimalFloatingPointWithTitleError {
+    fn from(value: ParseFloatError) -> Self {
+        Self::InvalidDuration(value)
+    }
+}
+impl From<Utf8Error> for ParseDecimalFloatingPointWithTitleError {
+    fn from(value: Utf8Error) -> Self {
+        Self::InvalidTitle(value)
+    }
+}
+impl From<fast_float2::Error> for ParseDecimalFloatingPointWithTitleError {
+    fn from(_: fast_float2::Error) -> Self {
+        Self::InvalidDuration(ParseFloatError)
+    }
+}
+
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum ParseAttributeValueError {
+    UnexpectedQuoted {
+        attr_name: &'static str,
+    },
+    UnexpectedUnquoted {
+        attr_name: &'static str,
+    },
+    DecimalInteger {
+        attr_name: &'static str,
+        error: ParseNumberError,
+    },
+    DecimalFloatingPoint {
+        attr_name: &'static str,
+        error: ParseFloatError,
+    },
+    DecimalResolution {
+        attr_name: &'static str,
+        error: DecimalResolutionParseError,
+    },
+    Utf8 {
+        attr_name: &'static str,
+        error: Utf8Error,
+    },
+}
+impl Display for ParseAttributeValueError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::UnexpectedQuoted { attr_name } => {
+                write!(f, "{attr_name} expected to be unquoted but was quoted")
+            }
+            Self::UnexpectedUnquoted { attr_name } => {
+                write!(f, "{attr_name} expected to be quoted but was unquoted")
+            }
+            Self::DecimalInteger { attr_name, error } => write!(
+                f,
+                "could not extract decimal integer for {attr_name} due to {error}"
+            ),
+            Self::DecimalFloatingPoint { attr_name, error } => write!(
+                f,
+                "could not extract decimal floating point for {attr_name} due to {error}"
+            ),
+            Self::DecimalResolution { attr_name, error } => write!(
+                f,
+                "could not extract decimal resolution for {attr_name} due to {error}"
+            ),
+            Self::Utf8 { attr_name, error } => write!(
+                f,
+                "could not extract utf-8 string for {attr_name} due to {error}"
+            ),
+        }
+    }
+}
+impl Error for ParseAttributeValueError {}
 
 /// The kind of value that was found unexpectedly in [`ValidationError::UnexpectedValueType`].
 #[derive(Debug, PartialEq, Clone, Copy)]

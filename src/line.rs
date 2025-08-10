@@ -9,7 +9,7 @@ use crate::{
     error::{ParseLineBytesError, ParseLineStrError, SyntaxError},
     tag::{
         self, hls,
-        known::{self, CustomTag, CustomTagAccess, NoCustomTag, ParsedTag},
+        known::{self, CustomTag, CustomTagAccess, NoCustomTag},
         unknown,
     },
     utils::{split_on_new_line, str_from},
@@ -435,21 +435,7 @@ where
             let mut tag = tag::unknown::parse_assuming_ext_taken(tag_rest, input)
                 .map_err(|error| map_err_bytes(error, input))?;
             if options.is_known_name(tag.parsed.name) || Custom::is_known_name(tag.parsed.name) {
-                let value_slice = match tag.parsed.value {
-                    None => ParsedByteSlice {
-                        parsed: tag::value::SemiParsedTagValue::Empty,
-                        remaining: None,
-                    },
-                    Some(remaining) => {
-                        tag::value::parse(remaining).map_err(|error| map_err_bytes(error, input))?
-                    }
-                };
-                let parsed_tag = ParsedTag {
-                    name: tag.parsed.name,
-                    value: value_slice.parsed,
-                    original_input: input,
-                };
-                match known::Tag::try_from(parsed_tag) {
+                match known::Tag::try_from(tag.parsed) {
                     Ok(known_tag) => Ok(ParsedByteSlice {
                         parsed: HlsLine::KnownTag(known_tag),
                         remaining: tag.remaining,
@@ -507,8 +493,11 @@ mod tests {
     use super::*;
     use crate::{
         config::ParsingOptionsBuilder,
-        error::{ValidationError, ValidationErrorValueKind},
-        tag::hls::{self, M3u, Start},
+        error::{ParseTagValueError, ValidationError},
+        tag::{
+            hls::{self, M3u, Start},
+            value::{AttributeValue, TagValue},
+        },
     };
     use pretty_assertions::assert_eq;
 
@@ -554,42 +543,39 @@ mod tests {
             times: u64,
             score: Option<f64>,
         }
-        impl<'a> TryFrom<ParsedTag<'a>> for TestTag<'a> {
+        impl<'a> TryFrom<unknown::Tag<'a>> for TestTag<'a> {
             type Error = ValidationError;
 
-            fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
-                match &tag.value {
-                    tag::value::SemiParsedTagValue::AttributeList(list) => {
-                        let Some(tag::value::ParsedAttributeValue::UnquotedString(greeting_type)) =
-                            list.get("TYPE")
-                        else {
-                            return Err(ValidationError::MissingRequiredAttribute("TYPE"));
-                        };
-                        let Some(tag::value::ParsedAttributeValue::QuotedString(message)) =
-                            list.get("MESSAGE")
-                        else {
-                            return Err(ValidationError::MissingRequiredAttribute("MESSAGE"));
-                        };
-                        let Some(tag::value::ParsedAttributeValue::DecimalInteger(times)) =
-                            list.get("TIMES")
-                        else {
-                            return Err(ValidationError::MissingRequiredAttribute("TIMES"));
-                        };
-                        let score = list
-                            .get("SCORE")
-                            .map(tag::value::ParsedAttributeValue::as_option_f64)
-                            .flatten();
-                        Ok(Self {
-                            greeting_type,
-                            message,
-                            times: *times,
-                            score,
-                        })
-                    }
-                    v => Err(ValidationError::UnexpectedValueType(
-                        ValidationErrorValueKind::from(v),
-                    )),
-                }
+            fn try_from(tag: unknown::Tag<'a>) -> Result<Self, Self::Error> {
+                let value = tag.value().ok_or(ParseTagValueError::UnexpectedEmpty)?;
+                let list = value.try_as_attribute_list()?;
+                let Some(greeting_type) = list
+                    .get("TYPE")
+                    .and_then(AttributeValue::unquoted)
+                    .and_then(|v| v.try_as_utf_8().ok())
+                else {
+                    return Err(ValidationError::MissingRequiredAttribute("TYPE"));
+                };
+                let Some(message) = list.get("MESSAGE").and_then(AttributeValue::quoted) else {
+                    return Err(ValidationError::MissingRequiredAttribute("MESSAGE"));
+                };
+                let Some(times) = list
+                    .get("TIMES")
+                    .and_then(AttributeValue::unquoted)
+                    .and_then(|v| v.try_as_decimal_integer().ok())
+                else {
+                    return Err(ValidationError::MissingRequiredAttribute("TIMES"));
+                };
+                let score = list
+                    .get("SCORE")
+                    .and_then(AttributeValue::unquoted)
+                    .and_then(|v| v.try_as_decimal_floating_point().ok());
+                Ok(Self {
+                    greeting_type,
+                    message,
+                    times,
+                    score,
+                })
             }
         }
         impl CustomTag<'static> for TestTag<'static> {
@@ -628,7 +614,7 @@ mod tests {
         assert_eq!(
             Ok(HlsLine::UnknownTag(unknown::Tag {
                 name: "-X-START",
-                value: Some(b"TIME-OFFSET=-18"),
+                value: Some(TagValue(b"TIME-OFFSET=-18")),
                 original_input: b"#EXT-X-START:TIME-OFFSET=-18",
                 validation_error: None,
             })),

@@ -1,9 +1,8 @@
 use crate::{
-    error::{ValidationError, ValidationErrorValueKind},
+    error::{ParseTagValueError, ValidationError},
     tag::{
         hls::{TagName, into_inner_tag},
-        known::ParsedTag,
-        value::SemiParsedTagValue,
+        unknown,
     },
 };
 use std::borrow::Cow;
@@ -24,16 +23,14 @@ impl PartialEq for Bitrate<'_> {
     }
 }
 
-impl<'a> TryFrom<ParsedTag<'a>> for Bitrate<'a> {
+impl<'a> TryFrom<unknown::Tag<'a>> for Bitrate<'a> {
     type Error = ValidationError;
 
-    fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
-        let SemiParsedTagValue::Unparsed(bytes) = tag.value else {
-            return Err(super::ValidationError::UnexpectedValueType(
-                ValidationErrorValueKind::from(&tag.value),
-            ));
-        };
-        let bitrate = bytes.try_as_decimal_integer()?;
+    fn try_from(tag: unknown::Tag<'a>) -> Result<Self, Self::Error> {
+        let bitrate = tag
+            .value()
+            .ok_or(ParseTagValueError::UnexpectedEmpty)?
+            .try_as_decimal_integer()?;
         Ok(Self {
             bitrate,
             output_line: Cow::Borrowed(tag.original_input),

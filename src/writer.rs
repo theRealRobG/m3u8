@@ -419,7 +419,8 @@ mod tests {
         error::ValidationError,
         tag::{
             hls::{self, Inf, M3u, MediaSequence, Targetduration, Version},
-            known::{CustomTag, ParsedTag, WritableTag},
+            known::{CustomTag, WritableTag},
+            unknown,
             value::{MutableParsedAttributeValue, MutableSemiParsedTagValue},
         },
     };
@@ -436,10 +437,10 @@ mod tests {
         List,
     }
 
-    impl TryFrom<ParsedTag<'_>> for TestTag {
+    impl TryFrom<unknown::Tag<'_>> for TestTag {
         type Error = ValidationError;
 
-        fn try_from(_: ParsedTag<'_>) -> Result<Self, Self::Error> {
+        fn try_from(_: unknown::Tag<'_>) -> Result<Self, Self::Error> {
             Err(ValidationError::NotImplemented)
         }
     }

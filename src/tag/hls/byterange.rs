@@ -1,9 +1,8 @@
 use crate::{
-    error::{ValidationError, ValidationErrorValueKind},
+    error::{ParseTagValueError, ValidationError},
     tag::{
         hls::{TagName, into_inner_tag},
-        known::ParsedTag,
-        value::SemiParsedTagValue,
+        unknown,
     },
 };
 use std::borrow::Cow;
@@ -25,24 +24,20 @@ impl PartialEq for Byterange<'_> {
     }
 }
 
-impl<'a> TryFrom<ParsedTag<'a>> for Byterange<'a> {
+impl<'a> TryFrom<unknown::Tag<'a>> for Byterange<'a> {
     type Error = ValidationError;
 
-    fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
-        match tag.value {
-            SemiParsedTagValue::Unparsed(bytes) => {
-                let (length, offset) = bytes.try_as_decimal_integer_range()?;
-                Ok(Self {
-                    length,
-                    offset,
-                    output_line: Cow::Borrowed(tag.original_input),
-                    output_line_is_dirty: false,
-                })
-            }
-            _ => Err(super::ValidationError::UnexpectedValueType(
-                ValidationErrorValueKind::from(&tag.value),
-            )),
-        }
+    fn try_from(tag: unknown::Tag<'a>) -> Result<Self, Self::Error> {
+        let (length, offset) = tag
+            .value()
+            .ok_or(ParseTagValueError::UnexpectedEmpty)?
+            .try_as_decimal_integer_range()?;
+        Ok(Self {
+            length,
+            offset,
+            output_line: Cow::Borrowed(tag.original_input),
+            output_line_is_dirty: false,
+        })
     }
 }
 

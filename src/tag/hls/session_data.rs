@@ -1,9 +1,9 @@
 use crate::{
-    error::{UnrecognizedEnumerationError, ValidationError, ValidationErrorValueKind},
+    error::{ParseTagValueError, UnrecognizedEnumerationError, ValidationError},
     tag::{
         hls::{EnumeratedString, into_inner_tag},
-        known::ParsedTag,
-        value::{ParsedAttributeValue, SemiParsedTagValue},
+        unknown,
+        value::AttributeValue,
     },
     utils::AsStaticCow,
 };
@@ -241,9 +241,9 @@ pub struct SessionData<'a> {
     uri: Option<Cow<'a, str>>,
     format: Option<Cow<'a, str>>,
     language: Option<Cow<'a, str>>,
-    attribute_list: HashMap<&'a str, ParsedAttributeValue<'a>>, // Original attribute list
-    output_line: Cow<'a, [u8]>,                                 // Used with Writer
-    output_line_is_dirty: bool,                                 // If should recalculate output_line
+    attribute_list: HashMap<&'a str, AttributeValue<'a>>, // Original attribute list
+    output_line: Cow<'a, [u8]>,                           // Used with Writer
+    output_line_is_dirty: bool,                           // If should recalculate output_line
 }
 
 impl<'a> PartialEq for SessionData<'a> {
@@ -256,16 +256,15 @@ impl<'a> PartialEq for SessionData<'a> {
     }
 }
 
-impl<'a> TryFrom<ParsedTag<'a>> for SessionData<'a> {
+impl<'a> TryFrom<unknown::Tag<'a>> for SessionData<'a> {
     type Error = ValidationError;
 
-    fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
-        let SemiParsedTagValue::AttributeList(attribute_list) = tag.value else {
-            return Err(ValidationError::UnexpectedValueType(
-                ValidationErrorValueKind::from(&tag.value),
-            ));
-        };
-        let Some(ParsedAttributeValue::QuotedString(data_id)) = attribute_list.get(DATA_ID) else {
+    fn try_from(tag: unknown::Tag<'a>) -> Result<Self, Self::Error> {
+        let attribute_list = tag
+            .value()
+            .ok_or(ParseTagValueError::UnexpectedEmpty)?
+            .try_as_attribute_list()?;
+        let Some(data_id) = attribute_list.get(DATA_ID).and_then(AttributeValue::quoted) else {
             return Err(ValidationError::MissingRequiredAttribute(DATA_ID));
         };
         Ok(Self {
@@ -361,10 +360,9 @@ impl<'a> SessionData<'a> {
         if let Some(value) = &self.value {
             Some(value)
         } else {
-            match self.attribute_list.get(VALUE) {
-                Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
-                _ => None,
-            }
+            self.attribute_list
+                .get(VALUE)
+                .and_then(AttributeValue::quoted)
         }
     }
 
@@ -375,10 +373,9 @@ impl<'a> SessionData<'a> {
         if let Some(uri) = &self.uri {
             Some(uri)
         } else {
-            match self.attribute_list.get(URI) {
-                Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
-                _ => None,
-            }
+            self.attribute_list
+                .get(URI)
+                .and_then(AttributeValue::quoted)
         }
     }
 
@@ -389,10 +386,12 @@ impl<'a> SessionData<'a> {
         if let Some(format) = &self.format {
             EnumeratedString::from(format.as_ref())
         } else {
-            match self.attribute_list.get(FORMAT) {
-                Some(ParsedAttributeValue::UnquotedString(s)) => EnumeratedString::from(*s),
-                _ => EnumeratedString::Known(Format::Json),
-            }
+            self.attribute_list
+                .get(FORMAT)
+                .and_then(AttributeValue::unquoted)
+                .and_then(|v| v.try_as_utf_8().ok())
+                .map(EnumeratedString::from)
+                .unwrap_or(EnumeratedString::Known(Format::Json))
         }
     }
 
@@ -403,10 +402,9 @@ impl<'a> SessionData<'a> {
         if let Some(language) = &self.language {
             Some(language)
         } else {
-            match self.attribute_list.get(LANGUAGE) {
-                Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
-                _ => None,
-            }
+            self.attribute_list
+                .get(LANGUAGE)
+                .and_then(AttributeValue::quoted)
         }
     }
 

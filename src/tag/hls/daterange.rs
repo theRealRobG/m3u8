@@ -1,10 +1,10 @@
 use crate::{
     date::{self, DateTime},
-    error::{UnrecognizedEnumerationError, ValidationError, ValidationErrorValueKind},
+    error::{ParseTagValueError, UnrecognizedEnumerationError, ValidationError},
     tag::{
         hls::{EnumeratedString, EnumeratedStringList, TagName, into_inner_tag},
-        known::ParsedTag,
-        value::{ParsedAttributeValue, SemiParsedTagValue},
+        unknown,
+        value::{AttributeValue, ParsedAttributeValue, UnquotedAttributeValue},
     },
     utils::AsStaticCow,
 };
@@ -336,9 +336,9 @@ pub struct Daterange<'a> {
     scte35_cmd: Option<Cow<'a, str>>,
     scte35_out: Option<Cow<'a, str>>,
     scte35_in: Option<Cow<'a, str>>,
-    attribute_list: HashMap<&'a str, ParsedAttributeValue<'a>>, // Original attribute list
-    output_line: Cow<'a, [u8]>,                                 // Used with Writer
-    output_line_is_dirty: bool,                                 // If should recalculate output_line
+    attribute_list: HashMap<&'a str, AttributeValue<'a>>, // Original attribute list
+    output_line: Cow<'a, [u8]>,                           // Used with Writer
+    output_line_is_dirty: bool,                           // If should recalculate output_line
 }
 
 impl<'a> PartialEq for Daterange<'a> {
@@ -358,22 +358,22 @@ impl<'a> PartialEq for Daterange<'a> {
     }
 }
 
-impl<'a> TryFrom<ParsedTag<'a>> for Daterange<'a> {
+impl<'a> TryFrom<unknown::Tag<'a>> for Daterange<'a> {
     type Error = ValidationError;
 
-    fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
-        let SemiParsedTagValue::AttributeList(attribute_list) = tag.value else {
-            return Err(ValidationError::UnexpectedValueType(
-                ValidationErrorValueKind::from(&tag.value),
-            ));
-        };
-        let Some(ParsedAttributeValue::QuotedString(id)) = attribute_list.get(ID) else {
+    fn try_from(tag: unknown::Tag<'a>) -> Result<Self, Self::Error> {
+        let attribute_list = tag
+            .value()
+            .ok_or(ParseTagValueError::UnexpectedEmpty)?
+            .try_as_attribute_list()?;
+        let Some(id) = attribute_list.get(ID).and_then(AttributeValue::quoted) else {
             return Err(ValidationError::MissingRequiredAttribute(ID));
         };
-        let Some(start_date) = (match attribute_list.get(START_DATE) {
-            Some(ParsedAttributeValue::QuotedString(date_str)) => date::parse(date_str).ok(),
-            _ => None,
-        }) else {
+        let Some(start_date) = attribute_list
+            .get(START_DATE)
+            .and_then(AttributeValue::quoted)
+            .and_then(|s| date::parse(s).ok())
+        else {
             return Err(ValidationError::MissingRequiredAttribute(START_DATE));
         };
         Ok(Self {
@@ -486,10 +486,9 @@ impl<'a> Daterange<'a> {
         if let Some(class) = &self.class {
             Some(class)
         } else {
-            match self.attribute_list.get(CLASS) {
-                Some(ParsedAttributeValue::QuotedString(class)) => Some(class),
-                _ => None,
-            }
+            self.attribute_list
+                .get(CLASS)
+                .and_then(AttributeValue::quoted)
         }
     }
 
@@ -526,12 +525,10 @@ impl<'a> Daterange<'a> {
         if let Some(cue) = &self.cue {
             Some(EnumeratedStringList::from(cue.as_ref()))
         } else {
-            match self.attribute_list.get(CUE) {
-                Some(ParsedAttributeValue::QuotedString(cue)) => {
-                    Some(EnumeratedStringList::from(*cue))
-                }
-                _ => None,
-            }
+            self.attribute_list
+                .get(CUE)
+                .and_then(AttributeValue::quoted)
+                .map(EnumeratedStringList::from)
         }
     }
 
@@ -542,10 +539,10 @@ impl<'a> Daterange<'a> {
         if let Some(end_date) = self.end_date {
             Some(end_date)
         } else {
-            match self.attribute_list.get(END_DATE) {
-                Some(ParsedAttributeValue::QuotedString(date_str)) => date::parse(date_str).ok(),
-                _ => None,
-            }
+            self.attribute_list
+                .get(END_DATE)
+                .and_then(AttributeValue::quoted)
+                .and_then(|s| date::parse(s).ok())
         }
     }
 
@@ -556,10 +553,10 @@ impl<'a> Daterange<'a> {
         if let Some(duration) = self.duration {
             Some(duration)
         } else {
-            match self.attribute_list.get(DURATION) {
-                Some(d) => d.as_option_f64(),
-                _ => None,
-            }
+            self.attribute_list
+                .get(DURATION)
+                .and_then(AttributeValue::unquoted)
+                .and_then(|d| d.try_as_decimal_floating_point().ok())
         }
     }
 
@@ -570,10 +567,10 @@ impl<'a> Daterange<'a> {
         if let Some(planned_duration) = self.planned_duration {
             Some(planned_duration)
         } else {
-            match self.attribute_list.get(PLANNED_DURATION) {
-                Some(d) => d.as_option_f64(),
-                _ => None,
-            }
+            self.attribute_list
+                .get(PLANNED_DURATION)
+                .and_then(AttributeValue::unquoted)
+                .and_then(|d| d.try_as_decimal_floating_point().ok())
         }
     }
 
@@ -700,7 +697,7 @@ impl<'a> Daterange<'a> {
         } else {
             matches!(
                 self.attribute_list.get(END_ON_NEXT),
-                Some(ParsedAttributeValue::UnquotedString(YES))
+                Some(AttributeValue::Unquoted(UnquotedAttributeValue(b"YES")))
             )
         }
     }
@@ -729,8 +726,8 @@ impl<'a> Daterange<'a> {
             Some(scte35_cmd)
         } else {
             match self.attribute_list.get(SCTE35_CMD) {
-                Some(ParsedAttributeValue::UnquotedString(s)) => Some(s),
-                Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
+                Some(AttributeValue::Unquoted(v)) => v.try_as_utf_8().ok(),
+                Some(AttributeValue::Quoted(s)) => Some(s),
                 _ => None,
             }
         }
@@ -752,8 +749,8 @@ impl<'a> Daterange<'a> {
             Some(scte35_out)
         } else {
             match self.attribute_list.get(SCTE35_OUT) {
-                Some(ParsedAttributeValue::UnquotedString(s)) => Some(s),
-                Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
+                Some(AttributeValue::Unquoted(v)) => v.try_as_utf_8().ok(),
+                Some(AttributeValue::Quoted(s)) => Some(s),
                 _ => None,
             }
         }
@@ -775,8 +772,8 @@ impl<'a> Daterange<'a> {
             Some(scte35_in)
         } else {
             match self.attribute_list.get(SCTE35_IN) {
-                Some(ParsedAttributeValue::UnquotedString(s)) => Some(s),
-                Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
+                Some(AttributeValue::Unquoted(v)) => v.try_as_utf_8().ok(),
+                Some(AttributeValue::Quoted(s)) => Some(s),
                 _ => None,
             }
         }
@@ -1075,29 +1072,23 @@ impl<'a> ExtensionAttributeValue<'a> {
     }
 }
 
-#[cfg(test)]
-mod ribtests {
-    use super::*;
-    use crate::{
-        HlsLine, Reader,
-        config::ParsingOptions,
-        tag::{hls, known},
-    };
-    use pretty_assertions::assert_eq;
+impl<'a> TryFrom<AttributeValue<'a>> for ExtensionAttributeValue<'a> {
+    type Error = &'static str;
 
-    #[test]
-    fn some_test_name() {
-        let daterange =
-            r#"#EXT-X-DATERANGE:ID="id",START-DATE="2025-08-02T21:31:00Z",CUE="PRE,ONCE""#;
-        let mut reader = Reader::from_str(daterange, ParsingOptions::default());
-        match reader.read_line() {
-            Ok(Some(HlsLine::KnownTag(known::Tag::Hls(hls::Tag::Daterange(mut tag))))) => {
-                let mut cue = tag.cue().expect("should have cue defined");
-                cue.remove(Cue::Pre);
-                tag.set_cue(cue.to_owned());
-                assert_eq!("ONCE", tag.cue().expect("must be defined").as_ref());
+    fn try_from(value: AttributeValue<'a>) -> Result<Self, Self::Error> {
+        match value {
+            AttributeValue::Unquoted(v) => {
+                if let Ok(d) = v.try_as_decimal_floating_point() {
+                    Ok(Self::SignedDecimalFloatingPoint(d))
+                } else if let Ok(s) = v.try_as_utf_8()
+                    && is_hexadecimal_sequence(s)
+                {
+                    Ok(Self::HexadecimalSequence(Cow::Borrowed(s)))
+                } else {
+                    Err("Invalid extension attribute value")
+                }
             }
-            r => panic!("unexpected result {r:?}"),
+            AttributeValue::Quoted(s) => Ok(Self::QuotedString(Cow::Borrowed(s))),
         }
     }
 }

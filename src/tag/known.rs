@@ -6,7 +6,7 @@
 use crate::{
     error::ValidationError,
     tag::{
-        hls,
+        hls, unknown,
         value::{MutableParsedAttributeValue, MutableSemiParsedTagValue, SemiParsedTagValue},
     },
     utils::split_on_new_line,
@@ -538,7 +538,7 @@ pub trait IntoInnerTag<'a> {
 ///
 /// [hlsjs-rfcs-0001]: https://video-dev.github.io/hlsjs-rfcs/docs/0001-lhls
 pub trait CustomTag<'a>:
-    TryFrom<ParsedTag<'a>, Error = ValidationError> + Debug + PartialEq
+    TryFrom<unknown::Tag<'a>, Error = ValidationError> + Debug + PartialEq
 {
     /// Check if the provided name is known for this custom tag implementation.
     ///
@@ -903,13 +903,13 @@ where
     pub(crate) original_input: &'a [u8],
 }
 
-impl<'a, Custom> TryFrom<ParsedTag<'a>> for CustomTagAccess<'a, Custom>
+impl<'a, Custom> TryFrom<unknown::Tag<'a>> for CustomTagAccess<'a, Custom>
 where
     Custom: CustomTag<'a>,
 {
     type Error = ValidationError;
 
-    fn try_from(value: ParsedTag<'a>) -> Result<Self, Self::Error> {
+    fn try_from(value: unknown::Tag<'a>) -> Result<Self, Self::Error> {
         let original_input = value.original_input;
         let custom_tag = Custom::try_from(value)?;
         Ok(Self {
@@ -1118,10 +1118,10 @@ impl<'a> WritableTag<'a> {
 /// data, because [`Self::is_known_name`] always returns false.
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct NoCustomTag;
-impl TryFrom<ParsedTag<'_>> for NoCustomTag {
+impl TryFrom<unknown::Tag<'_>> for NoCustomTag {
     type Error = ValidationError;
 
-    fn try_from(_: ParsedTag) -> Result<Self, Self::Error> {
+    fn try_from(_: unknown::Tag) -> Result<Self, Self::Error> {
         Err(ValidationError::NotImplemented)
     }
 }
@@ -1136,13 +1136,13 @@ impl WritableCustomTag<'_> for NoCustomTag {
     }
 }
 
-impl<'a, Custom> TryFrom<ParsedTag<'a>> for Tag<'a, Custom>
+impl<'a, Custom> TryFrom<unknown::Tag<'a>> for Tag<'a, Custom>
 where
     Custom: CustomTag<'a>,
 {
     type Error = ValidationError;
 
-    fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
+    fn try_from(tag: unknown::Tag<'a>) -> Result<Self, Self::Error> {
         if Custom::is_known_name(tag.name) {
             let original_input = tag.original_input;
             let custom_tag = Custom::try_from(tag)?;
@@ -1173,8 +1173,8 @@ where
 mod tests {
     use super::*;
     use crate::{
-        Reader, Writer, config::ParsingOptions, error::ValidationErrorValueKind, line::HlsLine,
-        tag::value::ParsedAttributeValue,
+        Reader, Writer, config::ParsingOptions, error::ParseTagValueError, line::HlsLine,
+        tag::value::AttributeValue,
     };
     use pretty_assertions::assert_eq;
     use std::marker::PhantomData;
@@ -1183,19 +1183,21 @@ mod tests {
     struct TestTag {
         mutated: bool,
     }
-    impl TryFrom<ParsedTag<'_>> for TestTag {
+    impl TryFrom<unknown::Tag<'_>> for TestTag {
         type Error = ValidationError;
-        fn try_from(tag: ParsedTag<'_>) -> Result<Self, Self::Error> {
-            let SemiParsedTagValue::AttributeList(list) = tag.value else {
-                return Err(ValidationError::UnexpectedValueType(
-                    ValidationErrorValueKind::from(&tag.value),
-                ));
-            };
-            let Some(ParsedAttributeValue::UnquotedString(mutated_str)) = list.get("MUTATED")
+        fn try_from(tag: unknown::Tag<'_>) -> Result<Self, Self::Error> {
+            let list = tag
+                .value()
+                .ok_or(ParseTagValueError::UnexpectedEmpty)?
+                .try_as_attribute_list()?;
+            let Some(mutated_str) = list
+                .get("MUTATED")
+                .and_then(AttributeValue::unquoted)
+                .and_then(|v| v.try_as_utf_8().ok())
             else {
                 return Err(ValidationError::MissingRequiredAttribute("MUTATED"));
             };
-            match *mutated_str {
+            match mutated_str {
                 "NO" => Ok(Self { mutated: false }),
                 "YES" => Ok(Self { mutated: true }),
                 _ => Err(ValidationError::InvalidEnumeratedString),
@@ -1249,17 +1251,13 @@ mod tests {
     struct WeirdTag {
         number: f64,
     }
-    impl TryFrom<ParsedTag<'_>> for WeirdTag {
+    impl TryFrom<unknown::Tag<'_>> for WeirdTag {
         type Error = ValidationError;
-        fn try_from(tag: ParsedTag<'_>) -> Result<Self, Self::Error> {
-            let SemiParsedTagValue::Unparsed(v) = tag.value else {
-                return Err(ValidationError::UnexpectedValueType(
-                    ValidationErrorValueKind::from(&tag.value),
-                ));
-            };
-            let Ok(number) = v.try_as_float() else {
-                return Err(ValidationError::MissingRequiredAttribute("self"));
-            };
+        fn try_from(tag: unknown::Tag<'_>) -> Result<Self, Self::Error> {
+            let number = tag
+                .value()
+                .ok_or(ParseTagValueError::UnexpectedEmpty)?
+                .try_as_decimal_floating_point()?;
             Ok(Self { number })
         }
     }

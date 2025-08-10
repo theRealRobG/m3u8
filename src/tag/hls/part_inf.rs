@@ -1,10 +1,6 @@
 use crate::{
-    error::{ValidationError, ValidationErrorValueKind},
-    tag::{
-        hls::into_inner_tag,
-        known::ParsedTag,
-        value::{ParsedAttributeValue, SemiParsedTagValue},
-    },
+    error::{ParseTagValueError, ValidationError},
+    tag::{hls::into_inner_tag, unknown, value::AttributeValue},
 };
 use std::borrow::Cow;
 
@@ -24,18 +20,18 @@ impl<'a> PartialEq for PartInf<'a> {
     }
 }
 
-impl<'a> TryFrom<ParsedTag<'a>> for PartInf<'a> {
+impl<'a> TryFrom<unknown::Tag<'a>> for PartInf<'a> {
     type Error = ValidationError;
 
-    fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
-        let SemiParsedTagValue::AttributeList(attribute_list) = tag.value else {
-            return Err(super::ValidationError::UnexpectedValueType(
-                ValidationErrorValueKind::from(&tag.value),
-            ));
-        };
-        let Some(Some(part_target)) = attribute_list
+    fn try_from(tag: unknown::Tag<'a>) -> Result<Self, Self::Error> {
+        let attribute_list = tag
+            .value()
+            .ok_or(ParseTagValueError::UnexpectedEmpty)?
+            .try_as_attribute_list()?;
+        let Some(part_target) = attribute_list
             .get(PART_TARGET)
-            .map(ParsedAttributeValue::as_option_f64)
+            .and_then(AttributeValue::unquoted)
+            .and_then(|v| v.try_as_decimal_floating_point().ok())
         else {
             return Err(super::ValidationError::MissingRequiredAttribute(
                 PART_TARGET,

@@ -1,10 +1,6 @@
 use crate::{
-    error::{ValidationError, ValidationErrorValueKind},
-    tag::{
-        hls::TagInner,
-        known::{IntoInnerTag, ParsedTag},
-        value::{HlsPlaylistType, SemiParsedTagValue},
-    },
+    error::{ParseTagValueError, ValidationError},
+    tag::{hls::TagInner, known::IntoInnerTag, unknown, value::HlsPlaylistType},
 };
 use std::borrow::Cow;
 
@@ -14,16 +10,15 @@ use std::borrow::Cow;
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct PlaylistType(HlsPlaylistType);
 
-impl TryFrom<ParsedTag<'_>> for PlaylistType {
+impl TryFrom<unknown::Tag<'_>> for PlaylistType {
     type Error = ValidationError;
 
-    fn try_from(tag: ParsedTag<'_>) -> Result<Self, Self::Error> {
-        let SemiParsedTagValue::Unparsed(bytes) = tag.value else {
-            return Err(super::ValidationError::UnexpectedValueType(
-                ValidationErrorValueKind::from(&tag.value),
-            ));
-        };
-        Ok(Self(bytes.try_as_hls_playlist_type()?))
+    fn try_from(tag: unknown::Tag<'_>) -> Result<Self, Self::Error> {
+        Ok(Self(
+            tag.value()
+                .ok_or(ParseTagValueError::UnexpectedEmpty)?
+                .try_as_playlist_type()?,
+        ))
     }
 }
 

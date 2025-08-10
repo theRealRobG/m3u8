@@ -1,9 +1,10 @@
 use crate::{
-    error::{ValidationError, ValidationErrorValueKind},
+    error::{ParseTagValueError, ValidationError},
     tag::{
         hls::{TagInner, into_inner_tag},
-        known::{IntoInnerTag, ParsedTag},
-        value::{ParsedAttributeValue, SemiParsedTagValue},
+        known::IntoInnerTag,
+        unknown,
+        value::AttributeValue,
     },
 };
 use std::borrow::Cow;
@@ -204,17 +205,16 @@ pub enum Define<'a> {
     Queryparam(Queryparam<'a>),
 }
 
-impl<'a> TryFrom<ParsedTag<'a>> for Define<'a> {
+impl<'a> TryFrom<unknown::Tag<'a>> for Define<'a> {
     type Error = ValidationError;
 
-    fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
-        let SemiParsedTagValue::AttributeList(attribute_list) = tag.value else {
-            return Err(ValidationError::UnexpectedValueType(
-                ValidationErrorValueKind::from(&tag.value),
-            ));
-        };
-        if let Some(ParsedAttributeValue::QuotedString(name)) = attribute_list.get(NAME) {
-            if let Some(ParsedAttributeValue::QuotedString(value)) = attribute_list.get(VALUE) {
+    fn try_from(tag: unknown::Tag<'a>) -> Result<Self, Self::Error> {
+        let attribute_list = tag
+            .value()
+            .ok_or(ParseTagValueError::UnexpectedEmpty)?
+            .try_as_attribute_list()?;
+        if let Some(AttributeValue::Quoted(name)) = attribute_list.get(NAME) {
+            if let Some(AttributeValue::Quoted(value)) = attribute_list.get(VALUE) {
                 Ok(Self::Name(Name {
                     name: Cow::Borrowed(name),
                     value: Cow::Borrowed(value),
@@ -224,16 +224,13 @@ impl<'a> TryFrom<ParsedTag<'a>> for Define<'a> {
             } else {
                 Err(super::ValidationError::MissingRequiredAttribute(VALUE))
             }
-        } else if let Some(ParsedAttributeValue::QuotedString(import)) = attribute_list.get(IMPORT)
-        {
+        } else if let Some(AttributeValue::Quoted(import)) = attribute_list.get(IMPORT) {
             Ok(Self::Import(Import {
                 import: Cow::Borrowed(import),
                 output_line: Cow::Borrowed(tag.original_input),
                 output_line_is_dirty: false,
             }))
-        } else if let Some(ParsedAttributeValue::QuotedString(queryparam)) =
-            attribute_list.get(QUERYPARAM)
-        {
+        } else if let Some(AttributeValue::Quoted(queryparam)) = attribute_list.get(QUERYPARAM) {
             Ok(Self::Queryparam(Queryparam {
                 queryparam: Cow::Borrowed(queryparam),
                 output_line: Cow::Borrowed(tag.original_input),

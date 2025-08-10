@@ -1,10 +1,6 @@
 use crate::{
-    error::{ValidationError, ValidationErrorValueKind},
-    tag::{
-        hls::into_inner_tag,
-        known::ParsedTag,
-        value::{ParsedAttributeValue, SemiParsedTagValue},
-    },
+    error::{ParseTagValueError, ValidationError},
+    tag::{hls::into_inner_tag, unknown, value::AttributeValue},
 };
 use std::{borrow::Cow, collections::HashMap, fmt::Display, marker::PhantomData};
 
@@ -82,9 +78,9 @@ impl<'a, UriStatus> MapBuilder<'a, UriStatus> {
 pub struct Map<'a> {
     uri: Cow<'a, str>,
     byterange: Option<MapByterange>,
-    attribute_list: HashMap<&'a str, ParsedAttributeValue<'a>>, // Original attribute list
-    output_line: Cow<'a, [u8]>,                                 // Used with Writer
-    output_line_is_dirty: bool,                                 // If should recalculate output_line
+    attribute_list: HashMap<&'a str, AttributeValue<'a>>, // Original attribute list
+    output_line: Cow<'a, [u8]>,                           // Used with Writer
+    output_line_is_dirty: bool,                           // If should recalculate output_line
 }
 
 impl<'a> PartialEq for Map<'a> {
@@ -111,16 +107,15 @@ impl Display for MapByterange {
     }
 }
 
-impl<'a> TryFrom<ParsedTag<'a>> for Map<'a> {
+impl<'a> TryFrom<unknown::Tag<'a>> for Map<'a> {
     type Error = ValidationError;
 
-    fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
-        let SemiParsedTagValue::AttributeList(mut attribute_list) = tag.value else {
-            return Err(super::ValidationError::UnexpectedValueType(
-                ValidationErrorValueKind::from(&tag.value),
-            ));
-        };
-        let Some(ParsedAttributeValue::QuotedString(uri)) = attribute_list.remove(URI) else {
+    fn try_from(tag: unknown::Tag<'a>) -> Result<Self, Self::Error> {
+        let mut attribute_list = tag
+            .value()
+            .ok_or(ParseTagValueError::UnexpectedEmpty)?
+            .try_as_attribute_list()?;
+        let Some(AttributeValue::Quoted(uri)) = attribute_list.remove(URI) else {
             return Err(super::ValidationError::MissingRequiredAttribute(URI));
         };
         Ok(Self {
@@ -181,8 +176,10 @@ impl<'a> Map<'a> {
         if let Some(byterange) = self.byterange {
             Some(byterange)
         } else {
-            match self.attribute_list.get(BYTERANGE) {
-                Some(ParsedAttributeValue::QuotedString(byterange_str)) => {
+            self.attribute_list
+                .get(BYTERANGE)
+                .and_then(AttributeValue::quoted)
+                .and_then(|byterange_str| {
                     let mut parts = byterange_str.splitn(2, '@');
                     let Some(Ok(length)) = parts.next().map(str::parse::<u64>) else {
                         return None;
@@ -191,9 +188,7 @@ impl<'a> Map<'a> {
                         return None;
                     };
                     Some(MapByterange { length, offset })
-                }
-                _ => None,
-            }
+                })
         }
     }
 

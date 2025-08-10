@@ -428,12 +428,12 @@ mod tests {
     use super::*;
     use crate::{
         config::ParsingOptionsBuilder,
-        error::{SyntaxError, UnknownTagSyntaxError, ValidationError, ValidationErrorValueKind},
+        error::{ParseTagValueError, SyntaxError, UnknownTagSyntaxError, ValidationError},
         tag::{
             hls::{Endlist, Inf, M3u, Targetduration, Version},
-            known::{CustomTagAccess, ParsedTag},
+            known::CustomTagAccess,
             unknown,
-            value::{ParsedAttributeValue, SemiParsedTagValue},
+            value::TagValue,
         },
     };
     use pretty_assertions::assert_eq;
@@ -483,7 +483,7 @@ mod tests {
             read_line,
             Some(HlsLine::from(unknown::Tag {
                 name: "-X-EXAMPLE-TAG",
-                value: Some(b"MEANING-OF-LIFE=42,QUESTION=\"UNKNOWN\""),
+                value: Some(TagValue(b"MEANING-OF-LIFE=42,QUESTION=\"UNKNOWN\"")),
                 original_input: &EXAMPLE_MANIFEST.as_bytes()[50..],
                 validation_error: None,
             }))
@@ -504,7 +504,7 @@ mod tests {
             read_line,
             Some(HlsLine::from(unknown::Tag {
                 name: "-X-EXAMPLE-TAG",
-                value: Some(b"MEANING-OF-LIFE=42,QUESTION=\"UNKNOWN\""),
+                value: Some(TagValue(b"MEANING-OF-LIFE=42,QUESTION=\"UNKNOWN\"")),
                 original_input: &EXAMPLE_MANIFEST.as_bytes()[50..],
                 validation_error: None,
             }))
@@ -586,22 +586,21 @@ mod tests {
             Self { answer, question }
         }
     }
-    impl<'a> TryFrom<ParsedTag<'a>> for ExampleTag<'a> {
+    impl<'a> TryFrom<unknown::Tag<'a>> for ExampleTag<'a> {
         type Error = ValidationError;
-        fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
-            let SemiParsedTagValue::AttributeList(mut attribute_list) = tag.value else {
-                return Err(ValidationError::UnexpectedValueType(
-                    ValidationErrorValueKind::AttributeList,
-                ));
-            };
-            let Some(ParsedAttributeValue::DecimalInteger(answer)) =
-                attribute_list.remove("MEANING-OF-LIFE")
+        fn try_from(tag: unknown::Tag<'a>) -> Result<Self, Self::Error> {
+            let mut attribute_list = tag
+                .value()
+                .ok_or(ParseTagValueError::UnexpectedEmpty)?
+                .try_as_attribute_list()?;
+            let Some(answer) = attribute_list
+                .remove("MEANING-OF-LIFE")
+                .and_then(|v| v.unquoted())
+                .and_then(|v| v.try_as_decimal_integer().ok())
             else {
                 return Err(ValidationError::MissingRequiredAttribute("MEANING-OF-LIFE"));
             };
-            let Some(ParsedAttributeValue::QuotedString(question)) =
-                attribute_list.remove("QUESTION")
-            else {
+            let Some(question) = attribute_list.remove("QUESTION").and_then(|v| v.quoted()) else {
                 return Err(ValidationError::MissingRequiredAttribute("QUESTION"));
             };
             Ok(Self { answer, question })

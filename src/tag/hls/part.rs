@@ -1,9 +1,9 @@
 use crate::{
-    error::{ValidationError, ValidationErrorValueKind},
+    error::{ParseTagValueError, ValidationError},
     tag::{
         hls::into_inner_tag,
-        known::ParsedTag,
-        value::{ParsedAttributeValue, SemiParsedTagValue},
+        unknown,
+        value::{AttributeValue, UnquotedAttributeValue},
     },
 };
 use std::{borrow::Cow, collections::HashMap, fmt::Display, marker::PhantomData};
@@ -133,9 +133,9 @@ pub struct Part<'a> {
     independent: Option<bool>,
     byterange: Option<PartByterange>,
     gap: Option<bool>,
-    attribute_list: HashMap<&'a str, ParsedAttributeValue<'a>>, // Original attribute list
-    output_line: Cow<'a, [u8]>,                                 // Used with Writer
-    output_line_is_dirty: bool,                                 // If should recalculate output_line
+    attribute_list: HashMap<&'a str, AttributeValue<'a>>, // Original attribute list
+    output_line: Cow<'a, [u8]>,                           // Used with Writer
+    output_line_is_dirty: bool,                           // If should recalculate output_line
 }
 /// Corresponds to the value of the `#EXT-X-PART:BYTERANGE` attribute.
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -169,22 +169,22 @@ impl<'a> PartialEq for Part<'a> {
     }
 }
 
-impl<'a> TryFrom<ParsedTag<'a>> for Part<'a> {
+impl<'a> TryFrom<unknown::Tag<'a>> for Part<'a> {
     type Error = ValidationError;
 
-    fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
-        let SemiParsedTagValue::AttributeList(attribute_list) = tag.value else {
-            return Err(super::ValidationError::UnexpectedValueType(
-                ValidationErrorValueKind::from(&tag.value),
-            ));
-        };
-        let Some(ParsedAttributeValue::QuotedString(uri)) = attribute_list.get(URI) else {
+    fn try_from(tag: unknown::Tag<'a>) -> Result<Self, Self::Error> {
+        let attribute_list = tag
+            .value()
+            .ok_or(ParseTagValueError::UnexpectedEmpty)?
+            .try_as_attribute_list()?;
+        let Some(uri) = attribute_list.get(URI).and_then(AttributeValue::quoted) else {
             return Err(super::ValidationError::MissingRequiredAttribute(URI));
         };
-        let Some(duration) = (match attribute_list.get(DURATION) {
-            Some(a) => a.as_option_f64(),
-            _ => None,
-        }) else {
+        let Some(duration) = attribute_list
+            .get(DURATION)
+            .and_then(AttributeValue::unquoted)
+            .and_then(|v| v.try_as_decimal_floating_point().ok())
+        else {
             return Err(super::ValidationError::MissingRequiredAttribute(DURATION));
         };
         Ok(Self {
@@ -276,7 +276,7 @@ impl<'a> Part<'a> {
         } else {
             matches!(
                 self.attribute_list.get(INDEPENDENT),
-                Some(ParsedAttributeValue::UnquotedString(YES))
+                Some(AttributeValue::Unquoted(UnquotedAttributeValue(b"YES")))
             )
         }
     }
@@ -288,8 +288,10 @@ impl<'a> Part<'a> {
         if let Some(byterange) = self.byterange {
             Some(byterange)
         } else {
-            match self.attribute_list.get(BYTERANGE) {
-                Some(ParsedAttributeValue::QuotedString(range)) => {
+            self.attribute_list
+                .get(BYTERANGE)
+                .and_then(AttributeValue::quoted)
+                .and_then(|range| {
                     let mut parts = range.splitn(2, '@');
                     let Some(Ok(length)) = parts.next().map(str::parse::<u64>) else {
                         return None;
@@ -300,9 +302,7 @@ impl<'a> Part<'a> {
                         Some(Err(_)) => return None,
                     };
                     Some(PartByterange { length, offset })
-                }
-                _ => None,
-            }
+                })
         }
     }
 
@@ -315,7 +315,7 @@ impl<'a> Part<'a> {
         } else {
             matches!(
                 self.attribute_list.get(GAP),
-                Some(ParsedAttributeValue::UnquotedString(YES))
+                Some(AttributeValue::Unquoted(UnquotedAttributeValue(b"YES")))
             )
         }
     }

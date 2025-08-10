@@ -1,9 +1,9 @@
 use crate::{
-    error::{ValidationError, ValidationErrorValueKind},
+    error::{ParseTagValueError, ValidationError},
     tag::{
         hls::into_inner_tag,
-        known::ParsedTag,
-        value::{ParsedAttributeValue, SemiParsedTagValue},
+        unknown,
+        value::{AttributeValue, UnquotedAttributeValue},
     },
 };
 use std::{borrow::Cow, collections::HashMap, marker::PhantomData};
@@ -81,9 +81,9 @@ impl<TimeOffsetStatus> StartBuilder<TimeOffsetStatus> {
 pub struct Start<'a> {
     time_offset: f64,
     precise: Option<bool>,
-    attribute_list: HashMap<&'a str, ParsedAttributeValue<'a>>, // Original attribute list
-    output_line: Cow<'a, [u8]>,                                 // Used with Writer
-    output_line_is_dirty: bool,                                 // If should recalculate output_line
+    attribute_list: HashMap<&'a str, AttributeValue<'a>>, // Original attribute list
+    output_line: Cow<'a, [u8]>,                           // Used with Writer
+    output_line_is_dirty: bool,                           // If should recalculate output_line
 }
 
 impl<'a> PartialEq for Start<'a> {
@@ -92,18 +92,18 @@ impl<'a> PartialEq for Start<'a> {
     }
 }
 
-impl<'a> TryFrom<ParsedTag<'a>> for Start<'a> {
+impl<'a> TryFrom<unknown::Tag<'a>> for Start<'a> {
     type Error = ValidationError;
 
-    fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
-        let SemiParsedTagValue::AttributeList(attribute_list) = tag.value else {
-            return Err(super::ValidationError::UnexpectedValueType(
-                ValidationErrorValueKind::from(&tag.value),
-            ));
-        };
-        let Some(Some(time_offset)) = attribute_list
+    fn try_from(tag: unknown::Tag<'a>) -> Result<Self, Self::Error> {
+        let attribute_list = tag
+            .value()
+            .ok_or(ParseTagValueError::UnexpectedEmpty)?
+            .try_as_attribute_list()?;
+        let Some(time_offset) = attribute_list
             .get(TIME_OFFSET)
-            .map(ParsedAttributeValue::as_option_f64)
+            .and_then(AttributeValue::unquoted)
+            .and_then(|v| v.try_as_decimal_floating_point().ok())
         else {
             return Err(super::ValidationError::MissingRequiredAttribute(
                 TIME_OFFSET,
@@ -172,7 +172,7 @@ impl<'a> Start<'a> {
         } else {
             matches!(
                 self.attribute_list.get(PRECISE),
-                Some(ParsedAttributeValue::UnquotedString(YES))
+                Some(AttributeValue::Unquoted(UnquotedAttributeValue(b"YES")))
             )
         }
     }

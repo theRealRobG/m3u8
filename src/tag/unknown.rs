@@ -8,6 +8,7 @@
 use crate::{
     error::{UnknownTagSyntaxError, ValidationError},
     line::{ParsedByteSlice, ParsedLineSlice},
+    tag::value::TagValue,
     utils::{split_on_new_line, str_from},
 };
 use memchr::memchr2;
@@ -67,7 +68,7 @@ use std::fmt::Debug;
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct Tag<'a> {
     pub(crate) name: &'a str,
-    pub(crate) value: Option<&'a [u8]>,
+    pub(crate) value: Option<TagValue<'a>>,
     pub(crate) original_input: &'a [u8],
     pub(crate) validation_error: Option<ValidationError>,
 }
@@ -85,7 +86,7 @@ impl<'a> Tag<'a> {
     ///
     /// This will be the entire byte-slice after the first `:` in the line. If there is no `:` then
     /// this will be `None`.
-    pub fn value(&self) -> Option<&'a [u8]> {
+    pub fn value(&self) -> Option<TagValue<'a>> {
         self.value
     }
 
@@ -138,7 +139,7 @@ pub(crate) fn parse_assuming_ext_taken<'a>(
             Ok(ParsedByteSlice {
                 parsed: Tag {
                     name,
-                    value: Some(parsed),
+                    value: Some(TagValue(parsed)),
                     original_input,
                     validation_error: None,
                 },
@@ -205,11 +206,11 @@ mod tests {
     fn tag_value_empty_when_remaining_is_empty() {
         let tag = Tag {
             name: "-X-TEST",
-            value: Some(b""),
+            value: Some(TagValue(b"")),
             original_input: b"#EXT-X-TEST:",
             validation_error: None,
         };
-        assert_eq!(Some(b"" as &[u8]), tag.value());
+        assert_eq!(Some(TagValue(b"")), tag.value());
         assert_eq!(b"#EXT-X-TEST:", tag.as_bytes());
     }
 
@@ -217,11 +218,11 @@ mod tests {
     fn tag_value_some_when_remaining_is_some() {
         let tag = Tag {
             name: "-X-TEST",
-            value: Some(b"42"),
+            value: Some(TagValue(b"42")),
             original_input: b"#EXT-X-TEST:42",
             validation_error: None,
         };
-        assert_eq!(Some(b"42" as &[u8]), tag.value());
+        assert_eq!(Some(TagValue(b"42")), tag.value());
         assert_eq!(b"#EXT-X-TEST:42", tag.as_bytes());
     }
 
@@ -229,11 +230,11 @@ mod tests {
     fn tag_value_remaining_is_some_when_split_by_crlf() {
         let tag = Tag {
             name: "-X-TEST",
-            value: Some(b"42"),
+            value: Some(TagValue(b"42")),
             original_input: b"#EXT-X-TEST:42\r\n#EXT-X-NEW-TEST\r\n",
             validation_error: None,
         };
-        assert_eq!(Some(b"42" as &[u8]), tag.value());
+        assert_eq!(Some(TagValue(b"42")), tag.value());
         assert_eq!(b"#EXT-X-TEST:42", tag.as_bytes());
     }
 
@@ -241,11 +242,11 @@ mod tests {
     fn tag_value_remaining_is_some_when_split_by_lf() {
         let tag = Tag {
             name: "-X-TEST",
-            value: Some(b"42"),
+            value: Some(TagValue(b"42")),
             original_input: b"#EXT-X-TEST:42\n#EXT-X-NEW-TEST\n",
             validation_error: None,
         };
-        assert_eq!(Some(b"42" as &[u8]), tag.value());
+        assert_eq!(Some(TagValue(b"42")), tag.value());
         assert_eq!(b"#EXT-X-TEST:42", tag.as_bytes());
     }
 
@@ -295,7 +296,7 @@ mod tests {
             Ok(ParsedLineSlice {
                 parsed: Tag {
                     name: "-TEST-TAG",
-                    value: Some(b"42"),
+                    value: Some(TagValue(b"42")),
                     original_input: b"#EXT-TEST-TAG:42",
                     validation_error: None,
                 },
@@ -307,7 +308,7 @@ mod tests {
             Ok(ParsedLineSlice {
                 parsed: Tag {
                     name: "-TEST-TAG",
-                    value: Some(b"42"),
+                    value: Some(TagValue(b"42")),
                     original_input: b"#EXT-TEST-TAG:42\r\n",
                     validation_error: None,
                 },
@@ -319,7 +320,7 @@ mod tests {
             Ok(ParsedLineSlice {
                 parsed: Tag {
                     name: "-TEST-TAG",
-                    value: Some(b"42"),
+                    value: Some(TagValue(b"42")),
                     original_input: b"#EXT-TEST-TAG:42\n",
                     validation_error: None,
                 },
@@ -335,7 +336,7 @@ mod tests {
             Ok(ParsedLineSlice {
                 parsed: Tag {
                     name: "-X-TEST",
-                    value: Some(b"42"),
+                    value: Some(TagValue(b"42")),
                     original_input: b"#EXT-X-TEST:42\r\n#EXT-X-NEW-TEST\r\n",
                     validation_error: None,
                 },
@@ -351,7 +352,7 @@ mod tests {
             Ok(ParsedLineSlice {
                 parsed: Tag {
                     name: "-X-TEST",
-                    value: Some(b"42"),
+                    value: Some(TagValue(b"42")),
                     original_input: b"#EXT-X-TEST:42\n#EXT-X-NEW-TEST\n",
                     validation_error: None,
                 },

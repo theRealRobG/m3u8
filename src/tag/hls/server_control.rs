@@ -1,9 +1,9 @@
 use crate::{
-    error::{ValidationError, ValidationErrorValueKind},
+    error::{ParseTagValueError, ValidationError},
     tag::{
         hls::into_inner_tag,
-        known::ParsedTag,
-        value::{ParsedAttributeValue, SemiParsedTagValue},
+        unknown,
+        value::{AttributeValue, UnquotedAttributeValue},
     },
 };
 use std::{borrow::Cow, collections::HashMap, marker::PhantomData};
@@ -139,9 +139,9 @@ pub struct ServerControl<'a> {
     hold_back: Option<f64>,
     part_hold_back: Option<f64>,
     can_block_reload: Option<bool>,
-    attribute_list: HashMap<&'a str, ParsedAttributeValue<'a>>, // Original attribute list
-    output_line: Cow<'a, [u8]>,                                 // Used with Writer
-    output_line_is_dirty: bool,                                 // If should recalculate output_line
+    attribute_list: HashMap<&'a str, AttributeValue<'a>>, // Original attribute list
+    output_line: Cow<'a, [u8]>,                           // Used with Writer
+    output_line_is_dirty: bool,                           // If should recalculate output_line
 }
 
 impl<'a> PartialEq for ServerControl<'a> {
@@ -154,15 +154,14 @@ impl<'a> PartialEq for ServerControl<'a> {
     }
 }
 
-impl<'a> TryFrom<ParsedTag<'a>> for ServerControl<'a> {
+impl<'a> TryFrom<unknown::Tag<'a>> for ServerControl<'a> {
     type Error = ValidationError;
 
-    fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
-        let SemiParsedTagValue::AttributeList(attribute_list) = tag.value else {
-            return Err(super::ValidationError::UnexpectedValueType(
-                ValidationErrorValueKind::from(&tag.value),
-            ));
-        };
+    fn try_from(tag: unknown::Tag<'a>) -> Result<Self, Self::Error> {
+        let attribute_list = tag
+            .value()
+            .ok_or(ParseTagValueError::UnexpectedEmpty)?
+            .try_as_attribute_list()?;
         Ok(Self {
             can_skip_until: None,
             can_skip_dateranges: None,
@@ -226,12 +225,10 @@ impl<'a> ServerControl<'a> {
         if let Some(can_skip_until) = self.can_skip_until {
             Some(can_skip_until)
         } else {
-            match self.attribute_list.get(CAN_SKIP_UNTIL) {
-                Some(ParsedAttributeValue::SignedDecimalFloatingPoint(can_skip_until)) => {
-                    Some(*can_skip_until)
-                }
-                _ => None,
-            }
+            self.attribute_list
+                .get(CAN_SKIP_UNTIL)
+                .and_then(AttributeValue::unquoted)
+                .and_then(|v| v.try_as_decimal_floating_point().ok())
         }
     }
 
@@ -244,7 +241,7 @@ impl<'a> ServerControl<'a> {
         } else {
             matches!(
                 self.attribute_list.get(CAN_SKIP_DATERANGES),
-                Some(ParsedAttributeValue::UnquotedString(YES))
+                Some(AttributeValue::Unquoted(UnquotedAttributeValue(b"YES")))
             )
         }
     }
@@ -256,12 +253,10 @@ impl<'a> ServerControl<'a> {
         if let Some(hold_back) = self.hold_back {
             Some(hold_back)
         } else {
-            match self.attribute_list.get(HOLD_BACK) {
-                Some(ParsedAttributeValue::SignedDecimalFloatingPoint(hold_back)) => {
-                    Some(*hold_back)
-                }
-                _ => None,
-            }
+            self.attribute_list
+                .get(HOLD_BACK)
+                .and_then(AttributeValue::unquoted)
+                .and_then(|v| v.try_as_decimal_floating_point().ok())
         }
     }
     /// Corresponds to the `PART-HOLD-BACK` attribute.
@@ -271,12 +266,10 @@ impl<'a> ServerControl<'a> {
         if let Some(part_hold_back) = self.part_hold_back {
             Some(part_hold_back)
         } else {
-            match self.attribute_list.get(PART_HOLD_BACK) {
-                Some(ParsedAttributeValue::SignedDecimalFloatingPoint(part_hold_back)) => {
-                    Some(*part_hold_back)
-                }
-                _ => None,
-            }
+            self.attribute_list
+                .get(PART_HOLD_BACK)
+                .and_then(AttributeValue::unquoted)
+                .and_then(|v| v.try_as_decimal_floating_point().ok())
         }
     }
 
@@ -289,7 +282,7 @@ impl<'a> ServerControl<'a> {
         } else {
             matches!(
                 self.attribute_list.get(CAN_BLOCK_RELOAD),
-                Some(ParsedAttributeValue::UnquotedString(YES))
+                Some(AttributeValue::Unquoted(UnquotedAttributeValue(b"YES")))
             )
         }
     }

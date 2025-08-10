@@ -1,6 +1,6 @@
 use crate::{
-    error::{ValidationError, ValidationErrorValueKind},
-    tag::{hls::into_inner_tag, known::ParsedTag, value::SemiParsedTagValue},
+    error::{ParseTagValueError, ValidationError},
+    tag::{hls::into_inner_tag, unknown},
 };
 use std::borrow::Cow;
 
@@ -21,29 +21,20 @@ impl<'a> PartialEq for Inf<'a> {
     }
 }
 
-impl<'a> TryFrom<ParsedTag<'a>> for Inf<'a> {
+impl<'a> TryFrom<unknown::Tag<'a>> for Inf<'a> {
     type Error = ValidationError;
 
-    fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
-        match tag.value {
-            SemiParsedTagValue::Unparsed(bytes) => Ok(Self {
-                duration: bytes.try_as_float()?,
-                title: Cow::Borrowed(""),
-                output_line: Cow::Borrowed(tag.original_input),
-                output_line_is_dirty: false,
-            }),
-            SemiParsedTagValue::DecimalFloatingPointWithOptionalTitle(duration, title) => {
-                Ok(Self {
-                    duration,
-                    title: Cow::Borrowed(title),
-                    output_line: Cow::Borrowed(tag.original_input),
-                    output_line_is_dirty: false,
-                })
-            }
-            _ => Err(super::ValidationError::UnexpectedValueType(
-                ValidationErrorValueKind::from(&tag.value),
-            )),
-        }
+    fn try_from(tag: unknown::Tag<'a>) -> Result<Self, Self::Error> {
+        let (duration, title) = tag
+            .value()
+            .ok_or(ParseTagValueError::UnexpectedEmpty)?
+            .try_as_decimal_floating_point_with_title()?;
+        Ok(Self {
+            duration,
+            title: Cow::Borrowed(title),
+            output_line: Cow::Borrowed(tag.original_input),
+            output_line_is_dirty: false,
+        })
     }
 }
 

@@ -1,9 +1,9 @@
 use crate::{
-    error::{UnrecognizedEnumerationError, ValidationError, ValidationErrorValueKind},
+    error::{ParseTagValueError, UnrecognizedEnumerationError, ValidationError},
     tag::{
         hls::{EnumeratedString, EnumeratedStringList, into_inner_tag},
-        known::ParsedTag,
-        value::{ParsedAttributeValue, SemiParsedTagValue},
+        unknown,
+        value::{AttributeValue, UnquotedAttributeValue},
     },
     utils::AsStaticCow,
 };
@@ -824,9 +824,9 @@ pub struct Media<'a> {
     sample_rate: Option<u64>,
     characteristics: Option<Cow<'a, str>>,
     channels: Option<Cow<'a, str>>,
-    attribute_list: HashMap<&'a str, ParsedAttributeValue<'a>>, // Original attribute list
-    output_line: Cow<'a, [u8]>,                                 // Used with Writer
-    output_line_is_dirty: bool,                                 // If should recalculate output_line
+    attribute_list: HashMap<&'a str, AttributeValue<'a>>, // Original attribute list
+    output_line: Cow<'a, [u8]>,                           // Used with Writer
+    output_line_is_dirty: bool,                           // If should recalculate output_line
 }
 
 impl<'a> PartialEq for Media<'a> {
@@ -849,24 +849,28 @@ impl<'a> PartialEq for Media<'a> {
     }
 }
 
-impl<'a> TryFrom<ParsedTag<'a>> for Media<'a> {
+impl<'a> TryFrom<unknown::Tag<'a>> for Media<'a> {
     type Error = ValidationError;
 
-    fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
-        let SemiParsedTagValue::AttributeList(attribute_list) = tag.value else {
-            return Err(super::ValidationError::UnexpectedValueType(
-                ValidationErrorValueKind::from(&tag.value),
-            ));
-        };
-        let Some(ParsedAttributeValue::UnquotedString(media_type)) = attribute_list.get(TYPE)
+    fn try_from(tag: unknown::Tag<'a>) -> Result<Self, Self::Error> {
+        let attribute_list = tag
+            .value()
+            .ok_or(ParseTagValueError::UnexpectedEmpty)?
+            .try_as_attribute_list()?;
+        let Some(media_type) = attribute_list
+            .get(TYPE)
+            .and_then(AttributeValue::unquoted)
+            .and_then(|v| v.try_as_utf_8().ok())
         else {
             return Err(super::ValidationError::MissingRequiredAttribute(TYPE));
         };
-        let Some(ParsedAttributeValue::QuotedString(group_id)) = attribute_list.get(GROUP_ID)
+        let Some(group_id) = attribute_list
+            .get(GROUP_ID)
+            .and_then(AttributeValue::quoted)
         else {
             return Err(super::ValidationError::MissingRequiredAttribute(GROUP_ID));
         };
-        let Some(ParsedAttributeValue::QuotedString(name)) = attribute_list.get(NAME) else {
+        let Some(name) = attribute_list.get(NAME).and_then(AttributeValue::quoted) else {
             return Err(super::ValidationError::MissingRequiredAttribute(NAME));
         };
         Ok(Self {
@@ -1030,10 +1034,9 @@ impl<'a> Media<'a> {
         if let Some(uri) = &self.uri {
             Some(uri)
         } else {
-            match self.attribute_list.get(URI) {
-                Some(ParsedAttributeValue::QuotedString(uri)) => Some(uri),
-                _ => None,
-            }
+            self.attribute_list
+                .get(URI)
+                .and_then(AttributeValue::quoted)
         }
     }
     /// Corresponds to the `LANGUAGE` attribute.
@@ -1043,10 +1046,9 @@ impl<'a> Media<'a> {
         if let Some(language) = &self.language {
             Some(language)
         } else {
-            match self.attribute_list.get(LANGUAGE) {
-                Some(ParsedAttributeValue::QuotedString(language)) => Some(language),
-                _ => None,
-            }
+            self.attribute_list
+                .get(LANGUAGE)
+                .and_then(AttributeValue::quoted)
         }
     }
     /// Corresponds to the `ASSOC-LANGUAGE` attribute.
@@ -1056,10 +1058,9 @@ impl<'a> Media<'a> {
         if let Some(assoc_language) = &self.assoc_language {
             Some(assoc_language)
         } else {
-            match self.attribute_list.get(ASSOC_LANGUAGE) {
-                Some(ParsedAttributeValue::QuotedString(language)) => Some(language),
-                _ => None,
-            }
+            self.attribute_list
+                .get(ASSOC_LANGUAGE)
+                .and_then(AttributeValue::quoted)
         }
     }
     /// Corresponds to the `STABLE-RENDITION-ID` attribute.
@@ -1069,10 +1070,9 @@ impl<'a> Media<'a> {
         if let Some(stable_rendition_id) = &self.stable_rendition_id {
             Some(stable_rendition_id)
         } else {
-            match self.attribute_list.get(STABLE_RENDITION_ID) {
-                Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
-                _ => None,
-            }
+            self.attribute_list
+                .get(STABLE_RENDITION_ID)
+                .and_then(AttributeValue::quoted)
         }
     }
     /// Corresponds to the `DEFAULT` attribute.
@@ -1084,7 +1084,7 @@ impl<'a> Media<'a> {
         } else {
             matches!(
                 self.attribute_list.get(DEFAULT),
-                Some(ParsedAttributeValue::UnquotedString(YES))
+                Some(AttributeValue::Unquoted(UnquotedAttributeValue(b"YES")))
             )
         }
     }
@@ -1097,7 +1097,7 @@ impl<'a> Media<'a> {
         } else {
             matches!(
                 self.attribute_list.get(AUTOSELECT),
-                Some(ParsedAttributeValue::UnquotedString(YES))
+                Some(AttributeValue::Unquoted(UnquotedAttributeValue(b"YES")))
             )
         }
     }
@@ -1110,7 +1110,7 @@ impl<'a> Media<'a> {
         } else {
             matches!(
                 self.attribute_list.get(FORCED),
-                Some(ParsedAttributeValue::UnquotedString(YES))
+                Some(AttributeValue::Unquoted(UnquotedAttributeValue(b"YES")))
             )
         }
     }
@@ -1136,10 +1136,10 @@ impl<'a> Media<'a> {
         if let Some(instream_id) = &self.instream_id {
             Some(EnumeratedString::from(instream_id.as_ref()))
         } else {
-            match self.attribute_list.get(INSTREAM_ID) {
-                Some(ParsedAttributeValue::QuotedString(s)) => Some(EnumeratedString::from(*s)),
-                _ => None,
-            }
+            self.attribute_list
+                .get(INSTREAM_ID)
+                .and_then(AttributeValue::quoted)
+                .map(EnumeratedString::from)
         }
     }
     /// Corresponds to the `BIT-DEPTH` attribute.
@@ -1149,10 +1149,10 @@ impl<'a> Media<'a> {
         if let Some(bit_depth) = self.bit_depth {
             Some(bit_depth)
         } else {
-            match self.attribute_list.get(BIT_DEPTH) {
-                Some(ParsedAttributeValue::DecimalInteger(d)) => Some(*d),
-                _ => None,
-            }
+            self.attribute_list
+                .get(BIT_DEPTH)
+                .and_then(AttributeValue::unquoted)
+                .and_then(|v| v.try_as_decimal_integer().ok())
         }
     }
     /// Corresponds to the `SAMPLE-RATE` attribute.
@@ -1162,10 +1162,10 @@ impl<'a> Media<'a> {
         if let Some(sample_rate) = self.sample_rate {
             Some(sample_rate)
         } else {
-            match self.attribute_list.get(SAMPLE_RATE) {
-                Some(ParsedAttributeValue::DecimalInteger(rate)) => Some(*rate),
-                _ => None,
-            }
+            self.attribute_list
+                .get(SAMPLE_RATE)
+                .and_then(AttributeValue::unquoted)
+                .and_then(|v| v.try_as_decimal_integer().ok())
         }
     }
     /// Corresponds to the `CHARACTERISTICS` attribute.
@@ -1175,10 +1175,10 @@ impl<'a> Media<'a> {
         if let Some(characteristics) = &self.characteristics {
             Some(EnumeratedStringList::from(characteristics.as_ref()))
         } else {
-            match self.attribute_list.get(CHARACTERISTICS) {
-                Some(ParsedAttributeValue::QuotedString(c)) => Some(EnumeratedStringList::from(*c)),
-                _ => None,
-            }
+            self.attribute_list
+                .get(CHARACTERISTICS)
+                .and_then(AttributeValue::quoted)
+                .map(EnumeratedStringList::from)
         }
     }
     /// Corresponds to the `CHANNELS` attribute.
@@ -1223,10 +1223,10 @@ impl<'a> Media<'a> {
         if let Some(channels) = &self.channels {
             Some(Channels::from(channels.as_ref()))
         } else {
-            match self.attribute_list.get(CHANNELS) {
-                Some(ParsedAttributeValue::QuotedString(c)) => Some(Channels::from(*c)),
-                _ => None,
-            }
+            self.attribute_list
+                .get(CHANNELS)
+                .and_then(AttributeValue::quoted)
+                .map(Channels::from)
         }
     }
 

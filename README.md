@@ -51,7 +51,7 @@ The above example demonstrates that a `HlsLine` is an with several potential cas
 The `HlsLine` in `m3u8` is defined as such:
 ```rust
 use m3u8::tag::{
-    known::{self, CustomTag, NoCustomTag, ParsedTag},
+    known::{self, CustomTag, NoCustomTag},
     unknown,
 };
 use std::{borrow::Cow, fmt::Debug};
@@ -104,7 +104,7 @@ structs providing access to all defined values.
 
 The `Custom` case allows for the library user to define their own custom known tag. Custom tag is
 generic but must implement the `CustomTag` trait. This trait requires `Debug`, `PartialEq`, and also
-`TryFrom<ParsedTag<'a>, Error = ValidationError>` which is what is used to construct the tag from
+`TryFrom<unknown::Tag<'a>, Error = ValidationError>` which is what is used to construct the tag from
 parsed data. The trait includes `is_known_name(name: &str) -> bool` which has no `self` requirement,
 as it is used as a test in the parser for whether `try_from` should be attempted for a given tag
 name.
@@ -128,14 +128,15 @@ https://developer.roku.com/docs/developer-program/media-playback/trick-mode/hls-
 use m3u8::{
     Reader,
     config::ParsingOptions,
-    error::{ValidationError, ValidationErrorValueKind},
+    error::{ValidationError, ParseTagValueError, ParseAttributeValueError},
     line::HlsLine,
     tag::{
         hls::Inf,
-        known::{self, CustomTag, ParsedTag, WritableCustomTag, WritableTag},
+        known::{self, CustomTag, WritableCustomTag, WritableTag},
+        unknown,
         value::{
             DecimalResolution, MutableParsedAttributeValue, MutableSemiParsedTagValue,
-            ParsedAttributeValue, SemiParsedTagValue,
+            ParsedAttributeValue, AttributeValue,
         },
     },
 };
@@ -151,11 +152,11 @@ pub enum CustomImageTag {
 }
 // Here we specialize into our own strongly typed structure what m3u8 was able to parse from the
 // input data.
-impl TryFrom<ParsedTag<'_>> for CustomImageTag {
+impl TryFrom<unknown::Tag<'_>> for CustomImageTag {
     type Error = ValidationError;
 
-    fn try_from(tag: ParsedTag) -> Result<Self, Self::Error> {
-        match tag.name {
+    fn try_from(tag: unknown::Tag) -> Result<Self, Self::Error> {
+        match tag.name() {
             "-X-IMAGES-ONLY" => Ok(CustomImageTag::ImagesOnly),
             "-X-TILES" => Ok(CustomImageTag::Tiles(Tiles::try_from(tag)?)),
             _ => Err(ValidationError::UnexpectedTagName),
@@ -207,44 +208,53 @@ pub struct Tiles {
     pub layout: DecimalResolution,
     pub duration: f64,
 }
-impl TryFrom<ParsedTag<'_>> for Tiles {
+impl TryFrom<unknown::Tag<'_>> for Tiles {
     type Error = ValidationError;
 
-    fn try_from(tag: ParsedTag) -> Result<Self, Self::Error> {
-        let SemiParsedTagValue::AttributeList(attribute_list) = tag.value else {
-            return Err(ValidationError::UnexpectedValueType(
-                ValidationErrorValueKind::from(&tag.value),
-            ));
-        };
-        let resolution = try_resolution_from("RESOLUTION", &attribute_list)?;
-        let layout = try_resolution_from("LAYOUT", &attribute_list)?;
-        // Note, `m3u8` is not able to distinguish what *should* be an "integer" vs what *should* be
-        // a float without decimal precision, and so a number without decimals will be parsed as the
-        // DecimalInteger case. To help extract float values a helper method is provided on
-        // ParsedAttributeValue as demonstrated below:
-        let Some(duration) = attribute_list
+    fn try_from(tag: unknown::Tag) -> Result<Self, Self::Error> {
+        let attribute_list = tag
+            .value()
+            .ok_or(ParseTagValueError::UnexpectedEmpty)?
+            .try_as_attribute_list()?;
+        let resolution = attribute_list
+            .get("RESOLUTION")
+            .and_then(AttributeValue::unquoted)
+            .ok_or(ValidationError::MissingRequiredAttribute("RESOLUTION"))?
+            .try_as_decimal_resolution()
+            .map_err(|e| {
+                ValidationError::from(ParseAttributeValueError::DecimalResolution {
+                    attr_name: "RESOLUTION",
+                    error: e,
+                })
+            })?;
+        let layout = attribute_list
+            .get("LAYOUT")
+            .and_then(AttributeValue::unquoted)
+            .ok_or(ValidationError::MissingRequiredAttribute("LAYOUT"))?
+            .try_as_decimal_resolution()
+            .map_err(|e| {
+                ValidationError::from(ParseAttributeValueError::DecimalResolution {
+                    attr_name: "LAYOUT",
+                    error: e,
+                })
+            })?;
+        let duration = attribute_list
             .get("DURATION")
-            .map(ParsedAttributeValue::as_option_f64)
-            .flatten()
-        else {
-            return Err(ValidationError::MissingRequiredAttribute("DURATION"));
-        };
+            .and_then(AttributeValue::unquoted)
+            .ok_or(ValidationError::MissingRequiredAttribute("DURATION"))?
+            .try_as_decimal_floating_point()
+            .map_err(|e| {
+                ValidationError::from(ParseAttributeValueError::DecimalFloatingPoint {
+                    attr_name: "DURATION",
+                    error: e,
+                })
+            })?;
         Ok(Self {
             resolution,
             layout,
             duration,
         })
     }
-}
-fn try_resolution_from<'a, 'b>(
-    attr_name: &'static str,
-    attribute_list: &'a HashMap<&'b str, ParsedAttributeValue<'b>>,
-) -> Result<DecimalResolution, ValidationError> {
-    let Some(ParsedAttributeValue::UnquotedString(s)) = attribute_list.get(attr_name) else {
-        return Err(ValidationError::MissingRequiredAttribute(attr_name));
-    };
-    DecimalResolution::try_from(*s)
-        .map_err(|_| ValidationError::MissingRequiredAttribute(attr_name))
 }
 
 // Below we can demonstrate that the correct parsing occurs.

@@ -1,12 +1,12 @@
 use crate::{
-    error::{ValidationError, ValidationErrorValueKind},
+    error::{ParseTagValueError, ValidationError},
     tag::{
         hls::{
             EnumeratedString, into_inner_tag,
             stream_inf::{HdcpLevel, VideoLayout, VideoRange},
         },
-        known::ParsedTag,
-        value::{DecimalResolution, ParsedAttributeValue, SemiParsedTagValue},
+        unknown,
+        value::{AttributeValue, DecimalResolution},
     },
 };
 use std::{borrow::Cow, collections::HashMap, marker::PhantomData};
@@ -319,9 +319,9 @@ pub struct IFrameStreamInf<'a> {
     stable_variant_id: Option<Cow<'a, str>>,
     video: Option<Cow<'a, str>>,
     pathway_id: Option<Cow<'a, str>>,
-    attribute_list: HashMap<&'a str, ParsedAttributeValue<'a>>, // Original attribute list
-    output_line: Cow<'a, [u8]>,                                 // Used with Writer
-    output_line_is_dirty: bool,                                 // If should recalculate output_line
+    attribute_list: HashMap<&'a str, AttributeValue<'a>>, // Original attribute list
+    output_line: Cow<'a, [u8]>,                           // Used with Writer
+    output_line_is_dirty: bool,                           // If should recalculate output_line
 }
 
 impl<'a> PartialEq for IFrameStreamInf<'a> {
@@ -343,25 +343,27 @@ impl<'a> PartialEq for IFrameStreamInf<'a> {
     }
 }
 
-impl<'a> TryFrom<ParsedTag<'a>> for IFrameStreamInf<'a> {
+impl<'a> TryFrom<unknown::Tag<'a>> for IFrameStreamInf<'a> {
     type Error = ValidationError;
 
-    fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
-        let SemiParsedTagValue::AttributeList(attribute_list) = tag.value else {
-            return Err(super::ValidationError::UnexpectedValueType(
-                ValidationErrorValueKind::from(&tag.value),
-            ));
-        };
-        let Some(ParsedAttributeValue::QuotedString(uri)) = attribute_list.get(URI) else {
+    fn try_from(tag: unknown::Tag<'a>) -> Result<Self, Self::Error> {
+        let attribute_list = tag
+            .value()
+            .ok_or(ParseTagValueError::UnexpectedEmpty)?
+            .try_as_attribute_list()?;
+        let Some(uri) = attribute_list.get(URI).and_then(AttributeValue::quoted) else {
             return Err(super::ValidationError::MissingRequiredAttribute(URI));
         };
-        let Some(ParsedAttributeValue::DecimalInteger(bandwidth)) = attribute_list.get(BANDWIDTH)
+        let Some(bandwidth) = attribute_list
+            .get(BANDWIDTH)
+            .and_then(AttributeValue::unquoted)
+            .and_then(|v| v.try_as_decimal_integer().ok())
         else {
             return Err(super::ValidationError::MissingRequiredAttribute(BANDWIDTH));
         };
         Ok(Self {
             uri: Cow::Borrowed(uri),
-            bandwidth: *bandwidth,
+            bandwidth,
             average_bandwidth: None,
             score: None,
             codecs: None,
@@ -482,10 +484,10 @@ impl<'a> IFrameStreamInf<'a> {
         if let Some(average_bandwidth) = self.average_bandwidth {
             Some(average_bandwidth)
         } else {
-            match self.attribute_list.get(AVERAGE_BANDWIDTH) {
-                Some(ParsedAttributeValue::DecimalInteger(b)) => Some(*b),
-                _ => None,
-            }
+            self.attribute_list
+                .get(AVERAGE_BANDWIDTH)
+                .and_then(AttributeValue::unquoted)
+                .and_then(|v| v.try_as_decimal_integer().ok())
         }
     }
 
@@ -496,10 +498,10 @@ impl<'a> IFrameStreamInf<'a> {
         if let Some(score) = self.score {
             Some(score)
         } else {
-            match self.attribute_list.get(SCORE) {
-                Some(value) => value.as_option_f64(),
-                _ => None,
-            }
+            self.attribute_list
+                .get(SCORE)
+                .and_then(AttributeValue::unquoted)
+                .and_then(|v| v.try_as_decimal_floating_point().ok())
         }
     }
 
@@ -510,10 +512,9 @@ impl<'a> IFrameStreamInf<'a> {
         if let Some(codecs) = &self.codecs {
             Some(codecs)
         } else {
-            match self.attribute_list.get(CODECS) {
-                Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
-                _ => None,
-            }
+            self.attribute_list
+                .get(CODECS)
+                .and_then(AttributeValue::quoted)
         }
     }
 
@@ -524,10 +525,9 @@ impl<'a> IFrameStreamInf<'a> {
         if let Some(supplemental_codecs) = &self.supplemental_codecs {
             Some(supplemental_codecs)
         } else {
-            match self.attribute_list.get(SUPPLEMENTAL_CODECS) {
-                Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
-                _ => None,
-            }
+            self.attribute_list
+                .get(SUPPLEMENTAL_CODECS)
+                .and_then(AttributeValue::quoted)
         }
     }
 
@@ -538,12 +538,10 @@ impl<'a> IFrameStreamInf<'a> {
         if let Some(decimal_resolution) = self.resolution {
             Some(decimal_resolution)
         } else {
-            match self.attribute_list.get(RESOLUTION) {
-                Some(ParsedAttributeValue::UnquotedString(r)) => {
-                    DecimalResolution::try_from(*r).ok()
-                }
-                _ => None,
-            }
+            self.attribute_list
+                .get(RESOLUTION)
+                .and_then(AttributeValue::unquoted)
+                .and_then(|v| v.try_as_decimal_resolution().ok())
         }
     }
 
@@ -568,10 +566,11 @@ impl<'a> IFrameStreamInf<'a> {
         if let Some(hdcp_level) = &self.hdcp_level {
             Some(EnumeratedString::from(hdcp_level.as_ref()))
         } else {
-            match self.attribute_list.get(HDCP_LEVEL) {
-                Some(ParsedAttributeValue::UnquotedString(s)) => Some(EnumeratedString::from(*s)),
-                _ => None,
-            }
+            self.attribute_list
+                .get(HDCP_LEVEL)
+                .and_then(AttributeValue::unquoted)
+                .and_then(|v| v.try_as_utf_8().ok())
+                .map(EnumeratedString::from)
         }
     }
 
@@ -582,10 +581,9 @@ impl<'a> IFrameStreamInf<'a> {
         if let Some(allowed_cpc) = &self.allowed_cpc {
             Some(allowed_cpc)
         } else {
-            match self.attribute_list.get(ALLOWED_CPC) {
-                Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
-                _ => None,
-            }
+            self.attribute_list
+                .get(ALLOWED_CPC)
+                .and_then(AttributeValue::quoted)
         }
     }
 
@@ -610,10 +608,11 @@ impl<'a> IFrameStreamInf<'a> {
         if let Some(video_range) = &self.video_range {
             Some(EnumeratedString::from(video_range.as_ref()))
         } else {
-            match self.attribute_list.get(VIDEO_RANGE) {
-                Some(ParsedAttributeValue::UnquotedString(s)) => Some(EnumeratedString::from(*s)),
-                _ => None,
-            }
+            self.attribute_list
+                .get(VIDEO_RANGE)
+                .and_then(AttributeValue::unquoted)
+                .and_then(|v| v.try_as_utf_8().ok())
+                .map(EnumeratedString::from)
         }
     }
 
@@ -627,10 +626,10 @@ impl<'a> IFrameStreamInf<'a> {
         if let Some(req_video_layout) = &self.req_video_layout {
             Some(VideoLayout::from(req_video_layout.as_ref()))
         } else {
-            match self.attribute_list.get(REQ_VIDEO_LAYOUT) {
-                Some(ParsedAttributeValue::QuotedString(s)) => Some(VideoLayout::from(*s)),
-                _ => None,
-            }
+            self.attribute_list
+                .get(REQ_VIDEO_LAYOUT)
+                .and_then(AttributeValue::quoted)
+                .map(VideoLayout::from)
         }
     }
 
@@ -641,10 +640,9 @@ impl<'a> IFrameStreamInf<'a> {
         if let Some(stable_variant_id) = &self.stable_variant_id {
             Some(stable_variant_id)
         } else {
-            match self.attribute_list.get(STABLE_VARIANT_ID) {
-                Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
-                _ => None,
-            }
+            self.attribute_list
+                .get(STABLE_VARIANT_ID)
+                .and_then(AttributeValue::quoted)
         }
     }
 
@@ -655,10 +653,9 @@ impl<'a> IFrameStreamInf<'a> {
         if let Some(video) = &self.video {
             Some(video)
         } else {
-            match self.attribute_list.get(VIDEO) {
-                Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
-                _ => None,
-            }
+            self.attribute_list
+                .get(VIDEO)
+                .and_then(AttributeValue::quoted)
         }
     }
 
@@ -669,10 +666,9 @@ impl<'a> IFrameStreamInf<'a> {
         if let Some(pathway_id) = &self.pathway_id {
             Some(pathway_id)
         } else {
-            match self.attribute_list.get(PATHWAY_ID) {
-                Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
-                _ => None,
-            }
+            self.attribute_list
+                .get(PATHWAY_ID)
+                .and_then(AttributeValue::quoted)
         }
     }
 

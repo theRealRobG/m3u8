@@ -1,9 +1,9 @@
 use crate::{
-    error::{ValidationError, ValidationErrorValueKind},
+    error::{ParseTagValueError, ValidationError},
     tag::{
         hls::{TagName, into_inner_tag},
-        known::ParsedTag,
-        value::{ParsedAttributeValue, SemiParsedTagValue},
+        unknown,
+        value::AttributeValue,
     },
 };
 use std::{borrow::Cow, collections::HashMap, marker::PhantomData};
@@ -85,9 +85,9 @@ impl<'a, ServerUriStatus> ContentSteeringBuilder<'a, ServerUriStatus> {
 pub struct ContentSteering<'a> {
     server_uri: Cow<'a, str>,
     pathway_id: Option<Cow<'a, str>>,
-    attribute_list: HashMap<&'a str, ParsedAttributeValue<'a>>, // Original attribute list
-    output_line: Cow<'a, [u8]>,                                 // Used with Writer
-    output_line_is_dirty: bool,                                 // If should recalculate output_line
+    attribute_list: HashMap<&'a str, AttributeValue<'a>>, // Original attribute list
+    output_line: Cow<'a, [u8]>,                           // Used with Writer
+    output_line_is_dirty: bool,                           // If should recalculate output_line
 }
 
 impl<'a> PartialEq for ContentSteering<'a> {
@@ -96,16 +96,17 @@ impl<'a> PartialEq for ContentSteering<'a> {
     }
 }
 
-impl<'a> TryFrom<ParsedTag<'a>> for ContentSteering<'a> {
+impl<'a> TryFrom<unknown::Tag<'a>> for ContentSteering<'a> {
     type Error = ValidationError;
 
-    fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
-        let SemiParsedTagValue::AttributeList(attribute_list) = tag.value else {
-            return Err(super::ValidationError::UnexpectedValueType(
-                ValidationErrorValueKind::from(&tag.value),
-            ));
-        };
-        let Some(ParsedAttributeValue::QuotedString(server_uri)) = attribute_list.get(SERVER_URI)
+    fn try_from(tag: unknown::Tag<'a>) -> Result<Self, Self::Error> {
+        let attribute_list = tag
+            .value()
+            .ok_or(ParseTagValueError::UnexpectedEmpty)?
+            .try_as_attribute_list()?;
+        let Some(server_uri) = attribute_list
+            .get(SERVER_URI)
+            .and_then(AttributeValue::quoted)
         else {
             return Err(super::ValidationError::MissingRequiredAttribute(SERVER_URI));
         };
@@ -170,10 +171,9 @@ impl<'a> ContentSteering<'a> {
         if let Some(pathway_id) = &self.pathway_id {
             Some(pathway_id)
         } else {
-            match self.attribute_list.get(PATHWAY_ID) {
-                Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
-                _ => None,
-            }
+            self.attribute_list
+                .get(PATHWAY_ID)
+                .and_then(AttributeValue::quoted)
         }
     }
 

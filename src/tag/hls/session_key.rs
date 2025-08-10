@@ -1,9 +1,9 @@
 use crate::{
-    error::{ValidationError, ValidationErrorValueKind},
+    error::{ParseTagValueError, ValidationError},
     tag::{
         hls::{EnumeratedString, into_inner_tag, key::Method},
-        known::ParsedTag,
-        value::{ParsedAttributeValue, SemiParsedTagValue},
+        unknown,
+        value::AttributeValue,
     },
 };
 use std::{borrow::Cow, collections::HashMap, marker::PhantomData};
@@ -133,9 +133,9 @@ pub struct SessionKey<'a> {
     iv: Option<Cow<'a, str>>,
     keyformat: Option<Cow<'a, str>>,
     keyformatversions: Option<Cow<'a, str>>,
-    attribute_list: HashMap<&'a str, ParsedAttributeValue<'a>>, // Original attribute list
-    output_line: Cow<'a, [u8]>,                                 // Used with Writer
-    output_line_is_dirty: bool,                                 // If should recalculate output_line
+    attribute_list: HashMap<&'a str, AttributeValue<'a>>, // Original attribute list
+    output_line: Cow<'a, [u8]>,                           // Used with Writer
+    output_line_is_dirty: bool,                           // If should recalculate output_line
 }
 
 impl<'a> PartialEq for SessionKey<'a> {
@@ -148,19 +148,22 @@ impl<'a> PartialEq for SessionKey<'a> {
     }
 }
 
-impl<'a> TryFrom<ParsedTag<'a>> for SessionKey<'a> {
+impl<'a> TryFrom<unknown::Tag<'a>> for SessionKey<'a> {
     type Error = ValidationError;
 
-    fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
-        let SemiParsedTagValue::AttributeList(attribute_list) = tag.value else {
-            return Err(super::ValidationError::UnexpectedValueType(
-                ValidationErrorValueKind::from(&tag.value),
-            ));
-        };
-        let Some(ParsedAttributeValue::UnquotedString(method)) = attribute_list.get(METHOD) else {
+    fn try_from(tag: unknown::Tag<'a>) -> Result<Self, Self::Error> {
+        let attribute_list = tag
+            .value()
+            .ok_or(ParseTagValueError::UnexpectedEmpty)?
+            .try_as_attribute_list()?;
+        let Some(method) = attribute_list
+            .get(METHOD)
+            .and_then(AttributeValue::unquoted)
+            .and_then(|v| v.try_as_utf_8().ok())
+        else {
             return Err(super::ValidationError::MissingRequiredAttribute(METHOD));
         };
-        let Some(ParsedAttributeValue::QuotedString(uri)) = attribute_list.get(URI) else {
+        let Some(uri) = attribute_list.get(URI).and_then(AttributeValue::quoted) else {
             return Err(super::ValidationError::MissingRequiredAttribute(URI));
         };
         Ok(Self {
@@ -251,10 +254,10 @@ impl<'a> SessionKey<'a> {
         if let Some(iv) = &self.iv {
             Some(iv)
         } else {
-            match self.attribute_list.get(IV) {
-                Some(ParsedAttributeValue::UnquotedString(iv)) => Some(iv),
-                _ => None,
-            }
+            self.attribute_list
+                .get(IV)
+                .and_then(AttributeValue::unquoted)
+                .and_then(|v| v.try_as_utf_8().ok())
         }
     }
 
@@ -265,10 +268,10 @@ impl<'a> SessionKey<'a> {
         if let Some(keyformat) = &self.keyformat {
             keyformat
         } else {
-            match self.attribute_list.get(KEYFORMAT) {
-                Some(ParsedAttributeValue::QuotedString(keyformat)) => keyformat,
-                _ => "identity",
-            }
+            self.attribute_list
+                .get(KEYFORMAT)
+                .and_then(AttributeValue::quoted)
+                .unwrap_or("identity")
         }
     }
 
@@ -279,12 +282,9 @@ impl<'a> SessionKey<'a> {
         if let Some(keyformatversions) = &self.keyformatversions {
             Some(keyformatversions)
         } else {
-            match self.attribute_list.get(KEYFORMATVERSIONS) {
-                Some(ParsedAttributeValue::QuotedString(keyformatversions)) => {
-                    Some(keyformatversions)
-                }
-                _ => None,
-            }
+            self.attribute_list
+                .get(KEYFORMATVERSIONS)
+                .and_then(AttributeValue::quoted)
         }
     }
 

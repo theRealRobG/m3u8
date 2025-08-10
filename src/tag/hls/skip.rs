@@ -1,10 +1,6 @@
 use crate::{
-    error::{ValidationError, ValidationErrorValueKind},
-    tag::{
-        hls::into_inner_tag,
-        known::ParsedTag,
-        value::{ParsedAttributeValue, SemiParsedTagValue},
-    },
+    error::{ParseTagValueError, ValidationError},
+    tag::{hls::into_inner_tag, unknown, value::AttributeValue},
 };
 use std::{borrow::Cow, collections::HashMap, marker::PhantomData};
 
@@ -85,9 +81,9 @@ impl<'a, SkippedSegmentsStatus> SkipBuilder<'a, SkippedSegmentsStatus> {
 pub struct Skip<'a> {
     skipped_segments: u64,
     recently_removed_dateranges: Option<Cow<'a, str>>,
-    attribute_list: HashMap<&'a str, ParsedAttributeValue<'a>>, // Original attribute list
-    output_line: Cow<'a, [u8]>,                                 // Used with Writer
-    output_line_is_dirty: bool,                                 // If should recalculate output_line
+    attribute_list: HashMap<&'a str, AttributeValue<'a>>, // Original attribute list
+    output_line: Cow<'a, [u8]>,                           // Used with Writer
+    output_line_is_dirty: bool,                           // If should recalculate output_line
 }
 
 impl<'a> PartialEq for Skip<'a> {
@@ -97,24 +93,25 @@ impl<'a> PartialEq for Skip<'a> {
     }
 }
 
-impl<'a> TryFrom<ParsedTag<'a>> for Skip<'a> {
+impl<'a> TryFrom<unknown::Tag<'a>> for Skip<'a> {
     type Error = ValidationError;
 
-    fn try_from(tag: ParsedTag<'a>) -> Result<Self, Self::Error> {
-        let SemiParsedTagValue::AttributeList(attribute_list) = tag.value else {
-            return Err(super::ValidationError::UnexpectedValueType(
-                ValidationErrorValueKind::from(&tag.value),
-            ));
-        };
-        let Some(ParsedAttributeValue::DecimalInteger(skipped_segments)) =
-            attribute_list.get(SKIPPED_SEGMENTS)
+    fn try_from(tag: unknown::Tag<'a>) -> Result<Self, Self::Error> {
+        let attribute_list = tag
+            .value()
+            .ok_or(ParseTagValueError::UnexpectedEmpty)?
+            .try_as_attribute_list()?;
+        let Some(skipped_segments) = attribute_list
+            .get(SKIPPED_SEGMENTS)
+            .and_then(AttributeValue::unquoted)
+            .and_then(|v| v.try_as_decimal_integer().ok())
         else {
             return Err(super::ValidationError::MissingRequiredAttribute(
                 SKIPPED_SEGMENTS,
             ));
         };
         Ok(Self {
-            skipped_segments: *skipped_segments,
+            skipped_segments,
             recently_removed_dateranges: None,
             attribute_list,
             output_line: Cow::Borrowed(tag.original_input),
@@ -174,10 +171,9 @@ impl<'a> Skip<'a> {
         if let Some(recently_removed_dateranges) = &self.recently_removed_dateranges {
             Some(recently_removed_dateranges)
         } else {
-            match self.attribute_list.get(RECENTLY_REMOVED_DATERANGES) {
-                Some(ParsedAttributeValue::QuotedString(s)) => Some(s),
-                _ => None,
-            }
+            self.attribute_list
+                .get(RECENTLY_REMOVED_DATERANGES)
+                .and_then(AttributeValue::quoted)
         }
     }
 
