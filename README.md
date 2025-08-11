@@ -128,16 +128,13 @@ https://developer.roku.com/docs/developer-program/media-playback/trick-mode/hls-
 use m3u8::{
     Reader,
     config::ParsingOptions,
-    error::{ValidationError, ParseTagValueError, ParseAttributeValueError},
+    error::{ParseAttributeValueError, ParseTagValueError, ValidationError},
     line::HlsLine,
     tag::{
         hls::Inf,
         known::{self, CustomTag, WritableCustomTag, WritableTag},
         unknown,
-        value::{
-            DecimalResolution, MutableParsedAttributeValue, MutableSemiParsedTagValue,
-            AttributeValue,
-        },
+        value::{AttributeValue, DecimalResolution, WritableAttributeValue, WritableTagValue},
     },
 };
 use std::{collections::HashMap, marker::PhantomData};
@@ -175,30 +172,32 @@ impl CustomTag<'_> for CustomImageTag {
 // This is used by the m3u8::Writer to handle writing of custom tag implementations.
 impl<'a> WritableCustomTag<'a> for CustomImageTag {
     fn into_writable_tag(self) -> known::WritableTag<'a> {
-        let name = match self {
-            CustomImageTag::ImagesOnly => "-X-IMAGES-ONLY",
-            CustomImageTag::Tiles(_) => "-X-TILES",
-        };
-        let value = match self {
-            Self::ImagesOnly => MutableSemiParsedTagValue::Empty,
-            Self::Tiles(tiles) => MutableSemiParsedTagValue::from([
-                (
-                    "RESOLUTION",
-                    MutableParsedAttributeValue::UnquotedString(
-                        format!("{}", tiles.resolution).into(),
+        match self {
+            CustomImageTag::ImagesOnly => {
+                WritableTag::new("-X-IMAGES-ONLY", WritableTagValue::Empty)
+            }
+            CustomImageTag::Tiles(tiles) => WritableTag::new(
+                "-X-TILES",
+                [
+                    (
+                        "RESOLUTION",
+                        WritableAttributeValue::UnquotedString(
+                            format!("{}", tiles.resolution).into(),
+                        ),
                     ),
-                ),
-                (
-                    "LAYOUT",
-                    MutableParsedAttributeValue::UnquotedString(format!("{}", tiles.layout).into()),
-                ),
-                (
-                    "DURATION",
-                    MutableParsedAttributeValue::SignedDecimalFloatingPoint(tiles.duration),
-                ),
-            ]),
-        };
-        WritableTag::new(name, value)
+                    (
+                        "LAYOUT",
+                        WritableAttributeValue::UnquotedString(
+                            format!("{}", tiles.layout).into(),
+                        ),
+                    ),
+                    (
+                        "DURATION",
+                        WritableAttributeValue::SignedDecimalFloatingPoint(tiles.duration),
+                    ),
+                ],
+            ),
+        }
     }
 }
 

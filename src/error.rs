@@ -383,8 +383,8 @@ pub enum ValidationError {
     ErrorExtractingTagValue(ParseTagValueError),
     /// An attribute value within an attribute list could not be parsed.
     ErrorExtractingAttributeListValue(ParseAttributeValueError),
-    /// The enumerated string extracted from
-    /// [`crate::tag::value::ParsedAttributeValue::UnquotedString`] was not a known value.
+    /// The enumerated string extracted from [`crate::tag::value::UnquotedAttributeValue`] was not a
+    /// known value.
     InvalidEnumeratedString,
 }
 impl Display for ValidationError {

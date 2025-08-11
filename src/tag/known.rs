@@ -7,7 +7,7 @@ use crate::{
     error::ValidationError,
     tag::{
         hls, unknown,
-        value::{MutableParsedAttributeValue, MutableSemiParsedTagValue},
+        value::{WritableAttributeValue, WritableTagValue},
     },
     utils::split_on_new_line,
 };
@@ -107,14 +107,16 @@ pub trait IntoInnerTag<'a> {
 /// The trait comes in two parts:
 /// 1. [`CustomTag::is_known_name`] which allows the library to know whether a tag line (line
 ///    prefixed with `#EXT`) should be considered a possible instance of this implementation.
-/// 2. `TryFrom<ParsedTag>` which is where the parsing into the custom tag instance is attempted.
+/// 2. `TryFrom<unknown::Tag>` which is where the parsing into the custom tag instance is attempted.
 ///
-/// The [`ParsedTag`] struct provides generic information about what the library has been able to
-/// parse from the tag line already (note that the parsing into `ParsedTag` only happens if
-/// `is_known_name` returned true for the line). The concept here is that the user of the library
-/// does not have to re-implement the whole of the line parsing algorithm for their custom tag, but
-/// the data provided is still quite generic, and will have to be translated into the type that they
-/// have defined.
+/// The [`unknown::Tag`] struct provides the name of the tag and the value (if it exists), split out
+/// and wrapped in a struct that provides parsing methods for several data types defined in the HLS
+/// specification. The concept here is that when we are converting into our known tag we have the
+/// right context to choose the best parsing method for the tag value type we expect. If we were to
+/// try and parse values up front, then we would run into issues, like trying to distinguish between
+/// an integer and a float if the mantissa (fractional part) is not present. Taking a lazy approach
+/// to parsing helps us avoid these ambiguities, and also, provdies a performance improvement as we
+/// do not waste attempts at parsing data in an unexpected format.
 ///
 /// ## Single tag example
 ///
@@ -160,7 +162,7 @@ pub trait IntoInnerTag<'a> {
 /// }
 /// ```
 /// The first step we must take is to implement the parsing logic for this tag. To do that we must
-/// implement the `TryFrom<ParsedTag>` requirement. We may do this as follows:
+/// implement the `TryFrom<unknown::Tag>` requirement. We may do this as follows:
 /// ```
 /// # use m3u8::{
 /// #     tag::{
@@ -385,6 +387,8 @@ pub trait IntoInnerTag<'a> {
 /// #EXT-X-TARGETDURATION:10
 /// #EXT-X-VERSION:3
 /// #EXT-X-JOKE:TYPE=DAD,JOKE="Why did the bicycle fall over? Because it was two-tired!"
+/// # Forgive me, I'm writing this library in my spare time during paternity leave, so this seems
+/// # appropriate to me at this stage.
 /// #EXTINF:9.009
 /// segment.0.ts
 /// "#;
@@ -577,7 +581,7 @@ pub trait CustomTag<'a>:
 /// #         known::{CustomTag, Tag, WritableTag, WritableCustomTag},
 /// #         unknown,
 /// #         value::{
-/// #             MutableParsedAttributeValue, MutableSemiParsedTagValue, AttributeValue
+/// #             WritableTagValue, WritableAttributeValue, AttributeValue
 /// #         },
 /// #         hls::{Version, Targetduration, M3u}
 /// #     },
@@ -664,18 +668,25 @@ pub trait CustomTag<'a>:
 /// }
 /// impl<'a> WritableCustomTag<'a> for JokeTag<'a> {
 ///     fn into_writable_tag(self) -> WritableTag<'a> {
+///         // Note, that the `WritableTag` expects to have `name: Cow<'a, str>` and
+///         // `value: WritableTagValue<'a>`; however, the `new` method accepts
+///         // `impl Into<Cow<'a, str>>` for name, and `impl Into<WritableTagValue<'a>>` for value.
+///         // The library provides convenience `From<T>` implementations for many types of `T` to
+///         // `WritableTagValue`, so this may help in some cases with shortening how much needs to
+///         // be written. Below we make use of `From<[(K, V); N]>` where `const N: usize`,
+///         // `K: Into<Cow<'a, str>>`, and `V: Into<WritableAttributeValue>`.
 ///         WritableTag::new(
 ///             "-X-JOKE",
-///             MutableSemiParsedTagValue::AttributeList(HashMap::from([
+///             [
 ///                 (
-///                     Cow::Borrowed("TYPE"),
-///                     MutableParsedAttributeValue::UnquotedString(self.joke_type.as_str().into()),
+///                     "TYPE",
+///                     WritableAttributeValue::UnquotedString(self.joke_type.as_str().into()),
 ///                 ),
 ///                 (
-///                     Cow::Borrowed("JOKE"),
-///                     MutableParsedAttributeValue::QuotedString(self.joke.into()),
+///                     "JOKE",
+///                     WritableAttributeValue::QuotedString(self.joke.into()),
 ///                 ),
-///             ])),
+///             ],
 ///         )
 ///     }
 /// }
@@ -736,8 +747,8 @@ pub trait CustomTag<'a>:
 /// # use m3u8::{HlsLine, Reader, config::ParsingOptions, tag::known::Tag, tag::hls::{M3u, Version,
 /// # Targetduration, MediaSequence, DiscontinuitySequence, Inf, ProgramDateTime}, date_time,
 /// # tag::known::CustomTag, error::{ValidationError, ParseTagValueError}, tag::unknown,
-/// # tag::known::{WritableCustomTag, WritableTag}, tag::value::{TagValue,
-/// # MutableSemiParsedTagValue, MutableUnparsedTagValue}, Writer};
+/// # tag::known::{WritableCustomTag, WritableTag}, tag::value::{TagValue, WritableTagValue},
+/// # Writer};
 /// # use std::{marker::PhantomData, io::Write};
 /// #[derive(Debug, PartialEq, Clone)]
 /// # enum LHlsTag<'a> {
@@ -789,17 +800,15 @@ pub trait CustomTag<'a>:
 /// # }
 /// impl<'a> WritableCustomTag<'a> for LHlsTag<'a> {
 ///     fn into_writable_tag(self) -> WritableTag<'a> {
+///         // Note, as mentioned above, the `WritableTag::new` method accepts types that implement
+///         // `Into` the stored properties on the struct. Below we make use of `From<&str>` for
+///         // `WritableTagValue` in the `Prefetch` case to cut down on boilerplate.
 ///         match self {
 ///             Self::Discontinuity => WritableTag::new(
 ///                 "-X-PREFETCH-DISCONTINUITY",
-///                 MutableSemiParsedTagValue::Empty
+///                 WritableTagValue::Empty
 ///             ),
-///             Self::Prefetch(uri) => WritableTag::new(
-///                 "-X-PREFETCH",
-///                 MutableSemiParsedTagValue::Unparsed(
-///                     MutableUnparsedTagValue(uri.as_bytes().into())
-///                 )
-///             )
+///             Self::Prefetch(uri) => WritableTag::new("-X-PREFETCH", uri),
 ///         }
 ///     }
 /// }
@@ -979,40 +988,38 @@ where
 pub(crate) fn calculate_output<'a, Custom: WritableCustomTag<'a>>(custom_tag: Custom) -> String {
     let tag = custom_tag.into_writable_tag();
     match tag.value {
-        MutableSemiParsedTagValue::Empty => format!("#EXT{}", tag.name),
-        MutableSemiParsedTagValue::DecimalFloatingPointWithOptionalTitle(n, t) => {
+        WritableTagValue::Empty => format!("#EXT{}", tag.name),
+        WritableTagValue::DecimalFloatingPointWithOptionalTitle(n, t) => {
             if t.is_empty() {
-                format!("#EXT{}:{}", tag.name, n)
+                format!("#EXT{}:{n}", tag.name)
             } else {
-                format!("#EXT{}:{},{}", tag.name, n, t)
+                format!("#EXT{}:{n},{t}", tag.name)
             }
         }
-        MutableSemiParsedTagValue::AttributeList(list) => {
+        WritableTagValue::DecimalInteger(n) => format!("#EXT{}:{n}", tag.name),
+        WritableTagValue::DecimalIntegerRange(n, Some(o)) => format!("#EXT{}:{n}@{o}", tag.name),
+        WritableTagValue::DecimalIntegerRange(n, None) => format!("#EXT{}:{n}", tag.name),
+        WritableTagValue::DateTime(d) => format!("#EXT{}:{d}", tag.name),
+        WritableTagValue::AttributeList(list) => {
             let attrs = list
                 .iter()
                 .map(|(k, v)| match v {
-                    MutableParsedAttributeValue::DecimalInteger(n) => format!("{k}={n}"),
-                    MutableParsedAttributeValue::SignedDecimalFloatingPoint(n) => {
+                    WritableAttributeValue::DecimalInteger(n) => format!("{k}={n}"),
+                    WritableAttributeValue::SignedDecimalFloatingPoint(n) => {
                         format!("{k}={n:?}")
                     }
-                    MutableParsedAttributeValue::QuotedString(s) => format!("{k}=\"{s}\""),
-                    MutableParsedAttributeValue::UnquotedString(s) => format!("{k}={s}"),
+                    WritableAttributeValue::QuotedString(s) => format!("{k}=\"{s}\""),
+                    WritableAttributeValue::UnquotedString(s) => format!("{k}={s}"),
                 })
                 .collect::<Vec<String>>();
             let value = attrs.join(",");
             format!("#EXT{}:{}", tag.name, value)
         }
-        MutableSemiParsedTagValue::Unparsed(bytes) => {
-            format!(
-                "#EXT{}:{}",
-                tag.name,
-                String::from_utf8_lossy(bytes.0.as_ref())
-            )
-        }
+        WritableTagValue::Utf8(s) => format!("#EXT{}:{s}", tag.name),
     }
 }
 
-/// A writable version of [`ParsedTag`].
+/// A tag representation that makes writing from custom tags easier.
 ///
 /// This is provided so that custom tag implementations may provide an output that does not depend
 /// on having parsed data to derive the write output from. This helps with mutability as well as
@@ -1026,10 +1033,10 @@ pub struct WritableTag<'a> {
     pub name: Cow<'a, str>,
     /// The value of the tag.
     ///
-    /// The [`MutableSemiParsedTagValue`] mirrors the [`SemiParsedTagValue`] but provides data types
-    /// that allow for owned data (rather than just borrowed references from parsed input data). See
-    /// the enum documentation for more information on what values can be defined.
-    pub value: MutableSemiParsedTagValue<'a>,
+    /// The [`WritableTagValue`] provides data types that allow for owned data (rather than just
+    /// borrowed references from parsed input data). See the enum documentation for more information
+    /// on what values can be defined.
+    pub value: WritableTagValue<'a>,
 }
 impl<'a> WritableTag<'a> {
     /// Create a new tag.
@@ -1038,32 +1045,77 @@ impl<'a> WritableTag<'a> {
     /// ### Empty
     /// ```
     /// # use m3u8::tag::known::WritableTag;
-    /// # use m3u8::tag::value::MutableSemiParsedTagValue;
-    /// WritableTag::new("-X-EXAMPLE", MutableSemiParsedTagValue::Empty);
+    /// # use m3u8::tag::value::WritableTagValue;
+    /// WritableTag::new("-X-EXAMPLE", WritableTagValue::Empty);
     /// ```
     /// produces a tag that would write as `#EXT-X-EXAMPLE`.
+    /// ### Integer
+    /// ```
+    /// # use m3u8::tag::known::WritableTag;
+    /// # use m3u8::tag::value::WritableTagValue;
+    /// # use std::borrow::Cow;
+    /// let explicit = WritableTag::new(
+    ///     Cow::Borrowed("-X-EXAMPLE"),
+    ///     WritableTagValue::DecimalInteger(42),
+    /// );
+    /// // Or, with convenience `From<u64>`
+    /// let terse = WritableTag::new("-X-EXAMPLE", 42);
+    /// assert_eq!(explicit, terse);
+    /// ```
+    /// produces a tag that would write as `#EXT-X-EXAMPLE:42`.
+    /// ### Integer range
+    /// ```
+    /// # use m3u8::tag::known::WritableTag;
+    /// # use m3u8::tag::value::WritableTagValue;
+    /// # use std::borrow::Cow;
+    /// let explicit = WritableTag::new(
+    ///     Cow::Borrowed("-X-EXAMPLE"),
+    ///     WritableTagValue::DecimalIntegerRange(1024, Some(512)),
+    /// );
+    /// // Or, with convenience `From<(u64, Option<u64>)>`
+    /// let terse = WritableTag::new("-X-EXAMPLE", (1024, Some(512)));
+    /// assert_eq!(explicit, terse);
+    /// ```
+    /// produces a tag that would write as `#EXT-X-EXAMPLE:1024@512`.
     /// ### Float with title
     /// ```
     /// # use m3u8::tag::known::WritableTag;
-    /// # use m3u8::tag::value::MutableSemiParsedTagValue;
+    /// # use m3u8::tag::value::WritableTagValue;
+    /// # use std::borrow::Cow;
     /// let explicit = WritableTag::new(
-    ///     "-X-EXAMPLE",
-    ///     MutableSemiParsedTagValue::DecimalFloatingPointWithOptionalTitle(3.14, "pi".into()),
+    ///     Cow::Borrowed("-X-EXAMPLE"),
+    ///     WritableTagValue::DecimalFloatingPointWithOptionalTitle(3.14, "pi".into()),
     /// );
     /// // Or, with convenience `From<(f64, impl Into<Cow<str>>)>`
     /// let terse = WritableTag::new("-X-EXAMPLE", (3.14, "pi"));
     /// assert_eq!(explicit, terse);
     /// ```
     /// produces a tag that would write as `#EXT-X-EXAMPLE:3.14,pi`.
+    /// ### Date time
+    /// ```
+    /// # use m3u8::date_time;
+    /// # use m3u8::tag::known::WritableTag;
+    /// # use m3u8::tag::value::WritableTagValue;
+    /// # use std::borrow::Cow;
+    /// let explicit = WritableTag::new(
+    ///     Cow::Borrowed("-X-EXAMPLE"),
+    ///     WritableTagValue::DateTime(date_time!(2025-08-10 T 21:51:42.123 -05:00)),
+    /// );
+    /// // Or, with convenience `From<DateTime>`
+    /// let terse = WritableTag::new("-X-EXAMPLE", date_time!(2025-08-10 T 21:51:42.123 -05:00));
+    /// assert_eq!(explicit, terse);
+    /// ```
+    /// produces a tag that would write as `#EXT-X-EXAMPLE:2025-08-10T21:51:42.123-05:00`.
     /// ### Attribute list
     /// ```
     /// # use m3u8::tag::known::WritableTag;
-    /// # use m3u8::tag::value::{MutableSemiParsedTagValue, MutableParsedAttributeValue};
+    /// # use m3u8::tag::value::{WritableTagValue, WritableAttributeValue};
     /// # use std::collections::HashMap;
+    /// # use std::borrow::Cow;
     /// let explicit = WritableTag::new(
-    ///     "-X-EXAMPLE",
-    ///     MutableSemiParsedTagValue::AttributeList(HashMap::from([
-    ///         ("VALUE".into(), MutableParsedAttributeValue::DecimalInteger(42)),
+    ///     Cow::Borrowed("-X-EXAMPLE"),
+    ///     WritableTagValue::AttributeList(HashMap::from([
+    ///         ("VALUE".into(), WritableAttributeValue::DecimalInteger(42)),
     ///     ])),
     /// );
     /// // Or, with convenience `From<[(K, V); N]>`
@@ -1071,20 +1123,21 @@ impl<'a> WritableTag<'a> {
     /// assert_eq!(explicit, terse);
     /// ```
     /// produces a tag that would write as `#EXT-X-EXAMPLE:VALUE=42`.
-    /// ### Unparsed
+    /// ### UTF-8
     /// ```
     /// # use m3u8::tag::known::WritableTag;
-    /// # use m3u8::tag::value::{MutableSemiParsedTagValue, MutableUnparsedTagValue};
-    /// WritableTag::new(
-    ///     "-X-EXAMPLE",
-    ///     MutableSemiParsedTagValue::Unparsed(MutableUnparsedTagValue(b"42".into())),
+    /// # use m3u8::tag::value::{WritableTagValue, WritableAttributeValue};
+    /// # use std::borrow::Cow;
+    /// let explicit = WritableTag::new(
+    ///     Cow::Borrowed("-X-EXAMPLE"),
+    ///     WritableTagValue::Utf8(Cow::Borrowed("HELLO")),
     /// );
+    /// // Or, with convenience `From<&str>`
+    /// let terse = WritableTag::new("-X-EXAMPLE", "HELLO");
+    /// assert_eq!(explicit, terse);
     /// ```
-    /// produces a tag that would write as `#EXT-X-EXAMPLE:42`.
-    pub fn new(
-        name: impl Into<Cow<'a, str>>,
-        value: impl Into<MutableSemiParsedTagValue<'a>>,
-    ) -> Self {
+    /// produces a tag that would write as `#EXT-X-EXAMPLE:HELLO`.
+    pub fn new(name: impl Into<Cow<'a, str>>, value: impl Into<WritableTagValue<'a>>) -> Self {
         Self {
             name: name.into(),
             value: value.into(),
@@ -1115,7 +1168,7 @@ impl CustomTag<'_> for NoCustomTag {
 }
 impl WritableCustomTag<'_> for NoCustomTag {
     fn into_writable_tag(self) -> WritableTag<'static> {
-        WritableTag::new("-NO-TAG", MutableSemiParsedTagValue::Empty)
+        WritableTag::new("-NO-TAG", WritableTagValue::Empty)
     }
 }
 
@@ -1199,7 +1252,7 @@ mod tests {
                 "-X-TEST-TAG",
                 [(
                     "MUTATED",
-                    MutableParsedAttributeValue::UnquotedString(value.into()),
+                    WritableAttributeValue::UnquotedString(value.into()),
                 )],
             )
         }

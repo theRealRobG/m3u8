@@ -260,10 +260,7 @@ where
     /// }
     /// impl WritableCustomTag<'_> for ExampleCustomTag {
     ///     fn into_writable_tag(self) -> WritableTag<'static> {
-    ///         WritableTag::new(
-    ///             "-X-MEANING-OF-LIFE",
-    ///             Cow::Owned(format!("{}", self.answer).into_bytes()),
-    ///         )
+    ///         WritableTag::new("-X-MEANING-OF-LIFE", self.answer)
     ///     }
     /// }
     ///
@@ -414,12 +411,13 @@ mod tests {
     use super::*;
     use crate::{
         config::ParsingOptionsBuilder,
+        date_time,
         error::ValidationError,
         tag::{
             hls::{self, Inf, M3u, MediaSequence, Targetduration, Version},
             known::{CustomTag, WritableTag},
             unknown,
-            value::{MutableParsedAttributeValue, MutableSemiParsedTagValue},
+            value::{WritableAttributeValue, WritableTagValue},
         },
     };
     use pretty_assertions::assert_eq;
@@ -452,29 +450,27 @@ mod tests {
     impl WritableCustomTag<'_> for TestTag {
         fn into_writable_tag(self) -> WritableTag<'static> {
             let value = match self {
-                TestTag::Empty => MutableSemiParsedTagValue::Empty,
-                TestTag::Type => MutableSemiParsedTagValue::from(Cow::Borrowed(b"VOD" as &[u8])),
-                TestTag::Int => MutableSemiParsedTagValue::from(Cow::Borrowed(b"42" as &[u8])),
-                TestTag::Range => {
-                    MutableSemiParsedTagValue::from(Cow::Borrowed(b"1024@512" as &[u8]))
+                TestTag::Empty => WritableTagValue::Empty,
+                TestTag::Type => WritableTagValue::from("VOD"),
+                TestTag::Int => WritableTagValue::from(42),
+                TestTag::Range => WritableTagValue::from((1024, Some(512))),
+                TestTag::Float { title } => WritableTagValue::from((42.42, title)),
+                TestTag::Date => {
+                    WritableTagValue::from(date_time!(2025-06-17 T 01:37:15.129 -05:00))
                 }
-                TestTag::Float { title } => MutableSemiParsedTagValue::from((42.42, title)),
-                TestTag::Date => MutableSemiParsedTagValue::from(Cow::Borrowed(
-                    b"2025-06-17T01:37:15.129-05:00" as &[u8],
-                )),
-                TestTag::List => MutableSemiParsedTagValue::from([
-                    ("TEST-INT", MutableParsedAttributeValue::DecimalInteger(42)),
+                TestTag::List => WritableTagValue::from([
+                    ("TEST-INT", WritableAttributeValue::DecimalInteger(42)),
                     (
                         "TEST-FLOAT",
-                        MutableParsedAttributeValue::SignedDecimalFloatingPoint(-42.42),
+                        WritableAttributeValue::SignedDecimalFloatingPoint(-42.42),
                     ),
                     (
                         "TEST-QUOTED-STRING",
-                        MutableParsedAttributeValue::QuotedString("test".into()),
+                        WritableAttributeValue::QuotedString("test".into()),
                     ),
                     (
                         "TEST-ENUMERATED-STRING",
-                        MutableParsedAttributeValue::UnquotedString("test".into()),
+                        WritableAttributeValue::UnquotedString("test".into()),
                     ),
                 ]),
             };

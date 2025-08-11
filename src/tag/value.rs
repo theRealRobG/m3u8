@@ -518,34 +518,69 @@ pub enum HlsPlaylistType {
     Vod,
 }
 
-/// Provides a mutable version of [`SemiParsedTagValue`].
+/// Provides a writable version of [`TagValue`].
 ///
 /// This is provided so that custom tag implementations may provide an output that does not depend
 /// on having parsed data to derive the write output from. This helps with mutability as well as
 /// allowing for custom tags to be constructed from scratch (without being parsed from source data).
 ///
-/// This mirrors the [`SemiParsedTagValue`] but provides data types that allow for owned data
-/// (rather than just borrowed references from parsed input data).
+/// While [`TagValue`] is just a wrapper around a borrowed slice of bytes, `WritableTagValue` is an
+/// enumeration of different value types, as this helps keep converting from a custom tag more easy
+/// (otherwise all users of the library would need to manage re-constructing the playlist line
+/// directly).
 #[derive(Debug, PartialEq)]
-pub enum MutableSemiParsedTagValue<'a> {
+pub enum WritableTagValue<'a> {
     /// The value is empty.
     ///
-    /// See [`SemiParsedTagValue::Empty`] for more information.
+    /// For example, the `#EXTM3U` tag has an `Empty` value.
     Empty,
+    /// The value is a decimal integer.
+    ///
+    /// For example, the `#EXT-X-VERSION:<n>` tag has a `DecimalInteger` value (e.g.
+    /// `#EXT-X-VERSION:9`).
+    DecimalInteger(u64),
+    /// The value is a decimal integer range.
+    ///
+    /// For example, the `#EXT-X-BYTERANGE:<n>[@<o>]` tag has a `DecimalIntegerRange` value (e.g.
+    /// `#EXT-X-BYTERANGE:4545045@720`).
+    DecimalIntegerRange(u64, Option<u64>),
     /// The value is a float with a string title.
     ///
-    /// See [`SemiParsedTagValue::DecimalFloatingPointWithOptionalTitle`] for more information.
+    /// For example, the `#EXTINF:<duration>,[<title>]` tag has a
+    /// `DecimalFloatingPointWithOptionalTitle` value (e.g. `#EXTINF:3.003,free-form text`).
+    ///
+    /// If the title provided is empty (`""`) then the comma will not be written.
     DecimalFloatingPointWithOptionalTitle(f64, Cow<'a, str>),
+    /// The value is a date time.
+    ///
+    /// For example, the `#EXT-X-PROGRAM-DATE-TIME:<date-time-msec>` tag has a `DateTime` value
+    /// (e.g. `#EXT-X-PROGRAM-DATE-TIME:2010-02-19T14:54:23.031+08:00`).
+    DateTime(DateTime),
     /// The value is an attribute list.
     ///
-    /// See [`SemiParsedTagValue::AttributeList`] for more information.
-    AttributeList(HashMap<Cow<'a, str>, MutableParsedAttributeValue<'a>>),
-    /// The value is unparsed.
+    /// For example, the `#EXT-X-MAP:<attribute-list>` tag has an `AttributeList` value (e.g.
+    /// `#EXT-X-MAP:URI="init.mp4"`).
+    AttributeList(HashMap<Cow<'a, str>, WritableAttributeValue<'a>>),
+    /// The value is a UTF-8 string.
     ///
-    /// See [`SemiParsedTagValue::Unparsed`] for more information.
-    Unparsed(MutableUnparsedTagValue<'a>),
+    /// For example, the `#EXT-X-PLAYLIST-TYPE:<type-enum>` tag has a `Utf8` value (e.g.
+    /// `#EXT-X-PLAYLIST-TYPE:VOD`).
+    ///
+    /// Note, this effectively provides the user of the library an "escape hatch" to write any value
+    /// that they want.
+    Utf8(Cow<'a, str>),
 }
-impl<'a, T> From<(f64, T)> for MutableSemiParsedTagValue<'a>
+impl From<u64> for WritableTagValue<'_> {
+    fn from(value: u64) -> Self {
+        Self::DecimalInteger(value)
+    }
+}
+impl From<(u64, Option<u64>)> for WritableTagValue<'_> {
+    fn from(value: (u64, Option<u64>)) -> Self {
+        Self::DecimalIntegerRange(value.0, value.1)
+    }
+}
+impl<'a, T> From<(f64, T)> for WritableTagValue<'a>
 where
     T: Into<Cow<'a, str>>,
 {
@@ -553,10 +588,15 @@ where
         Self::DecimalFloatingPointWithOptionalTitle(value.0, value.1.into())
     }
 }
-impl<'a, K, V> From<HashMap<K, V>> for MutableSemiParsedTagValue<'a>
+impl From<DateTime> for WritableTagValue<'_> {
+    fn from(value: DateTime) -> Self {
+        Self::DateTime(value)
+    }
+}
+impl<'a, K, V> From<HashMap<K, V>> for WritableTagValue<'a>
 where
     K: Into<Cow<'a, str>>,
-    V: Into<MutableParsedAttributeValue<'a>>,
+    V: Into<WritableAttributeValue<'a>>,
 {
     fn from(mut value: HashMap<K, V>) -> Self {
         let mut map = HashMap::new();
@@ -566,10 +606,10 @@ where
         Self::AttributeList(map)
     }
 }
-impl<'a, K, V, const N: usize> From<[(K, V); N]> for MutableSemiParsedTagValue<'a>
+impl<'a, K, V, const N: usize> From<[(K, V); N]> for WritableTagValue<'a>
 where
     K: Into<Cow<'a, str>>,
-    V: Into<MutableParsedAttributeValue<'a>>,
+    V: Into<WritableAttributeValue<'a>>,
 {
     fn from(value: [(K, V); N]) -> Self {
         let mut map = HashMap::new();
@@ -579,56 +619,73 @@ where
         Self::AttributeList(map)
     }
 }
-impl<'a> From<Cow<'a, [u8]>> for MutableSemiParsedTagValue<'a> {
-    fn from(value: Cow<'a, [u8]>) -> Self {
-        Self::Unparsed(MutableUnparsedTagValue(value))
+impl<'a> From<Cow<'a, str>> for WritableTagValue<'a> {
+    fn from(value: Cow<'a, str>) -> Self {
+        Self::Utf8(value)
+    }
+}
+impl<'a> From<&'a str> for WritableTagValue<'a> {
+    fn from(value: &'a str) -> Self {
+        Self::Utf8(Cow::Borrowed(value))
+    }
+}
+impl<'a> From<String> for WritableTagValue<'a> {
+    fn from(value: String) -> Self {
+        Self::Utf8(Cow::Owned(value))
     }
 }
 
-/// Provides a mutable version of [`UnparsedTagValue`].
+/// Provides a writable version of [`AttributeValue`].
 ///
 /// This is provided so that custom tag implementations may provide an output that does not depend
 /// on having parsed data to derive the write output from. This helps with mutability as well as
 /// allowing for custom tags to be constructed from scratch (without being parsed from source data).
 ///
-/// This mirrors the [`UnparsedTagValue`] but provides data types that allow for owned data (rather
-/// than just borrowed references from parsed input data).
-#[derive(Debug, PartialEq)]
-pub struct MutableUnparsedTagValue<'a>(pub Cow<'a, [u8]>);
-
-/// Provides a mutable version of [`ParsedAttributeValue`].
-///
-/// This is provided so that custom tag implementations may provide an output that does not depend
-/// on having parsed data to derive the write output from. This helps with mutability as well as
-/// allowing for custom tags to be constructed from scratch (without being parsed from source data).
-///
-/// This mirrors the [`ParsedAttributeValue`] but provides data types that allow for owned data
-/// (rather than just borrowed references from parsed input data).
+/// While [`AttributeValue`] is mostly just a wrapper around a borrowed slice of bytes,
+/// `WritableAttributeValue` is an enumeration of more value types, as this helps keep converting
+/// from a custom tag more easy (otherwise all users of the library would need to manage
+/// re-constructing the playlist line directly).
 #[derive(Debug, PartialEq, Clone)]
-pub enum MutableParsedAttributeValue<'a> {
+pub enum WritableAttributeValue<'a> {
     /// A decimal integer.
     ///
-    /// See [ParsedAttributeValue::DecimalInteger] for more information.
+    /// From [Section 4.2], this represents:
+    /// * decimal-integer
+    ///
+    /// [Section 4.2]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.2
     DecimalInteger(u64),
     /// A signed float.
     ///
-    /// See [ParsedAttributeValue::SignedDecimalFloatingPoint] for more information.
+    /// From [Section 4.2], this represents:
+    /// * decimal-floating-point
+    /// * signed-decimal-floating-point
+    ///
+    /// [Section 4.2]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.2
     SignedDecimalFloatingPoint(f64),
     /// A quoted string.
     ///
-    /// See [ParsedAttributeValue::QuotedString] for more information.
+    /// From [Section 4.2], this represents:
+    /// * quoted-string
+    /// * enumerated-string-list
+    ///
+    /// [Section 4.2]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.2
     QuotedString(Cow<'a, str>),
     /// An unquoted string.
     ///
-    /// See [ParsedAttributeValue::UnquotedString] for more information.
+    /// From [Section 4.2], this represents:
+    /// * hexadecimal-sequence
+    /// * enumerated-string
+    /// * decimal-resolution
+    ///
+    /// [Section 4.2]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.2
     UnquotedString(Cow<'a, str>),
 }
-impl From<u64> for MutableParsedAttributeValue<'_> {
+impl From<u64> for WritableAttributeValue<'_> {
     fn from(value: u64) -> Self {
         Self::DecimalInteger(value)
     }
 }
-impl From<f64> for MutableParsedAttributeValue<'_> {
+impl From<f64> for WritableAttributeValue<'_> {
     fn from(value: f64) -> Self {
         Self::SignedDecimalFloatingPoint(value)
     }
