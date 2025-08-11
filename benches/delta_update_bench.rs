@@ -367,12 +367,14 @@ fn make_delta_update<W: Write>(input: &[u8], output: &mut W) -> Result<(), Box<d
     // We do one final drain to make sure we're up to date.
     drain_lines(&mut state, &mut writer)?;
 
-    // We need to write out how many segments we've skipped.
-    writer.write_line(HlsLine::from(
-        Skip::builder()
-            .with_skipped_segments(state.removed_count)
-            .finish(),
-    ))?;
+    // We need to write out how many segments we've skipped (only if we have removed any).
+    if state.removed_count > 0 {
+        writer.write_line(HlsLine::from(
+            Skip::builder()
+                .with_skipped_segments(state.removed_count)
+                .finish(),
+        ))?;
+    }
 
     // Finally, write out whatever we have left.
     for line in state.lines {
