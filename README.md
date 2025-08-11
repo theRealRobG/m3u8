@@ -615,14 +615,14 @@ ParsingOptionsBuilder::new()
 It may be quite desirable to avoid parsing of tags that are not needed as this can add quite
 considerable performance overhead. Unknown tags make no attempt to parse or validate the value
 portion of the tag (the part after `:`) and just return the name of the tag along with the `&str`
-for the rest of the line. Running locally as of commit 6fcc38a67bf0eee0769b7e85f82599d1da6eb56d the
-following benchmark shows that when parsing a large playlist, including all tags in the parse is
-about 2x slower than including no tags in the parse (`2.3842 ms` vs `1.1364 ms`).
+for the rest of the line. Running locally as of commit `250406e124b512f961448b5dd760cccc6072a746`
+the following benchmark shows that when parsing a large playlist, including all tags in the parse is
+about 2x slower than including no tags in the parse (`1.8309 ms` vs `0.94808 ms`).
 ```sh
 Large playlist, all tags, using Reader::from_str, no writing
-                        time:   [2.3793 ms 2.3842 ms 2.3891 ms]
+                        time:   [1.8301 ms 1.8309 ms 1.8317 ms]
 Large playlist, no tags, using Reader::from_str, no writing
-                        time:   [1.1357 ms 1.1364 ms 1.1372 ms]
+                        time:   [947.17 µs 948.08 µs 949.12 µs]
 ```
 
 Some basic validation can still be done on `m3u8::tag::unknown::Tag`. For example, the name can be
@@ -717,14 +717,17 @@ A more complex example of using this library can be found within the
 thorough implementation of HLS Playlist Delta Updates intended to work with any given playlist. One
 could imagine using this implementation in a proxy layer (e.g. a CDN edge function) in front of any
 origin server, so as to add delta update functionality even where not supported at the origin, in an
-efficient way (especially assuming that appropriate caching layers are present). At time of writing
-this benchmark (commit 8665329a44aa45a2a59b158f10a6ce2b01aa31d4) the time taken to run this delta
-update on a massive playlist (27,985 lines, resulting in 9,204 skipped segments) is measured as
-`2.3001 ms` (running locally, Chip: Apple M1 Max, Memory: 64 GB).
+efficient way (especially assuming that appropriate caching layers are present). At least as of
+commit `250406e124b512f961448b5dd760cccc6072a746`, the time taken to run this delta update on a
+massive playlist (27,985 lines, resulting in 9,204 skipped segments) is measured as `1.8166 ms`
+(running locally, Chip: Apple M1 Max, Memory: 64 GB).
 ```sh
 Playlist delta update implementation using this library
-                        time:   [2.2995 ms 2.3001 ms 2.3007 ms]
+                        time:   [1.8155 ms 1.8166 ms 1.8181 ms]
 ```
+
+These bench figures are just a rough indication of comparative performance when run consecutively on
+the same machine.
 
 ### Comparison with alternative libraries
 
@@ -750,10 +753,10 @@ Nevertheless, I do have some implementation made, and so can compare some result
 bench locally:
 ```sh
 Playlist delta update implementation using m3u8-rs library
-                        time:   [6.5710 ms 6.5784 ms 6.5900 ms]
+                        time:   [6.4054 ms 6.4085 ms 6.4122 ms]
 ```
 
-These results show that the implementation we've made using this library is almost 3x faster than
+These results show that the implementation we've made using this library is about 3.5x faster than
 the implementation we've made using `m3u8-rs`.
 
 #### hls_m3u8
@@ -781,10 +784,10 @@ to test the library implementation details. Anyway, from what I could produce, h
 
 ```sh
 Playlist delta update implementation using hls_m3u8 library
-                        time:   [5.0737 ms 5.0783 ms 5.0834 ms]
+                        time:   [4.5292 ms 4.5693 ms 4.6107 ms]
 ```
 
-These results show that the implementation we've made using this library is about 2.2x faster than
+These results show that the implementation we've made using this library is about 2.5x faster than
 the implementation we've made using `hls_m3u8`.
 
 # HLS Specification
