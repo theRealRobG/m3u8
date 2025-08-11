@@ -417,7 +417,7 @@ mod tests {
             hls::{self, Inf, M3u, MediaSequence, Targetduration, Version},
             known::{CustomTag, WritableTag},
             unknown,
-            value::{WritableAttributeValue, WritableTagValue},
+            value::{DecimalResolution, WritableAttributeValue, WritableTagValue},
         },
     };
     use pretty_assertions::assert_eq;
@@ -463,6 +463,13 @@ mod tests {
                     (
                         "TEST-FLOAT",
                         WritableAttributeValue::SignedDecimalFloatingPoint(-42.42),
+                    ),
+                    (
+                        "TEST-RESOLUTION",
+                        WritableAttributeValue::DecimalResolution(DecimalResolution {
+                            width: 1920,
+                            height: 1080,
+                        }),
                     ),
                     (
                         "TEST-QUOTED-STRING",
@@ -529,6 +536,7 @@ mod tests {
         let test = TestTag::List;
         let mut found_int = false;
         let mut found_float = false;
+        let mut found_resolution = false;
         let mut found_quote = false;
         let mut found_enum = false;
         let tag_string = string_from(test);
@@ -537,7 +545,7 @@ mod tests {
         let attrs = name_value_split.next().unwrap().split(',').enumerate();
         for (index, attr) in attrs {
             match index {
-                0..4 => match attr.split('=').next().unwrap() {
+                0..5 => match attr.split('=').next().unwrap() {
                     "TEST-INT" => {
                         if found_int {
                             panic!("Unexpected duplicated attribute {attr}");
@@ -551,6 +559,13 @@ mod tests {
                         }
                         found_float = true;
                         assert_eq!("TEST-FLOAT=-42.42", attr);
+                    }
+                    "TEST-RESOLUTION" => {
+                        if found_resolution {
+                            panic!("Unexpected duplicated attribute {attr}");
+                        }
+                        found_resolution = true;
+                        assert_eq!("TEST-RESOLUTION=1920x1080", attr);
                     }
                     "TEST-QUOTED-STRING" => {
                         if found_quote {
@@ -573,6 +588,7 @@ mod tests {
         }
         assert!(found_int);
         assert!(found_float);
+        assert!(found_resolution);
         assert!(found_quote);
         assert!(found_enum);
     }

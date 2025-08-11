@@ -568,6 +568,10 @@ pub enum WritableTagValue<'a> {
     ///
     /// Note, this effectively provides the user of the library an "escape hatch" to write any value
     /// that they want.
+    ///
+    /// Also note, the library does not validate for correctness of the input value, so take care to
+    /// not introduce new lines or invalid characters (e.g. whitespace) as this will lead to an
+    /// invalid HLS playlist.
     Utf8(Cow<'a, str>),
 }
 impl From<u64> for WritableTagValue<'_> {
@@ -662,6 +666,13 @@ pub enum WritableAttributeValue<'a> {
     ///
     /// [Section 4.2]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.2
     SignedDecimalFloatingPoint(f64),
+    /// A decimal resolution.
+    ///
+    /// From [Section 4.2], this represents:
+    /// * decimal-resolution
+    ///
+    /// [Section 4.2]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.2
+    DecimalResolution(DecimalResolution),
     /// A quoted string.
     ///
     /// From [Section 4.2], this represents:
@@ -675,9 +686,15 @@ pub enum WritableAttributeValue<'a> {
     /// From [Section 4.2], this represents:
     /// * hexadecimal-sequence
     /// * enumerated-string
-    /// * decimal-resolution
     ///
     /// [Section 4.2]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.2
+    ///
+    /// Note, this case can be used as an "escape hatch" to write any of the other cases that
+    /// resolve from unquoted, but those are provided as convenience.
+    ///
+    /// Also note, the library does not validate for correctness of the input value, so take care to
+    /// not introduce new lines or invalid characters (e.g. whitespace) as this will lead to an
+    /// invalid HLS playlist.
     UnquotedString(Cow<'a, str>),
 }
 impl From<u64> for WritableAttributeValue<'_> {
@@ -688,6 +705,11 @@ impl From<u64> for WritableAttributeValue<'_> {
 impl From<f64> for WritableAttributeValue<'_> {
     fn from(value: f64) -> Self {
         Self::SignedDecimalFloatingPoint(value)
+    }
+}
+impl From<DecimalResolution> for WritableAttributeValue<'_> {
+    fn from(value: DecimalResolution) -> Self {
+        Self::DecimalResolution(value)
     }
 }
 

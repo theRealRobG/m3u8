@@ -181,15 +181,11 @@ impl<'a> WritableCustomTag<'a> for CustomImageTag {
                 [
                     (
                         "RESOLUTION",
-                        WritableAttributeValue::UnquotedString(
-                            format!("{}", tiles.resolution).into(),
-                        ),
+                        WritableAttributeValue::DecimalResolution(tiles.resolution),
                     ),
                     (
                         "LAYOUT",
-                        WritableAttributeValue::UnquotedString(
-                            format!("{}", tiles.layout).into(),
-                        ),
+                        WritableAttributeValue::DecimalResolution(tiles.layout),
                     ),
                     (
                         "DURATION",

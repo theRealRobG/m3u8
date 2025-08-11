@@ -1008,6 +1008,9 @@ pub(crate) fn calculate_output<'a, Custom: WritableCustomTag<'a>>(custom_tag: Cu
                     WritableAttributeValue::SignedDecimalFloatingPoint(n) => {
                         format!("{k}={n:?}")
                     }
+                    WritableAttributeValue::DecimalResolution(r) => {
+                        format!("{k}={}x{}", r.width, r.height)
+                    }
                     WritableAttributeValue::QuotedString(s) => format!("{k}=\"{s}\""),
                     WritableAttributeValue::UnquotedString(s) => format!("{k}={s}"),
                 })
