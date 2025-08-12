@@ -57,7 +57,8 @@ where
     /// the `#` (including any whitespace) and does not include the line break characters. Below
     /// demonstrates this:
     /// ```
-    /// # use m3u8::{config::ParsingOptions, line::{HlsLine, parse}, error::ParseLineStrError};
+    /// # use quick_m3u8::{config::ParsingOptions, line::{HlsLine, parse},
+    /// # error::ParseLineStrError};
     /// # use std::borrow::Cow;
     /// # let options = ParsingOptions::default();
     /// let original = "# Comment line. Note the leading space.\r\n";
@@ -81,7 +82,7 @@ where
     /// and also a copy-free reference to the original parsed data. It includes all characters up
     /// until, but not including, the line break characters. The following demonstrates this:
     /// ```
-    /// # use m3u8::{config::ParsingOptions, line::{HlsLine, parse}, error::ParseLineStrError};
+    /// # use quick_m3u8::{config::ParsingOptions, line::{HlsLine, parse}, error::ParseLineStrError};
     /// # use std::borrow::Cow;
     /// # let options = ParsingOptions::default();
     /// let expected = "hi.m3u8";
@@ -108,7 +109,7 @@ where
     /// will still be parsed as a URI line, rather than a blank line. As mentioned, it is up to the
     /// user of the library to properly validate URI lines.
     /// ```
-    /// # use m3u8::{config::ParsingOptions, line::{HlsLine, parse}, error::ParseLineStrError};
+    /// # use quick_m3u8::{config::ParsingOptions, line::{HlsLine, parse}, error::ParseLineStrError};
     /// # use std::borrow::Cow;
     /// # let options = ParsingOptions::default();
     /// // Demonstrating what is considered a blank line:
@@ -273,7 +274,7 @@ where
 ///
 /// ## Example
 /// ```
-/// # use m3u8::{
+/// # use quick_m3u8::{
 /// # config::ParsingOptions,
 /// # line::{HlsLine, ParsedLineSlice, parse},
 /// # error::ParseLineStrError,
@@ -319,7 +320,7 @@ pub fn parse<'a>(
 ///
 /// ## Example
 /// ```
-/// # use m3u8::{
+/// # use quick_m3u8::{
 /// # config::ParsingOptions,
 /// # line::{HlsLine, ParsedLineSlice, parse_with_custom},
 /// # error::{ParseLineStrError, ValidationError, ParseTagValueError},

@@ -198,7 +198,7 @@ impl<'a, UriStatus, BandwidthStatus> IFrameStreamInfBuilder<'a, UriStatus, Bandw
     /// Note that [`HdcpLevel`] implements `Into<Cow<str>>` and therefore can be used directly here.
     /// For example:
     /// ```
-    /// # use m3u8::tag::hls::{IFrameStreamInfBuilder, HdcpLevel};
+    /// # use quick_m3u8::tag::hls::{IFrameStreamInfBuilder, HdcpLevel};
     /// let builder = IFrameStreamInfBuilder::new()
     ///     .with_uri("uri")
     ///     .with_bandwidth(10000000)
@@ -206,7 +206,7 @@ impl<'a, UriStatus, BandwidthStatus> IFrameStreamInfBuilder<'a, UriStatus, Bandw
     /// ```
     /// Alternatively, a string slice can be used:
     /// ```
-    /// # use m3u8::tag::hls::{IFrameStreamInfBuilder, HdcpLevel};
+    /// # use quick_m3u8::tag::hls::{IFrameStreamInfBuilder, HdcpLevel};
     /// let builder = IFrameStreamInfBuilder::new()
     ///     .with_uri("uri")
     ///     .with_bandwidth(10000000)
@@ -228,7 +228,7 @@ impl<'a, UriStatus, BandwidthStatus> IFrameStreamInfBuilder<'a, UriStatus, Bandw
     /// Note that [`VideoRange`] implements `Into<Cow<str>>` and therefore can be used directly
     /// here. For example:
     /// ```
-    /// # use m3u8::tag::hls::{IFrameStreamInfBuilder, VideoRange};
+    /// # use quick_m3u8::tag::hls::{IFrameStreamInfBuilder, VideoRange};
     /// let builder = IFrameStreamInfBuilder::new()
     ///     .with_uri("uri")
     ///     .with_bandwidth(10000000)
@@ -236,7 +236,7 @@ impl<'a, UriStatus, BandwidthStatus> IFrameStreamInfBuilder<'a, UriStatus, Bandw
     /// ```
     /// Alternatively, a string slice can be used:
     /// ```
-    /// # use m3u8::tag::hls::{IFrameStreamInfBuilder, VideoRange};
+    /// # use quick_m3u8::tag::hls::{IFrameStreamInfBuilder, VideoRange};
     /// let builder = IFrameStreamInfBuilder::new()
     ///     .with_uri("uri")
     ///     .with_bandwidth(10000000)
@@ -252,7 +252,7 @@ impl<'a, UriStatus, BandwidthStatus> IFrameStreamInfBuilder<'a, UriStatus, Bandw
     /// Note that [`VideoLayout`] implements `Into<Cow<str>>` and therefore can be used directly
     /// here. For example:
     /// ```
-    /// # use m3u8::tag::hls::{
+    /// # use quick_m3u8::tag::hls::{
     /// # IFrameStreamInfBuilder, VideoLayout, EnumeratedStringList, VideoChannelSpecifier,
     /// # VideoProjectionSpecifier
     /// # };
@@ -267,7 +267,7 @@ impl<'a, UriStatus, BandwidthStatus> IFrameStreamInfBuilder<'a, UriStatus, Bandw
     /// Alternatively, a string slice can be used, but care should be taken to follow the correct
     /// syntax defined for `REQ-VIDEO-LAYOUT`.
     /// ```
-    /// # use m3u8::tag::hls::{
+    /// # use quick_m3u8::tag::hls::{
     /// # IFrameStreamInfBuilder, VideoLayout, EnumeratedStringList, VideoChannelSpecifier,
     /// # VideoProjectionSpecifier
     /// # };
@@ -439,7 +439,8 @@ impl<'a> IFrameStreamInf<'a> {
     ///
     /// For example, we could construct a `IFrameStreamInf` as such:
     /// ```
-    /// # use m3u8::tag::{value::DecimalResolution, hls::{IFrameStreamInf, HdcpLevel, VideoRange}};
+    /// # use quick_m3u8::tag::{value::DecimalResolution, hls::{IFrameStreamInf, HdcpLevel,
+    /// # VideoRange}};
     /// let i_frame_stream_inf = IFrameStreamInf::builder()
     ///     .with_uri("uri")
     ///     .with_bandwidth(10000000)
@@ -453,15 +454,15 @@ impl<'a> IFrameStreamInf<'a> {
     /// Note that the `finish` method is only callable if the builder has set `uri` AND `bandwidth`.
     /// Each of the following fail to compile:
     /// ```compile_fail
-    /// # use m3u8::tag::hls::IFrameStreamInf;
+    /// # use quick_m3u8::tag::hls::IFrameStreamInf;
     /// let i_frame_stream_inf = IFrameStreamInf::builder().finish();
     /// ```
     /// ```compile_fail
-    /// # use m3u8::tag::hls::IFrameStreamInf;
+    /// # use quick_m3u8::tag::hls::IFrameStreamInf;
     /// let i_frame_stream_inf = IFrameStreamInf::builder().with_uri("uri").finish();
     /// ```
     /// ```compile_fail
-    /// # use m3u8::tag::hls::IFrameStreamInf;
+    /// # use quick_m3u8::tag::hls::IFrameStreamInf;
     /// let i_frame_stream_inf = IFrameStreamInf::builder().with_bandwidth(10000000).finish();
     /// ```
     pub fn builder() -> IFrameStreamInfBuilder<
@@ -563,8 +564,8 @@ impl<'a> IFrameStreamInf<'a> {
     /// Note that the convenience [`crate::tag::hls::GetKnown`] trait exists to make accessing the
     /// known case easier:
     /// ```
-    /// # use m3u8::tag::hls::{IFrameStreamInf, HdcpLevel};
-    /// use m3u8::tag::hls::GetKnown;
+    /// # use quick_m3u8::tag::hls::{IFrameStreamInf, HdcpLevel};
+    /// use quick_m3u8::tag::hls::GetKnown;
     ///
     /// let tag = IFrameStreamInf::builder()
     ///     .with_uri("uri")
@@ -605,8 +606,8 @@ impl<'a> IFrameStreamInf<'a> {
     /// Note that the convenience [`crate::tag::hls::GetKnown`] trait exists to make accessing the
     /// known case easier:
     /// ```
-    /// # use m3u8::tag::hls::{IFrameStreamInf, VideoRange};
-    /// use m3u8::tag::hls::GetKnown;
+    /// # use quick_m3u8::tag::hls::{IFrameStreamInf, VideoRange};
+    /// use quick_m3u8::tag::hls::GetKnown;
     ///
     /// let tag = IFrameStreamInf::builder()
     ///     .with_uri("uri")

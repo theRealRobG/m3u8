@@ -213,7 +213,7 @@ impl<'a> SessionKey<'a> {
     ///
     /// For example, we could construct a `SessionKey` as such:
     /// ```
-    /// # use m3u8::tag::hls::{SessionKey, Method};
+    /// # use quick_m3u8::tag::hls::{SessionKey, Method};
     /// let session_key = SessionKey::builder()
     ///     .with_method(Method::SampleAes)
     ///     .with_uri("skd://1234")
@@ -224,15 +224,15 @@ impl<'a> SessionKey<'a> {
     /// Note that the `finish` method is only callable if the builder has set `method` AND `uri`.
     /// Each of the following fail to compile:
     /// ```compile_fail
-    /// # use m3u8::tag::hls::SessionKey;
+    /// # use quick_m3u8::tag::hls::SessionKey;
     /// let session_key = SessionKey::builder().finish();
     /// ```
     /// ```compile_fail
-    /// # use m3u8::tag::hls::SessionKey;
+    /// # use quick_m3u8::tag::hls::SessionKey;
     /// let session_key = SessionKey::builder().method(Method::SampleAes).finish();
     /// ```
     /// ```compile_fail
-    /// # use m3u8::tag::hls::SessionKey;
+    /// # use quick_m3u8::tag::hls::SessionKey;
     /// let session_key = SessionKey::builder().with_uri("skd://1234").finish();
     /// ```
     pub fn builder()

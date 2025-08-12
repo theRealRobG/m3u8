@@ -164,7 +164,7 @@ pub trait IntoInnerTag<'a> {
 /// The first step we must take is to implement the parsing logic for this tag. To do that we must
 /// implement the `TryFrom<unknown::Tag>` requirement. We may do this as follows:
 /// ```
-/// # use m3u8::{
+/// # use quick_m3u8::{
 /// #     tag::{
 /// #         unknown,
 /// #         value::AttributeValue,
@@ -233,7 +233,7 @@ pub trait IntoInnerTag<'a> {
 /// that the tag name is everything after `#EXT` (and before `:`), implying that the `-X-` is
 /// included in the name:
 /// ```
-/// # use m3u8::{
+/// # use quick_m3u8::{
 /// #     tag::{
 /// #         known::CustomTag,
 /// #         unknown,
@@ -309,7 +309,7 @@ pub trait IntoInnerTag<'a> {
 /// custom tag with the reader using [`std::marker::PhantomData`] and the
 /// [`crate::Reader::with_custom_from_str`] method.
 /// ```
-/// # use m3u8::{
+/// # use quick_m3u8::{
 /// #     Reader, HlsLine,
 /// #     config::ParsingOptions,
 /// #     tag::{
@@ -427,9 +427,9 @@ pub trait IntoInnerTag<'a> {
 /// in the example above. This example was chosen as the defined tag values are not `attribute-list`
 /// and so we can demonstrate different tag parsing techniques.
 /// ```
-/// # use m3u8::{HlsLine, Reader, config::ParsingOptions, tag::known::Tag, tag::hls::{M3u, Version,
-/// # Targetduration, MediaSequence, DiscontinuitySequence, Inf, ProgramDateTime}, date_time,
-/// # tag::known::CustomTag, error::{ValidationError, ParseTagValueError}, tag::unknown,
+/// # use quick_m3u8::{HlsLine, Reader, config::ParsingOptions, tag::known::Tag, tag::hls::{M3u,
+/// # Version, Targetduration, MediaSequence, DiscontinuitySequence, Inf, ProgramDateTime},
+/// # date_time, tag::known::CustomTag, error::{ValidationError, ParseTagValueError}, tag::unknown,
 /// # tag::value::TagValue};
 /// # use std::marker::PhantomData;
 /// #[derive(Debug, PartialEq, Clone)]
@@ -574,7 +574,7 @@ pub trait CustomTag<'a>:
 /// the user to provide a string slice reference with the same lifetime as the parsed data, but this
 /// is just extending an existing example for information purposes.
 /// ```
-/// # use m3u8::{
+/// # use quick_m3u8::{
 /// #     Reader, HlsLine, Writer,
 /// #     config::ParsingOptions,
 /// #     tag::{
@@ -744,9 +744,9 @@ pub trait CustomTag<'a>:
 /// show how we may change the prefetch URL (e.g. if we are acting as a proxy) before writing to
 /// output.
 /// ```
-/// # use m3u8::{HlsLine, Reader, config::ParsingOptions, tag::known::Tag, tag::hls::{M3u, Version,
-/// # Targetduration, MediaSequence, DiscontinuitySequence, Inf, ProgramDateTime}, date_time,
-/// # tag::known::CustomTag, error::{ValidationError, ParseTagValueError}, tag::unknown,
+/// # use quick_m3u8::{HlsLine, Reader, config::ParsingOptions, tag::known::Tag, tag::hls::{M3u,
+/// # Version, Targetduration, MediaSequence, DiscontinuitySequence, Inf, ProgramDateTime},
+/// # date_time, tag::known::CustomTag, error::{ValidationError, ParseTagValueError}, tag::unknown,
 /// # tag::known::{WritableCustomTag, WritableTag}, tag::value::{TagValue, WritableTagValue},
 /// # Writer};
 /// # use std::{marker::PhantomData, io::Write};
@@ -1047,15 +1047,15 @@ impl<'a> WritableTag<'a> {
     /// ## Examples
     /// ### Empty
     /// ```
-    /// # use m3u8::tag::known::WritableTag;
-    /// # use m3u8::tag::value::WritableTagValue;
+    /// # use quick_m3u8::tag::known::WritableTag;
+    /// # use quick_m3u8::tag::value::WritableTagValue;
     /// WritableTag::new("-X-EXAMPLE", WritableTagValue::Empty);
     /// ```
     /// produces a tag that would write as `#EXT-X-EXAMPLE`.
     /// ### Integer
     /// ```
-    /// # use m3u8::tag::known::WritableTag;
-    /// # use m3u8::tag::value::WritableTagValue;
+    /// # use quick_m3u8::tag::known::WritableTag;
+    /// # use quick_m3u8::tag::value::WritableTagValue;
     /// # use std::borrow::Cow;
     /// let explicit = WritableTag::new(
     ///     Cow::Borrowed("-X-EXAMPLE"),
@@ -1068,8 +1068,8 @@ impl<'a> WritableTag<'a> {
     /// produces a tag that would write as `#EXT-X-EXAMPLE:42`.
     /// ### Integer range
     /// ```
-    /// # use m3u8::tag::known::WritableTag;
-    /// # use m3u8::tag::value::WritableTagValue;
+    /// # use quick_m3u8::tag::known::WritableTag;
+    /// # use quick_m3u8::tag::value::WritableTagValue;
     /// # use std::borrow::Cow;
     /// let explicit = WritableTag::new(
     ///     Cow::Borrowed("-X-EXAMPLE"),
@@ -1082,8 +1082,8 @@ impl<'a> WritableTag<'a> {
     /// produces a tag that would write as `#EXT-X-EXAMPLE:1024@512`.
     /// ### Float with title
     /// ```
-    /// # use m3u8::tag::known::WritableTag;
-    /// # use m3u8::tag::value::WritableTagValue;
+    /// # use quick_m3u8::tag::known::WritableTag;
+    /// # use quick_m3u8::tag::value::WritableTagValue;
     /// # use std::borrow::Cow;
     /// let explicit = WritableTag::new(
     ///     Cow::Borrowed("-X-EXAMPLE"),
@@ -1096,9 +1096,9 @@ impl<'a> WritableTag<'a> {
     /// produces a tag that would write as `#EXT-X-EXAMPLE:3.14,pi`.
     /// ### Date time
     /// ```
-    /// # use m3u8::date_time;
-    /// # use m3u8::tag::known::WritableTag;
-    /// # use m3u8::tag::value::WritableTagValue;
+    /// # use quick_m3u8::date_time;
+    /// # use quick_m3u8::tag::known::WritableTag;
+    /// # use quick_m3u8::tag::value::WritableTagValue;
     /// # use std::borrow::Cow;
     /// let explicit = WritableTag::new(
     ///     Cow::Borrowed("-X-EXAMPLE"),
@@ -1111,8 +1111,8 @@ impl<'a> WritableTag<'a> {
     /// produces a tag that would write as `#EXT-X-EXAMPLE:2025-08-10T21:51:42.123-05:00`.
     /// ### Attribute list
     /// ```
-    /// # use m3u8::tag::known::WritableTag;
-    /// # use m3u8::tag::value::{WritableTagValue, WritableAttributeValue};
+    /// # use quick_m3u8::tag::known::WritableTag;
+    /// # use quick_m3u8::tag::value::{WritableTagValue, WritableAttributeValue};
     /// # use std::collections::HashMap;
     /// # use std::borrow::Cow;
     /// let explicit = WritableTag::new(
@@ -1128,8 +1128,8 @@ impl<'a> WritableTag<'a> {
     /// produces a tag that would write as `#EXT-X-EXAMPLE:VALUE=42`.
     /// ### UTF-8
     /// ```
-    /// # use m3u8::tag::known::WritableTag;
-    /// # use m3u8::tag::value::{WritableTagValue, WritableAttributeValue};
+    /// # use quick_m3u8::tag::known::WritableTag;
+    /// # use quick_m3u8::tag::value::{WritableTagValue, WritableAttributeValue};
     /// # use std::borrow::Cow;
     /// let explicit = WritableTag::new(
     ///     Cow::Borrowed("-X-EXAMPLE"),

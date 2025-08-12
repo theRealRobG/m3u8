@@ -43,7 +43,7 @@ impl<'a> ProgramDateTime<'a> {
     /// Note, the library provides a convenience `date_time!` macro, in case you are setting the
     /// `DateTime` using literal values:
     /// ```
-    /// use m3u8::{
+    /// use quick_m3u8::{
     ///     date_time,
     ///     tag::hls::ProgramDateTime,
     ///     date::{ DateTime, DateTimeTimezoneOffset}

@@ -241,9 +241,9 @@ impl<'a, IdStatus, StartDateStatus> DaterangeBuilder<'a, IdStatus, StartDateStat
     ///
     /// This sets one attribute at a time. For example:
     /// ```
-    /// # use m3u8::tag::hls::{Daterange, ExtensionAttributeValue};
-    /// # use m3u8::tag::known::IntoInnerTag;
-    /// # use m3u8::date_time;
+    /// # use quick_m3u8::tag::hls::{Daterange, ExtensionAttributeValue};
+    /// # use quick_m3u8::tag::known::IntoInnerTag;
+    /// # use quick_m3u8::date_time;
     /// let daterange = Daterange::builder()
     ///     .with_id("id")
     ///     .with_start_date(date_time!(2025-08-02 T 21:03:00.000 -05:00))
@@ -442,8 +442,8 @@ impl<'a> Daterange<'a> {
     ///
     /// For example, we could construct a `Daterange` as such:
     /// ```
-    /// # use m3u8::tag::hls::{Daterange, ExtensionAttributeValue, Cue};
-    /// # use m3u8::date_time;
+    /// # use quick_m3u8::tag::hls::{Daterange, ExtensionAttributeValue, Cue};
+    /// # use quick_m3u8::date_time;
     /// let daterange = Daterange::builder()
     ///     .with_id("id")
     ///     .with_start_date(date_time!(2025-08-02 T 21:22:33.123))
@@ -459,15 +459,15 @@ impl<'a> Daterange<'a> {
     /// Note that the `finish` method is only callable if the builder has set `id` AND `start_date`.
     /// Each of the following fail to compile:
     /// ```compile_fail
-    /// # use m3u8::tag::hls::Daterange;
+    /// # use quick_m3u8::tag::hls::Daterange;
     /// let daterange = Daterange::builder().finish();
     /// ```
     /// ```compile_fail
-    /// # use m3u8::tag::hls::Daterange;
+    /// # use quick_m3u8::tag::hls::Daterange;
     /// let daterange = Daterange::builder().with_id("id").finish();
     /// ```
     /// ```compile_fail
-    /// # use m3u8::tag::hls::Daterange;
+    /// # use quick_m3u8::tag::hls::Daterange;
     /// let daterange = Daterange::builder().with_start_date(Default::default()).finish();
     /// ```
     pub fn builder() -> DaterangeBuilder<'a, DaterangeIdNeedsToBeSet, DaterangeStartDateNeedsToBeSet>
@@ -512,7 +512,7 @@ impl<'a> Daterange<'a> {
     /// documentation on `EnumeratedStringList` provides more information around the concept. Below
     /// shows an example usage:
     /// ```
-    /// # use m3u8::{Reader, HlsLine, config::ParsingOptions, tag::known, tag::hls::{self, Cue}};
+    /// # use quick_m3u8::{Reader, HlsLine, config::ParsingOptions, tag::known, tag::hls::{self, Cue}};
     /// let daterange =
     ///     r#"#EXT-X-DATERANGE:ID="id",START-DATE="2025-08-02T21:31:00Z",CUE="PRE,ONCE""#;
     /// let mut reader = Reader::from_str(daterange, ParsingOptions::default());
@@ -586,7 +586,7 @@ impl<'a> Daterange<'a> {
     /// This method collects all the attributes prefixed with `X-` and provides them in a `HashMap`.
     /// For example:
     /// ```
-    /// # use m3u8::{
+    /// # use quick_m3u8::{
     /// # Reader, HlsLine, config::ParsingOptions, tag::known,
     /// # tag::hls::{self, ExtensionAttributeValue}
     /// # };
@@ -629,7 +629,7 @@ impl<'a> Daterange<'a> {
     /// This method attempts to get the attribute value for the provided `name`. The `X-` prefix
     /// must be included. For example:
     /// ```
-    /// # use m3u8::{
+    /// # use quick_m3u8::{
     /// # Reader, HlsLine, config::ParsingOptions, tag::known,
     /// # tag::hls::{self, ExtensionAttributeValue}
     /// # };
@@ -667,7 +667,7 @@ impl<'a> Daterange<'a> {
     ///
     /// This method provides the extension attribute keys that exist in the tag. For example:
     /// ```
-    /// # use m3u8::{
+    /// # use quick_m3u8::{
     /// # Reader, HlsLine, config::ParsingOptions, tag::known,
     /// # tag::hls,
     /// # };
@@ -829,7 +829,7 @@ impl<'a> Daterange<'a> {
     /// Note, that [`Cue`] implements `Into<Cow<str>>` and therefore can be used directly to set the
     /// value. Similarly, an array of `Cue` can be used. For example:
     /// ```
-    /// # use m3u8::{
+    /// # use quick_m3u8::{
     /// # Reader, HlsLine, config::ParsingOptions, tag::known,
     /// # tag::hls::{self, Cue, EnumeratedStringList, EnumeratedString}
     /// # };

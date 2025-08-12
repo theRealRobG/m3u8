@@ -146,7 +146,7 @@ impl<'a> Skip<'a> {
     ///
     /// For example, we could construct a `Skip` as such:
     /// ```
-    /// # use m3u8::tag::hls::Skip;
+    /// # use quick_m3u8::tag::hls::Skip;
     /// let skip = Skip::builder()
     ///     .with_skipped_segments(1000)
     ///     .with_recently_removed_dateranges("id_1\tid_2\tid_3")
@@ -155,7 +155,7 @@ impl<'a> Skip<'a> {
     /// Note that the `finish` method is only callable if the builder has set `skipped_segments`.
     /// The following fails to compile:
     /// ```compile_fail
-    /// # use m3u8::tag::hls::Skip;
+    /// # use quick_m3u8::tag::hls::Skip;
     /// let skip = Skip::builder().finish();
     /// ```
     pub fn builder() -> SkipBuilder<'a, SkipSkippedSegmentsNeedsToBeSet> {

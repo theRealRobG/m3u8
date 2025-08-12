@@ -145,7 +145,7 @@ impl<'a> Start<'a> {
     ///
     /// For example, we could construct a `Start` as such:
     /// ```
-    /// # use m3u8::tag::hls::Start;
+    /// # use quick_m3u8::tag::hls::Start;
     /// let start = Start::builder()
     ///     .with_time_offset(-18.0)
     ///     .with_precise()
@@ -154,7 +154,7 @@ impl<'a> Start<'a> {
     /// Note that the `finish` method is only callable if the builder has set `time_offset`. The
     /// following fails to compile:
     /// ```compile_fail
-    /// # use m3u8::tag::hls::Start;
+    /// # use quick_m3u8::tag::hls::Start;
     /// let start = Start::builder().finish();
     /// ```
     pub fn builder() -> StartBuilder<StartTimeOffsetNeedsToBeSet> {

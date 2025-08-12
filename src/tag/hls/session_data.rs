@@ -319,7 +319,7 @@ impl<'a> SessionData<'a> {
     ///
     /// For example, we could construct a `SessionData` as such:
     /// ```
-    /// # use m3u8::tag::hls::{SessionData, Format};
+    /// # use quick_m3u8::tag::hls::{SessionData, Format};
     /// let session_data = SessionData::builder()
     ///     .with_data_id("1234")
     ///     .with_uri("data.bin")
@@ -334,19 +334,19 @@ impl<'a> SessionData<'a> {
     /// `uri` attribute can only be set when `value` has not been set, and similarly, `value` can
     /// only be set when `uri` has not been set. Each of the following fail to compile:
     /// ```compile_fail
-    /// # use m3u8::tag::hls::SessionData;
+    /// # use quick_m3u8::tag::hls::SessionData;
     /// let session_data = SessionData::builder().finish();
     /// ```
     /// ```compile_fail
-    /// # use m3u8::tag::hls::SessionData;
+    /// # use quick_m3u8::tag::hls::SessionData;
     /// let session_data = SessionData::builder().with_data_id("1234").finish();
     /// ```
     /// ```compile_fail
-    /// # use m3u8::tag::hls::SessionData;
+    /// # use quick_m3u8::tag::hls::SessionData;
     /// let session_data_builder = SessionData::builder().with_value("test").with_uri("data.bin");
     /// ```
     /// ```compile_fail
-    /// # use m3u8::tag::hls::SessionData;
+    /// # use quick_m3u8::tag::hls::SessionData;
     /// let session_data_builder = SessionData::builder().with_uri("data.bin").with_value("test");
     /// ```
     pub fn builder() -> SessionDataBuilder<

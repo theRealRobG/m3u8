@@ -151,7 +151,7 @@ impl<'a> Map<'a> {
     ///
     /// For example, we could construct a `Map` as such:
     /// ```
-    /// # use m3u8::tag::hls::{Map, MapByterange};
+    /// # use quick_m3u8::tag::hls::{Map, MapByterange};
     /// let map = Map::builder()
     ///     .with_uri("uri")
     ///     .with_byterange(MapByterange { length: 1024, offset: 0 })
@@ -160,7 +160,7 @@ impl<'a> Map<'a> {
     /// Note that the `finish` method is only callable if the builder has set `uri`. The following
     /// will fail to compile:
     /// ```compile_fail
-    /// # use m3u8::tag::hls::Map;
+    /// # use quick_m3u8::tag::hls::Map;
     /// let map = Map::builder().finish();
     /// ```
     pub fn builder() -> MapBuilder<'a, MapUriNeedsToBeSet> {

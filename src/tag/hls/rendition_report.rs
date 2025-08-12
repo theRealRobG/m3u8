@@ -187,7 +187,7 @@ impl<'a> RenditionReport<'a> {
     ///
     /// For example, we could construct a `RenditionReport` as such:
     /// ```
-    /// # use m3u8::tag::hls::RenditionReport;
+    /// # use quick_m3u8::tag::hls::RenditionReport;
     /// let rendition_report = RenditionReport::builder()
     ///     .with_uri("hi.m3u8")
     ///     .with_last_msn(100)
@@ -197,15 +197,15 @@ impl<'a> RenditionReport<'a> {
     /// Note that the `finish` method is only callable if the builder has set `uri` AND `last_msn`.
     /// Each of the following fail to compile:
     /// ```compile_fail
-    /// # use m3u8::tag::hls::RenditionReport;
+    /// # use quick_m3u8::tag::hls::RenditionReport;
     /// let rendition_report = RenditionReport::builder().finish();
     /// ```
     /// ```compile_fail
-    /// # use m3u8::tag::hls::RenditionReport;
+    /// # use quick_m3u8::tag::hls::RenditionReport;
     /// let rendition_report = RenditionReport::builder().with_uri("hi.m3u8").finish();
     /// ```
     /// ```compile_fail
-    /// # use m3u8::tag::hls::RenditionReport;
+    /// # use quick_m3u8::tag::hls::RenditionReport;
     /// let rendition_report = RenditionReport::builder().with_last_msn(100).finish();
     /// ```
     pub fn builder() -> RenditionReportBuilder<

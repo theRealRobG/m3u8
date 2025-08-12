@@ -232,7 +232,7 @@ impl<'a> Part<'a> {
     ///
     /// For example, we could construct a `Part` as such:
     /// ```
-    /// # use m3u8::tag::hls::{Part, PartByterange};
+    /// # use quick_m3u8::tag::hls::{Part, PartByterange};
     /// let part = Part::builder()
     ///     .with_uri("part.100.0.mp4")
     ///     .with_duration(0.5)
@@ -243,15 +243,15 @@ impl<'a> Part<'a> {
     /// Note that the `finish` method is only callable if the builder has set `uri` AND `duration`.
     /// Each of the following fail to compile:
     /// ```compile_fail
-    /// # use m3u8::tag::hls::Part;
+    /// # use quick_m3u8::tag::hls::Part;
     /// let part = Part::builder().finish();
     /// ```
     /// ```compile_fail
-    /// # use m3u8::tag::hls::Part;
+    /// # use quick_m3u8::tag::hls::Part;
     /// let part = Part::builder().with_uri("uri").finish();
     /// ```
     /// ```compile_fail
-    /// # use m3u8::tag::hls::Part;
+    /// # use quick_m3u8::tag::hls::Part;
     /// let part = Part::builder().with_duration(0.5).finish();
     /// ```
     pub fn builder() -> PartBuilder<'a, PartUriNeedsToBeSet, PartDurationNeedsToBeSet> {

@@ -207,7 +207,7 @@ impl<'a> ServerControl<'a> {
     ///
     /// For example, we could construct a `ServerControl` as such:
     /// ```
-    /// # use m3u8::tag::hls::ServerControl;
+    /// # use quick_m3u8::tag::hls::ServerControl;
     /// let server_control = ServerControl::builder()
     ///     .with_can_skip_until(36.0)
     ///     .with_can_skip_dateranges()
@@ -216,7 +216,7 @@ impl<'a> ServerControl<'a> {
     /// Note that the `finish` method is only callable if at least one attribute has been set. The
     /// following will fail to compile:
     /// ```compile_fail
-    /// # use m3u8::tag::hls::ServerControl;
+    /// # use quick_m3u8::tag::hls::ServerControl;
     /// let server_control = ServerControl::builder().finish();
     /// ```
     pub fn builder() -> ServerControlBuilder<ServerControlAttributeNeedsToBeSet> {

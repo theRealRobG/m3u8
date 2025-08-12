@@ -28,8 +28,8 @@ pub enum EnumeratedString<'a, T> {
 /// Used to provide a convenience accessor on `Option<EnumeratedString<T>>` for the `Known(T)` case.
 /// For example:
 /// ```
-/// # use m3u8::tag::hls::{EnumeratedString, VideoRange};
-/// use m3u8::tag::hls::GetKnown;
+/// # use quick_m3u8::tag::hls::{EnumeratedString, VideoRange};
+/// use quick_m3u8::tag::hls::GetKnown;
 ///
 /// let some_enumerated_string: Option<EnumeratedString<VideoRange>> = Some(
 ///     EnumeratedString::Known(VideoRange::Pq)
@@ -137,8 +137,8 @@ where
 /// avoid ever even seeing the `EnumeratedString` type, such as the below example of constructing a
 /// list of [`crate::tag::hls::Cue`]:
 /// ```
-/// # use m3u8::tag::hls::EnumeratedStringList;
-/// # use m3u8::tag::hls::Cue;
+/// # use quick_m3u8::tag::hls::EnumeratedStringList;
+/// # use quick_m3u8::tag::hls::Cue;
 /// let list = EnumeratedStringList::from([Cue::Pre, Cue::Once]);
 /// assert_eq!(2, list.iter().count());
 /// ```
@@ -159,8 +159,8 @@ where
 {
     /// Indicates whether a value is contained within the string list. For example:
     /// ```
-    /// # use m3u8::tag::hls::EnumeratedStringList;
-    /// use m3u8::tag::hls::Cue;
+    /// # use quick_m3u8::tag::hls::EnumeratedStringList;
+    /// use quick_m3u8::tag::hls::Cue;
     ///
     /// let list = EnumeratedStringList::from([Cue::Pre, Cue::Once]);
     /// assert!(list.contains(Cue::Pre));
@@ -178,8 +178,8 @@ where
     ///
     /// This would be equivalent:
     /// ```
-    /// # use m3u8::tag::hls::{EnumeratedStringList, EnumeratedString};
-    /// # use m3u8::tag::hls::Cue;
+    /// # use quick_m3u8::tag::hls::{EnumeratedStringList, EnumeratedString};
+    /// # use quick_m3u8::tag::hls::Cue;
     /// # let list = EnumeratedStringList::from([Cue::Pre, Cue::Once]);
     /// assert!(list.contains(EnumeratedString::Known(Cue::Pre)));
     /// assert!(list.contains(EnumeratedString::Known(Cue::Once)));
@@ -189,8 +189,8 @@ where
     ///
     /// And also this:
     /// ```
-    /// # use m3u8::tag::hls::{EnumeratedStringList, EnumeratedString};
-    /// # use m3u8::tag::hls::Cue;
+    /// # use quick_m3u8::tag::hls::{EnumeratedStringList, EnumeratedString};
+    /// # use quick_m3u8::tag::hls::Cue;
     /// # let list = EnumeratedStringList::from([Cue::Pre, Cue::Once]);
     /// assert!(list.contains("PRE"));
     /// assert!(list.contains("ONCE"));
@@ -208,7 +208,7 @@ where
 
     /// Indicates whether the list is empty (i.e. empty string). For example:
     /// ```
-    /// # use m3u8::tag::hls::{EnumeratedStringList, Cue};
+    /// # use quick_m3u8::tag::hls::{EnumeratedStringList, Cue};
     /// let list = EnumeratedStringList::<Cue>::from("");
     /// assert!(list.is_empty());
     /// ```
@@ -218,7 +218,7 @@ where
 
     /// Inserts an item into the list. Returns true if the insertion was successful.
     /// ```
-    /// # use m3u8::tag::hls::{EnumeratedStringList, Cue};
+    /// # use quick_m3u8::tag::hls::{EnumeratedStringList, Cue};
     /// let mut list = EnumeratedStringList::from([Cue::Pre]);
     /// assert_eq!(1, list.iter().count());
     /// assert!(list.contains(Cue::Pre));
@@ -231,7 +231,7 @@ where
     /// ```
     /// If an item is already in the list then it does not insert again.
     /// ```
-    /// # use m3u8::tag::hls::{EnumeratedStringList, Cue};
+    /// # use quick_m3u8::tag::hls::{EnumeratedStringList, Cue};
     /// let mut list = EnumeratedStringList::from([Cue::Pre]);
     /// assert_eq!(1, list.iter().count());
     /// assert!(list.contains(Cue::Pre));
@@ -245,7 +245,7 @@ where
     /// convenience conversions between types, we can also insert unknown values by using `&str`
     /// directly:
     /// ```
-    /// # use m3u8::tag::hls::{EnumeratedStringList, Cue};
+    /// # use quick_m3u8::tag::hls::{EnumeratedStringList, Cue};
     /// let mut list = EnumeratedStringList::from([Cue::Pre]);
     /// list.insert("UNKNOWN");
     /// assert_eq!(2, list.iter().count());
@@ -267,7 +267,7 @@ where
 
     /// Removes an item from the list. Returns true if an item was removed.
     /// ```
-    /// # use m3u8::tag::hls::{EnumeratedStringList, Cue};
+    /// # use quick_m3u8::tag::hls::{EnumeratedStringList, Cue};
     /// let mut list = EnumeratedStringList::from([Cue::Pre]);
     /// assert_eq!(1, list.iter().count());
     /// assert!(list.contains(Cue::Pre));
@@ -278,7 +278,7 @@ where
     /// ```
     /// If an item is not in the list then it does not remove anything.
     /// ```
-    /// # use m3u8::tag::hls::{EnumeratedStringList, Cue};
+    /// # use quick_m3u8::tag::hls::{EnumeratedStringList, Cue};
     /// let mut list = EnumeratedStringList::from([Cue::Pre]);
     /// assert_eq!(1, list.iter().count());
     /// assert!(list.contains(Cue::Pre));
@@ -292,7 +292,7 @@ where
     /// convenience conversions between types, we can also insert unknown values by using `&str`
     /// directly:
     /// ```
-    /// # use m3u8::tag::hls::{EnumeratedStringList, Cue};
+    /// # use quick_m3u8::tag::hls::{EnumeratedStringList, Cue};
     /// let mut list = EnumeratedStringList::from(["PRE", "UNKNOWN"]);
     /// assert_eq!(2, list.iter().count());
     /// list.remove("UNKNOWN");
@@ -342,7 +342,7 @@ where
     /// mutate the list, and then set it back onto the tag. Providing this method makes that
     /// possible. For example:
     /// ```
-    /// # use m3u8::{date_time, tag::hls::{Daterange, Cue, EnumeratedStringList}};
+    /// # use quick_m3u8::{date_time, tag::hls::{Daterange, Cue, EnumeratedStringList}};
     /// let mut daterange = Daterange::builder()
     ///     .with_id("id")
     ///     .with_start_date(date_time!(2025-08-03 T 00:49:12.000 -05:00))

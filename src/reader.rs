@@ -17,9 +17,9 @@ use std::marker::PhantomData;
 /// A reader can take an input `&str` (or `&[u8]`) and sequentially parse information about HLS
 /// lines. For example, you could use the `Reader` to build up a media playlist:
 /// ```
-/// # use m3u8::{HlsLine, Reader};
-/// # use m3u8::config::ParsingOptions;
-/// # use m3u8::tag::{
+/// # use quick_m3u8::{HlsLine, Reader};
+/// # use quick_m3u8::config::ParsingOptions;
+/// # use quick_m3u8::tag::{
 /// #     hls::{ self, DiscontinuitySequence, MediaSequence, Targetduration, Version, M3u },
 /// #     known,
 /// # };
@@ -137,7 +137,7 @@ use std::marker::PhantomData;
 /// this is EXT-X-DATERANGE, so we can configure our reader to only consider this tag during parsing
 /// which provides a benefit in terms of processing time.
 /// ```
-/// # use m3u8::{
+/// # use quick_m3u8::{
 /// # Reader, HlsLine, Writer,
 /// # config::ParsingOptionsBuilder,
 /// # tag::known,
@@ -218,7 +218,7 @@ use std::marker::PhantomData;
 /// that the reader should use a custom tag, utilize `std::marker::PhantomData` to specify what the
 /// type of the custom tag is.
 /// ```
-/// # use m3u8::{
+/// # use quick_m3u8::{
 /// # Reader, HlsLine, Writer,
 /// # config::ParsingOptionsBuilder,
 /// # date::DateTime,

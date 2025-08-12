@@ -265,7 +265,7 @@ impl<'a> Key<'a> {
     ///
     /// For example, we could construct a `Key` as such:
     /// ```
-    /// # use m3u8::tag::hls::{Key, Method};
+    /// # use quick_m3u8::tag::hls::{Key, Method};
     /// let key = Key::builder()
     ///     .with_method(Method::SampleAes)
     ///     .with_uri("skd://1234")
@@ -276,7 +276,7 @@ impl<'a> Key<'a> {
     /// Note that the `finish` method is only callable if the builder has set `method`. The
     /// following fail to compile:
     /// ```compile_fail
-    /// # use m3u8::tag::hls::Key;
+    /// # use quick_m3u8::tag::hls::Key;
     /// let key = Key::builder().finish();
     /// ```
     pub fn builder() -> KeyBuilder<'a, KeyMethodNeedsToBeSet> {

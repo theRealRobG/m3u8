@@ -248,7 +248,7 @@ impl<'a> PreloadHint<'a> {
     ///
     /// For example, we could construct a `PreloadHint` as such:
     /// ```
-    /// # use m3u8::tag::hls::{PreloadHint, PreloadHintType};
+    /// # use quick_m3u8::tag::hls::{PreloadHint, PreloadHintType};
     /// let preload_hint = PreloadHint::builder()
     ///     .with_hint_type(PreloadHintType::Part)
     ///     .with_uri("part.100.2.mp4")
@@ -259,15 +259,15 @@ impl<'a> PreloadHint<'a> {
     /// Note that the `finish` method is only callable if the builder has set `hint_type` AND `uri`.
     /// Each of the following fail to compile:
     /// ```compile_fail
-    /// # use m3u8::tag::hls::PreloadHint;
+    /// # use quick_m3u8::tag::hls::PreloadHint;
     /// let preload_hint = PreloadHint::builder().finish();
     /// ```
     /// ```compile_fail
-    /// # use m3u8::tag::hls::PreloadHint;
+    /// # use quick_m3u8::tag::hls::PreloadHint;
     /// let preload_hint = PreloadHint::builder().with_hint_type(PreloadHintType::Part).finish();
     /// ```
     /// ```compile_fail
-    /// # use m3u8::tag::hls::PreloadHint;
+    /// # use quick_m3u8::tag::hls::PreloadHint;
     /// let preload_hint = PreloadHint::builder().with_uri("part.100.2.mp4").finish();
     /// ```
     pub fn builder()

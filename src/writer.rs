@@ -27,7 +27,7 @@ use std::{
 /// we provide a toy example of this (for a more interesting example, the repository includes an
 /// implementation of a HLS delta update in `benches/delta_update_bench.rs`).
 /// ```
-/// # use m3u8::{ config::ParsingOptions, line::HlsLine, tag::{hls, known}, Reader, Writer };
+/// # use quick_m3u8::{ config::ParsingOptions, line::HlsLine, tag::{hls, known}, Reader, Writer };
 /// # use std::io::{self, Write};
 /// const INPUT: &str = r#"
 /// #EXTINF:4
@@ -89,7 +89,7 @@ use std::{
 /// in the HLS specification.
 ///
 /// ```
-/// # use m3u8::{
+/// # use quick_m3u8::{
 /// #     HlsLine, Writer,
 /// #     tag::hls::{M3u, StreamInf},
 /// # };
@@ -185,7 +185,7 @@ where
 
     /// Example:
     /// ```
-    /// # use m3u8::Writer;
+    /// # use quick_m3u8::Writer;
     /// let mut writer = Writer::new(b"#EXTM3U\n".to_vec());
     /// writer.write_blank().unwrap();
     /// writer.write_comment(" Note blank line above.").unwrap();
@@ -201,7 +201,7 @@ where
 
     /// Example:
     /// ```
-    /// # use m3u8::Writer;
+    /// # use quick_m3u8::Writer;
     /// let mut writer = Writer::new(Vec::new());
     /// writer.write_comment(" This is a comment.").unwrap();
     /// assert_eq!("# This is a comment.\n".as_bytes(), writer.into_inner());
@@ -212,7 +212,7 @@ where
 
     /// Example:
     /// ```
-    /// # use m3u8::Writer;
+    /// # use quick_m3u8::Writer;
     /// let mut writer = Writer::new(Vec::new());
     /// writer.write_uri("example.m3u8").unwrap();
     /// assert_eq!("example.m3u8\n".as_bytes(), writer.into_inner());
@@ -230,10 +230,10 @@ where
     ///
     /// Example:
     /// ```
-    /// # use m3u8::Writer;
-    /// # use m3u8::tag::known::{CustomTag, WritableCustomTag, WritableTag};
-    /// # use m3u8::tag::unknown;
-    /// # use m3u8::error::{ValidationError, ParseTagValueError};
+    /// # use quick_m3u8::Writer;
+    /// # use quick_m3u8::tag::known::{CustomTag, WritableCustomTag, WritableTag};
+    /// # use quick_m3u8::tag::unknown;
+    /// # use quick_m3u8::error::{ValidationError, ParseTagValueError};
     /// # use std::borrow::Cow;
     /// #[derive(Debug, PartialEq, Clone)]
     /// struct ExampleCustomTag {
@@ -289,7 +289,7 @@ where
     /// [`crate::tag::known::NoCustomTag`]). For example, say we are parsing some data using a
     /// reader that supports our own custom defined tag (`SomeCustomTag`).
     /// ```
-    /// # use m3u8::{
+    /// # use quick_m3u8::{
     /// # Reader,
     /// # config::ParsingOptions,
     /// # tag::known::{CustomTag, WritableCustomTag, WritableTag},
@@ -324,7 +324,7 @@ where
     /// use the `write_custom_line` method in this case (even if we are not writing the custom tag
     /// itself):
     /// ```
-    /// # use m3u8::{
+    /// # use quick_m3u8::{
     /// # Reader, Writer,
     /// # config::ParsingOptions,
     /// # tag::known::{CustomTag, WritableCustomTag, WritableTag},

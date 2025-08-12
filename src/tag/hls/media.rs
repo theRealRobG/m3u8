@@ -369,7 +369,7 @@ impl<'a> ValidChannels<'a> {
     /// Note that `AudioCodingIdentifier` and `ChannelSpecialUsageIdentifier` can be used directly
     /// here. For example:
     /// ```
-    /// # use m3u8::tag::hls::{EnumeratedStringList, ValidChannels, AudioCodingIdentifier,
+    /// # use quick_m3u8::tag::hls::{EnumeratedStringList, ValidChannels, AudioCodingIdentifier,
     /// # ChannelSpecialUsageIdentifier};
     /// let channels = ValidChannels::new(
     ///     16,
@@ -380,7 +380,7 @@ impl<'a> ValidChannels<'a> {
     /// Since `&str` implements `Into<EnumeratedStringList>` we can also use string slice directly,
     /// but care should be taken to follow the correct format:
     /// ```
-    /// # use m3u8::tag::hls::ValidChannels;
+    /// # use quick_m3u8::tag::hls::ValidChannels;
     /// let channels = ValidChannels::new(16, "JOC", "BINAURAL");
     /// ```
     pub fn new(
@@ -485,8 +485,8 @@ pub enum Channels<'a> {
 /// Used to provide a convenience accessor on `Option<Channels>` for the `ValidChannels` case. For
 /// example:
 /// ```
-/// # use m3u8::tag::hls::{Channels, ValidChannels };
-/// use m3u8::tag::hls::GetValid;
+/// # use quick_m3u8::tag::hls::{Channels, ValidChannels };
+/// use quick_m3u8::tag::hls::GetValid;
 ///
 /// let some_channels = Some(Channels::Valid(ValidChannels::new(6, "", "")));
 /// let some_valid_channels = some_channels.valid();
@@ -774,7 +774,7 @@ impl<'a, TypeStatus, NameStatus, GroupIdStatus>
     /// Note that [`ValidChannels`] implements `Into<Cow<str>>` and therefore can be
     /// used directly here. For example:
     /// ```
-    /// # use m3u8::tag::hls::{
+    /// # use quick_m3u8::tag::hls::{
     /// # MediaBuilder, ValidChannels, MediaType, EnumeratedStringList, AudioCodingIdentifier,
     /// # ChannelSpecialUsageIdentifier
     /// # };
@@ -791,7 +791,7 @@ impl<'a, TypeStatus, NameStatus, GroupIdStatus>
     /// Alternatively, a string slice can be used, but care should be taken to follow the correct
     /// syntax defined for `CHANNELS`.
     /// ```
-    /// # use m3u8::tag::hls::{ MediaBuilder, MediaType };
+    /// # use quick_m3u8::tag::hls::{ MediaBuilder, MediaType };
     /// let builder = MediaBuilder::new()
     ///     .with_media_type(MediaType::Audio)
     ///     .with_name("ENGLISH")
@@ -950,7 +950,7 @@ impl<'a> Media<'a> {
     ///
     /// For example, we could construct a `Media` as such:
     /// ```
-    /// # use m3u8::tag::hls::{Media, MediaType, EnumeratedStringList, MediaCharacteristicTag,
+    /// # use quick_m3u8::tag::hls::{Media, MediaType, EnumeratedStringList, MediaCharacteristicTag,
     /// # ValidChannels, AudioCodingIdentifier, ChannelSpecialUsageIdentifier};
     /// let media = Media::builder()
     ///     .with_media_type(MediaType::Audio)
@@ -974,37 +974,37 @@ impl<'a> Media<'a> {
     /// Note that the `finish` method is only callable if the builder has set `media_type`, `name`,
     /// AND `group_id`. Each of the following fail to compile:
     /// ```compile_fail
-    /// # use m3u8::tag::hls::Media;
+    /// # use quick_m3u8::tag::hls::Media;
     /// let media = Media::builder().finish();
     /// ```
     /// ```compile_fail
-    /// # use m3u8::tag::hls::Media;
+    /// # use quick_m3u8::tag::hls::Media;
     /// let media = Media::builder().with_media_type(MediaType::Audio).finish();
     /// ```
     /// ```compile_fail
-    /// # use m3u8::tag::hls::Media;
+    /// # use quick_m3u8::tag::hls::Media;
     /// let media = Media::builder().with_name("test").finish();
     /// ```
     /// ```compile_fail
-    /// # use m3u8::tag::hls::Media;
+    /// # use quick_m3u8::tag::hls::Media;
     /// let media = Media::builder().with_group_id("test").finish();
     /// ```
     /// ```compile_fail
-    /// # use m3u8::tag::hls::Media;
+    /// # use quick_m3u8::tag::hls::Media;
     /// let media = Media::builder()
     ///     .with_media_type(MediaType::Audio)
     ///     .with_name("test")
     ///     .finish();
     /// ```
     /// ```compile_fail
-    /// # use m3u8::tag::hls::Media;
+    /// # use quick_m3u8::tag::hls::Media;
     /// let media = Media::builder()
     ///     .with_media_type(MediaType::Audio)
     ///     .with_group_id("test")
     ///     .finish();
     /// ```
     /// ```compile_fail
-    /// # use m3u8::tag::hls::Media;
+    /// # use quick_m3u8::tag::hls::Media;
     /// let media = Media::builder()
     ///     .name("test")
     ///     .with_group_id("test")
@@ -1128,8 +1128,8 @@ impl<'a> Media<'a> {
     /// Note that the convenience [`crate::tag::hls::GetKnown`] trait exists to make accessing the
     /// known case easier:
     /// ```
-    /// # use m3u8::tag::hls::{Media, MediaType, InstreamId, Cea608InstreamId};
-    /// use m3u8::tag::hls::GetKnown;
+    /// # use quick_m3u8::tag::hls::{Media, MediaType, InstreamId, Cea608InstreamId};
+    /// use quick_m3u8::tag::hls::GetKnown;
     ///
     /// let tag = Media::builder()
     ///     .with_media_type(MediaType::ClosedCaptions)
@@ -1204,11 +1204,11 @@ impl<'a> Media<'a> {
     /// would be the case with a `Vec` or `HashSet`) so is relatively little cost over using the
     /// `&str` directly but provides convenience types and methods. For example:
     /// ```
-    /// # use m3u8::{Reader, HlsLine, config::ParsingOptions, tag::{known, hls}};
-    /// # use m3u8::tag::hls::{Media, ChannelSpecialUsageIdentifier};
+    /// # use quick_m3u8::{Reader, HlsLine, config::ParsingOptions, tag::{known, hls}};
+    /// # use quick_m3u8::tag::hls::{Media, ChannelSpecialUsageIdentifier};
     /// // NOTE: This trait needs to be in scope to use the convenience `valid` method that the
     /// // library defines on `Option<Channels>` to get to `Option<ValidChannels>`.
-    /// use m3u8::tag::hls::GetValid;
+    /// use quick_m3u8::tag::hls::GetValid;
     ///
     /// let tag = r#"#EXT-X-MEDIA:TYPE=AUDIO,NAME="a",GROUP-ID="a",CHANNELS="6/-/DOWNMIX,BED-4""#;
     /// let mut reader = Reader::from_str(tag, ParsingOptions::default());
@@ -1420,7 +1420,8 @@ impl<'a> Media<'a> {
     /// Given that `ValidChannels` implements `Into<Cow<str>>` it is possible to work with
     /// `ValidChannels` directly here. For example:
     /// ```
-    /// # use m3u8::tag::hls::{Media, EnumeratedStringList, AudioCodingIdentifier, ValidChannels,
+    /// # use quick_m3u8::tag::hls::{Media, EnumeratedStringList, AudioCodingIdentifier,
+    /// # ValidChannels,
     /// # GetValid};
     /// # let mut media = Media::builder()
     /// #     .with_media_type("u")
@@ -1440,8 +1441,8 @@ impl<'a> Media<'a> {
     /// It is also possible to set with a `&str` directly, but care should be taken to ensure the
     /// correct syntax is followed:
     /// ```
-    /// # use m3u8::tag::hls::{Media, EnumeratedStringList, AudioCodingIdentifier, ValidChannels,
-    /// # ChannelSpecialUsageIdentifier, GetValid};
+    /// # use quick_m3u8::tag::hls::{Media, EnumeratedStringList, AudioCodingIdentifier,
+    /// # ValidChannels, ChannelSpecialUsageIdentifier, GetValid};
     /// # let mut media = Media::builder()
     /// #     .with_media_type("u")
     /// #     .with_name("n")
@@ -1463,8 +1464,8 @@ impl<'a> Media<'a> {
     /// an existing value. Note, `to_owned` will need to be used on each of the string lists if
     /// setting back on the tag:
     /// ```
-    /// # use m3u8::{Reader, HlsLine, config::ParsingOptions, tag::{known, hls}};
-    /// # use m3u8::tag::hls::{Media, AudioCodingIdentifier, ChannelSpecialUsageIdentifier,
+    /// # use quick_m3u8::{Reader, HlsLine, config::ParsingOptions, tag::{known, hls}};
+    /// # use quick_m3u8::tag::hls::{Media, AudioCodingIdentifier, ChannelSpecialUsageIdentifier,
     /// # ValidChannels, GetValid};
     /// let tag = r#"#EXT-X-MEDIA:TYPE=AUDIO,NAME="a",GROUP-ID="a",CHANNELS="6/-/DOWNMIX,BED-4""#;
     /// let mut reader = Reader::from_str(tag, ParsingOptions::default());

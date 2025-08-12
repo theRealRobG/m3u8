@@ -33,7 +33,7 @@ use std::{borrow::Cow, collections::HashMap, fmt::Display};
 /// comment only. Despite this, if we split on the `:`, we can use this struct to extract
 /// information about the value.
 /// ```
-/// # use m3u8::{
+/// # use quick_m3u8::{
 /// #     HlsLine, Reader,
 /// #     config::ParsingOptions,
 /// #     date, date_time,
@@ -92,7 +92,7 @@ impl<'a> TagValue<'a> {
     ///
     /// For example:
     /// ```
-    /// let tag = m3u8::tag::unknown::parse("#EXT-X-EXAMPLE:100")?.parsed;
+    /// let tag = quick_m3u8::tag::unknown::parse("#EXT-X-EXAMPLE:100")?.parsed;
     /// let value = tag.value().expect("should have value defined");
     /// assert_eq!(100, value.try_as_decimal_integer()?);
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -105,7 +105,7 @@ impl<'a> TagValue<'a> {
     ///
     /// For example:
     /// ```
-    /// let tag = m3u8::tag::unknown::parse("#EXT-X-EXAMPLE:1024@512")?.parsed;
+    /// let tag = quick_m3u8::tag::unknown::parse("#EXT-X-EXAMPLE:1024@512")?.parsed;
     /// let value = tag.value().expect("should have value defined");
     /// assert_eq!((1024, Some(512)), value.try_as_decimal_integer_range()?);
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -131,8 +131,8 @@ impl<'a> TagValue<'a> {
     ///
     /// For example:
     /// ```
-    /// # use m3u8::tag::value::HlsPlaylistType;
-    /// let tag = m3u8::tag::unknown::parse("#EXT-X-EXAMPLE:VOD")?.parsed;
+    /// # use quick_m3u8::tag::value::HlsPlaylistType;
+    /// let tag = quick_m3u8::tag::unknown::parse("#EXT-X-EXAMPLE:VOD")?.parsed;
     /// let value = tag.value().expect("should have value defined");
     /// assert_eq!(HlsPlaylistType::Vod, value.try_as_playlist_type()?);
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -151,7 +151,7 @@ impl<'a> TagValue<'a> {
     ///
     /// For example:
     /// ```
-    /// let tag = m3u8::tag::unknown::parse("#EXT-X-EXAMPLE:3.14")?.parsed;
+    /// let tag = quick_m3u8::tag::unknown::parse("#EXT-X-EXAMPLE:3.14")?.parsed;
     /// let value = tag.value().expect("should have value defined");
     /// assert_eq!(3.14, value.try_as_decimal_floating_point()?);
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -164,7 +164,7 @@ impl<'a> TagValue<'a> {
     ///
     /// For example:
     /// ```
-    /// let tag = m3u8::tag::unknown::parse("#EXT-X-EXAMPLE:3.14,pi")?.parsed;
+    /// let tag = quick_m3u8::tag::unknown::parse("#EXT-X-EXAMPLE:3.14,pi")?.parsed;
     /// let value = tag.value().expect("should have value defined");
     /// assert_eq!((3.14, "pi"), value.try_as_decimal_floating_point_with_title()?);
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -189,8 +189,10 @@ impl<'a> TagValue<'a> {
     ///
     /// For example:
     /// ```
-    /// # use m3u8::date_time;
-    /// let tag = m3u8::tag::unknown::parse("#EXT-X-EXAMPLE:2025-08-10T17:27:42.213-05:00")?.parsed;
+    /// # use quick_m3u8::date_time;
+    /// let tag = quick_m3u8::tag::unknown::parse(
+    ///     "#EXT-X-EXAMPLE:2025-08-10T17:27:42.213-05:00"
+    /// )?.parsed;
     /// let value = tag.value().expect("should have value defined");
     /// assert_eq!(date_time!(2025-08-10 T 17:27:42.213 -05:00), value.try_as_date_time()?);
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -204,8 +206,10 @@ impl<'a> TagValue<'a> {
     /// For example:
     /// ```
     /// # use std::collections::HashMap;
-    /// # use m3u8::tag::value::{AttributeValue, UnquotedAttributeValue};
-    /// let tag = m3u8::tag::unknown::parse("#EXT-X-EXAMPLE:TYPE=LIST,VALUE=\"example\"")?.parsed;
+    /// # use quick_m3u8::tag::value::{AttributeValue, UnquotedAttributeValue};
+    /// let tag = quick_m3u8::tag::unknown::parse(
+    ///     "#EXT-X-EXAMPLE:TYPE=LIST,VALUE=\"example\""
+    /// )?.parsed;
     /// let value = tag.value().expect("should have value defined");
     /// assert_eq!(
     ///     HashMap::from([
@@ -349,7 +353,7 @@ impl<'a> AttributeValue<'a> {
     /// This can be useful when chaining on optional values. For example:
     /// ```
     /// # use std::collections::HashMap;
-    /// # use m3u8::tag::value::AttributeValue;
+    /// # use quick_m3u8::tag::value::AttributeValue;
     /// fn get_bandwidth(list: &HashMap<&str, AttributeValue>) -> Option<u64> {
     ///     list
     ///         .get("BANDWIDTH")
@@ -368,7 +372,7 @@ impl<'a> AttributeValue<'a> {
     /// This can be useful when chaining on optional values. For example:
     /// ```
     /// # use std::collections::HashMap;
-    /// # use m3u8::tag::value::AttributeValue;
+    /// # use quick_m3u8::tag::value::AttributeValue;
     /// fn get_codecs<'a>(list: &HashMap<&'a str, AttributeValue<'a>>) -> Option<&'a str> {
     ///     list
     ///         .get("CODECS")
@@ -391,8 +395,8 @@ impl<'a> AttributeValue<'a> {
 /// example:
 /// ```
 /// # use std::collections::HashMap;
-/// # use m3u8::tag::value::{AttributeValue, UnquotedAttributeValue};
-/// let tag = m3u8::tag::unknown::parse("#EXT-X-EXAMPLE:TYPE=PI,NUMBER=3.14")?.parsed;
+/// # use quick_m3u8::tag::value::{AttributeValue, UnquotedAttributeValue};
+/// let tag = quick_m3u8::tag::unknown::parse("#EXT-X-EXAMPLE:TYPE=PI,NUMBER=3.14")?.parsed;
 /// let value = tag.value().expect("should have value defined");
 /// let list = value.try_as_attribute_list()?;
 ///
@@ -418,8 +422,8 @@ impl<'a> UnquotedAttributeValue<'a> {
     ///
     /// For example:
     /// ```
-    /// # use m3u8::tag::value::AttributeValue;
-    /// let tag = m3u8::tag::unknown::parse("#EXT-X-TEST:EXAMPLE=42")?.parsed;
+    /// # use quick_m3u8::tag::value::AttributeValue;
+    /// let tag = quick_m3u8::tag::unknown::parse("#EXT-X-TEST:EXAMPLE=42")?.parsed;
     /// let list = tag.value().expect("should have value defined").try_as_attribute_list()?;
     /// assert_eq!(
     ///     Some(42),
@@ -438,8 +442,8 @@ impl<'a> UnquotedAttributeValue<'a> {
     ///
     /// For example:
     /// ```
-    /// # use m3u8::tag::value::AttributeValue;
-    /// let tag = m3u8::tag::unknown::parse("#EXT-X-TEST:EXAMPLE=3.14")?.parsed;
+    /// # use quick_m3u8::tag::value::AttributeValue;
+    /// let tag = quick_m3u8::tag::unknown::parse("#EXT-X-TEST:EXAMPLE=3.14")?.parsed;
     /// let list = tag.value().expect("should have value defined").try_as_attribute_list()?;
     /// assert_eq!(
     ///     Some(3.14),
@@ -458,8 +462,8 @@ impl<'a> UnquotedAttributeValue<'a> {
     ///
     /// For example:
     /// ```
-    /// # use m3u8::tag::value::{AttributeValue, DecimalResolution};
-    /// let tag = m3u8::tag::unknown::parse("#EXT-X-TEST:EXAMPLE=1920x1080")?.parsed;
+    /// # use quick_m3u8::tag::value::{AttributeValue, DecimalResolution};
+    /// let tag = quick_m3u8::tag::unknown::parse("#EXT-X-TEST:EXAMPLE=1920x1080")?.parsed;
     /// let list = tag.value().expect("should have value defined").try_as_attribute_list()?;
     /// assert_eq!(
     ///     Some(DecimalResolution { width: 1920, height: 1080 }),
@@ -488,8 +492,8 @@ impl<'a> UnquotedAttributeValue<'a> {
     ///
     /// For example:
     /// ```
-    /// # use m3u8::tag::value::AttributeValue;
-    /// let tag = m3u8::tag::unknown::parse("#EXT-X-TEST:EXAMPLE=ENUMERATED-VALUE")?.parsed;
+    /// # use quick_m3u8::tag::value::AttributeValue;
+    /// let tag = quick_m3u8::tag::unknown::parse("#EXT-X-TEST:EXAMPLE=ENUMERATED-VALUE")?.parsed;
     /// let list = tag.value().expect("should have value defined").try_as_attribute_list()?;
     /// assert_eq!(
     ///     Some("ENUMERATED-VALUE"),

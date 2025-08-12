@@ -27,7 +27,7 @@ use std::fmt::Debug;
 ///
 /// For example:
 /// ```
-/// # use m3u8::{Reader, HlsLine, config::ParsingOptionsBuilder, error::ValidationError,
+/// # use quick_m3u8::{Reader, HlsLine, config::ParsingOptionsBuilder, error::ValidationError,
 /// # tag::value::TagValue};
 /// let lines = r#"#EXT-X-QUESTION:VALUE="Do you know who I am?"
 /// #EXT-X-PROGRAM-DATE-TIME:2025-08-05T21:59:42.417-05:00

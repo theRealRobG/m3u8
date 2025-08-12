@@ -1,5 +1,5 @@
 use criterion::{Criterion, criterion_group, criterion_main};
-use m3u8::{
+use quick_m3u8::{
     Reader, Writer,
     config::ParsingOptionsBuilder,
     line::{self, HlsLine},

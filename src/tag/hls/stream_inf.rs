@@ -249,7 +249,7 @@ impl<'a> VideoLayout<'a> {
     /// Note that `VideoChannelSpecifier` and `VideoProjectionSpecifier` can be used directly here.
     /// For example:
     /// ```
-    /// # use m3u8::tag::hls::{VideoLayout, VideoChannelSpecifier, VideoProjectionSpecifier,
+    /// # use quick_m3u8::tag::hls::{VideoLayout, VideoChannelSpecifier, VideoProjectionSpecifier,
     /// # EnumeratedStringList};
     /// let video_layout = VideoLayout::new(
     ///     EnumeratedStringList::from([
@@ -262,14 +262,14 @@ impl<'a> VideoLayout<'a> {
     /// Since `&str` implements `Into<EnumeratedStringList>` we can also use string slice directly,
     /// but care should be taken to follow the correct format:
     /// ```
-    /// # use m3u8::tag::hls::VideoLayout;
+    /// # use quick_m3u8::tag::hls::VideoLayout;
     /// let video_layout = VideoLayout::new("CH-STEREO,CH-MONO", "PROJ-PRIM");
     /// assert_eq!("CH-STEREO,CH-MONO/PROJ-PRIM", video_layout.as_ref());
     /// ```
     /// The `From<&str>` implementation ensures that the order of specifiers does not impact the
     /// parsed value:
     /// ```
-    /// # use m3u8::tag::hls::{VideoLayout, VideoChannelSpecifier, VideoProjectionSpecifier};
+    /// # use quick_m3u8::tag::hls::{VideoLayout, VideoChannelSpecifier, VideoProjectionSpecifier};
     /// let layout_1 = VideoLayout::from("CH-STEREO,CH-MONO/PROJ-PRIM");
     /// let layout_2 = VideoLayout::from("PROJ-PRIM/CH-STEREO,CH-MONO");
     /// assert_eq!(layout_1.channels(), layout_2.channels());
@@ -308,7 +308,7 @@ impl VideoLayout<'_> {
     ///
     /// Example:
     /// ```
-    /// # use m3u8::tag::hls::{VideoLayout, VideoChannelSpecifier};
+    /// # use quick_m3u8::tag::hls::{VideoLayout, VideoChannelSpecifier};
     /// let video_layout = VideoLayout::new("CH-STEREO,CH-MONO", "");
     /// assert_eq!(2, video_layout.channels().iter().count());
     /// assert!(video_layout.channels().contains(VideoChannelSpecifier::Stereo));
@@ -317,7 +317,7 @@ impl VideoLayout<'_> {
     /// ```
     /// Example with unknown specifier:
     /// ```
-    /// # use m3u8::tag::hls::{VideoLayout, VideoChannelSpecifier};
+    /// # use quick_m3u8::tag::hls::{VideoLayout, VideoChannelSpecifier};
     /// let video_layout = VideoLayout::new("CH-3D", "");
     /// assert_eq!(1, video_layout.channels().iter().count());
     /// assert!(video_layout.channels().contains("CH-3D"));
@@ -343,7 +343,7 @@ impl VideoLayout<'_> {
     ///
     /// Example:
     /// ```
-    /// # use m3u8::tag::hls::{VideoLayout, VideoProjectionSpecifier};
+    /// # use quick_m3u8::tag::hls::{VideoLayout, VideoProjectionSpecifier};
     /// let video_layout = VideoLayout::new("", "PROJ-EQUI,PROJ-HEQU");
     /// assert_eq!(2, video_layout.projection().iter().count());
     /// assert!(video_layout.projection().contains(VideoProjectionSpecifier::Equirectangular));
@@ -352,7 +352,7 @@ impl VideoLayout<'_> {
     /// ```
     /// Example with unknown specifier:
     /// ```
-    /// # use m3u8::tag::hls::{VideoLayout};
+    /// # use quick_m3u8::tag::hls::{VideoLayout};
     /// let video_layout = VideoLayout::new("", "PROJ-360");
     /// assert_eq!(1, video_layout.projection().iter().count());
     /// assert!(video_layout.projection().contains("PROJ-360"));
@@ -374,7 +374,7 @@ impl VideoLayout<'_> {
     ///
     /// For example:
     /// ```
-    /// # use m3u8::tag::hls::VideoLayout;
+    /// # use quick_m3u8::tag::hls::VideoLayout;
     /// let video_layout = VideoLayout::from("CH-STEREO/NEURAL-INJECT/PROJ-PRIM");
     /// let mut unknown = video_layout.unknown_entries();
     /// assert_eq!(Some("NEURAL-INJECT"), unknown.next());
@@ -583,13 +583,13 @@ impl<'a, BandwidthStatus> StreamInfBuilder<'a, BandwidthStatus> {
     /// Note that [`HdcpLevel`] implements `Into<Cow<str>>` and therefore can be used directly here.
     /// For example:
     /// ```
-    /// # use m3u8::tag::hls::{StreamInfBuilder, HdcpLevel};
+    /// # use quick_m3u8::tag::hls::{StreamInfBuilder, HdcpLevel};
     /// let builder = StreamInfBuilder::new()
     ///     .with_hdcp_level(HdcpLevel::Type1);
     /// ```
     /// Alternatively, a string slice can be used:
     /// ```
-    /// # use m3u8::tag::hls::{StreamInfBuilder, HdcpLevel};
+    /// # use quick_m3u8::tag::hls::{StreamInfBuilder, HdcpLevel};
     /// let builder = StreamInfBuilder::new()
     ///     .with_hdcp_level("TYPE-1");
     /// ```
@@ -607,13 +607,13 @@ impl<'a, BandwidthStatus> StreamInfBuilder<'a, BandwidthStatus> {
     /// Note that [`VideoRange`] implements `Into<Cow<str>>` and therefore can be used directly
     /// here. For example:
     /// ```
-    /// # use m3u8::tag::hls::{StreamInfBuilder, VideoRange};
+    /// # use quick_m3u8::tag::hls::{StreamInfBuilder, VideoRange};
     /// let builder = StreamInfBuilder::new()
     ///     .with_video_range(VideoRange::Pq);
     /// ```
     /// Alternatively, a string slice can be used:
     /// ```
-    /// # use m3u8::tag::hls::{StreamInfBuilder, VideoRange};
+    /// # use quick_m3u8::tag::hls::{StreamInfBuilder, VideoRange};
     /// let builder = StreamInfBuilder::new()
     ///     .with_video_range("PQ");
     /// ```
@@ -626,7 +626,7 @@ impl<'a, BandwidthStatus> StreamInfBuilder<'a, BandwidthStatus> {
     /// Note that [`VideoLayout`] implements `Into<Cow<str>>` and therefore can be used directly
     /// here. For example:
     /// ```
-    /// # use m3u8::tag::hls::{
+    /// # use quick_m3u8::tag::hls::{
     /// # StreamInfBuilder, VideoLayout, EnumeratedStringList, VideoChannelSpecifier,
     /// # VideoProjectionSpecifier
     /// # };
@@ -639,7 +639,7 @@ impl<'a, BandwidthStatus> StreamInfBuilder<'a, BandwidthStatus> {
     /// Alternatively, a string slice can be used, but care should be taken to follow the correct
     /// syntax defined for `REQ-VIDEO-LAYOUT`.
     /// ```
-    /// # use m3u8::tag::hls::{
+    /// # use quick_m3u8::tag::hls::{
     /// # StreamInfBuilder, VideoLayout, EnumeratedStringList, VideoChannelSpecifier,
     /// # VideoProjectionSpecifier
     /// # };
@@ -827,7 +827,7 @@ impl<'a> StreamInf<'a> {
     ///
     /// For example, we could construct a `StreamInf` as such:
     /// ```
-    /// # use m3u8::tag::{value::DecimalResolution, hls::{StreamInf, HdcpLevel, VideoRange}};
+    /// # use quick_m3u8::tag::{value::DecimalResolution, hls::{StreamInf, HdcpLevel, VideoRange}};
     /// let stream_inf = StreamInf::builder()
     ///     .with_bandwidth(10000000)
     ///     .with_codecs("hvc1.2.4.L153.b0")
@@ -840,7 +840,7 @@ impl<'a> StreamInf<'a> {
     /// Note that the `finish` method is only callable if the builder has set `bandwidth`. The
     /// following fails to compile:
     /// ```compile_fail
-    /// # use m3u8::tag::hls::StreamInf;
+    /// # use quick_m3u8::tag::hls::StreamInf;
     /// let stream_inf = StreamInf::builder().finish();
     /// ```
     pub fn builder() -> StreamInfBuilder<'a, StreamInfBandwidthNeedsToBeSet> {
@@ -943,8 +943,8 @@ impl<'a> StreamInf<'a> {
     /// Note that the convenience [`crate::tag::hls::GetKnown`] trait exists to make accessing the
     /// known case easier:
     /// ```
-    /// # use m3u8::tag::hls::{StreamInf, HdcpLevel};
-    /// use m3u8::tag::hls::GetKnown;
+    /// # use quick_m3u8::tag::hls::{StreamInf, HdcpLevel};
+    /// use quick_m3u8::tag::hls::GetKnown;
     ///
     /// let tag = StreamInf::builder()
     ///     .with_bandwidth(10000000)
@@ -984,8 +984,8 @@ impl<'a> StreamInf<'a> {
     /// Note that the convenience [`crate::tag::hls::GetKnown`] trait exists to make accessing the
     /// known case easier:
     /// ```
-    /// # use m3u8::tag::hls::{StreamInf, VideoRange};
-    /// use m3u8::tag::hls::GetKnown;
+    /// # use quick_m3u8::tag::hls::{StreamInf, VideoRange};
+    /// use quick_m3u8::tag::hls::GetKnown;
     ///
     /// let tag = StreamInf::builder()
     ///     .with_bandwidth(10000000)
@@ -1016,8 +1016,8 @@ impl<'a> StreamInf<'a> {
     /// would be the case with a `Vec` or `HashSet`) so is relatively little cost over using the
     /// `&str` directly but provides convenience types and methods. For example:
     /// ```
-    /// # use m3u8::{Reader, HlsLine, config::ParsingOptions, tag::{known, hls}};
-    /// # use m3u8::tag::hls::{StreamInf, VideoChannelSpecifier, VideoProjectionSpecifier};
+    /// # use quick_m3u8::{Reader, HlsLine, config::ParsingOptions, tag::{known, hls}};
+    /// # use quick_m3u8::tag::hls::{StreamInf, VideoChannelSpecifier, VideoProjectionSpecifier};
     /// let tag = r#"#EXT-X-STREAM-INF:BANDWIDTH=10000000,REQ-VIDEO-LAYOUT="PROJ-PRIM/CH-STEREO""#;
     /// let mut reader = Reader::from_str(tag, ParsingOptions::default());
     /// match reader.read_line() {
@@ -1308,7 +1308,8 @@ impl<'a> StreamInf<'a> {
     /// Given that `VideoLayout` implements `Into<Cow<str>>` it is possible to work with
     /// `VideoLayout` directly here. For example:
     /// ```
-    /// # use m3u8::tag::hls::{StreamInf, EnumeratedStringList, VideoChannelSpecifier, VideoLayout};
+    /// # use quick_m3u8::tag::hls::{StreamInf, EnumeratedStringList, VideoChannelSpecifier,
+    /// # VideoLayout};
     /// # let mut stream_inf = StreamInf::builder().with_bandwidth(10000000).finish();
     /// stream_inf.set_req_video_layout(VideoLayout::new(
     ///     EnumeratedStringList::from([
@@ -1324,8 +1325,8 @@ impl<'a> StreamInf<'a> {
     /// It is also possible to set with a `&str` directly, but care should be taken to ensure the
     /// correct syntax is followed:
     /// ```
-    /// # use m3u8::tag::hls::{StreamInf, EnumeratedStringList, VideoChannelSpecifier, VideoLayout,
-    /// # VideoProjectionSpecifier};
+    /// # use quick_m3u8::tag::hls::{StreamInf, EnumeratedStringList, VideoChannelSpecifier,
+    /// # VideoLayout, VideoProjectionSpecifier};
     /// # let mut stream_inf = StreamInf::builder().with_bandwidth(10000000).finish();
     /// stream_inf.set_req_video_layout("CH-STEREO,CH-MONO/PROJ-HEQU");
     /// let video_layout = stream_inf.req_video_layout().expect("should be defined");
@@ -1339,8 +1340,8 @@ impl<'a> StreamInf<'a> {
     /// an existing value. Note, `to_owned` will need to be used on each of the string lists if
     /// setting back on the tag:
     /// ```
-    /// # use m3u8::{Reader, HlsLine, config::ParsingOptions, tag::{known, hls}};
-    /// # use m3u8::tag::hls::{StreamInf, VideoChannelSpecifier, VideoProjectionSpecifier,
+    /// # use quick_m3u8::{Reader, HlsLine, config::ParsingOptions, tag::{known, hls}};
+    /// # use quick_m3u8::tag::hls::{StreamInf, VideoChannelSpecifier, VideoProjectionSpecifier,
     /// # VideoLayout};
     /// let tag = r#"#EXT-X-STREAM-INF:BANDWIDTH=10000000,REQ-VIDEO-LAYOUT="PROJ-PRIM/CH-STEREO""#;
     /// let mut reader = Reader::from_str(tag, ParsingOptions::default());

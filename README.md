@@ -1,11 +1,11 @@
-# M3U8
+# quick-m3u8
 
 ## Basic usage
 
 `m3u8` provides a `Reader` that can be used to extract HLS lines from an input string slice. An
 example is provided below:
 ```rust
-use m3u8::{
+use quick_m3u8::{
     config::ParsingOptionsBuilder,
     line::HlsLine,
     tag::hls::{ Endlist, Inf, M3u, Targetduration, Version },
@@ -50,7 +50,7 @@ The above example demonstrates that a `HlsLine` is an with several potential cas
 
 The `HlsLine` in `m3u8` is defined as such:
 ```rust
-use m3u8::tag::{
+use quick_m3u8::tag::{
     known::{self, CustomTag, NoCustomTag},
     unknown,
 };
@@ -125,7 +125,7 @@ We can demonstrate the usage of `CustomTag` by implementing it for the custom im
 definition found on the Roku developer website here:
 https://developer.roku.com/docs/developer-program/media-playback/trick-mode/hls-and-dash.md
 ```rust
-use m3u8::{
+use quick_m3u8::{
     Reader,
     config::ParsingOptions,
     error::{ParseAttributeValueError, ParseTagValueError, ValidationError},
@@ -169,7 +169,7 @@ impl CustomTag<'_> for CustomImageTag {
         }
     }
 }
-// This is used by the m3u8::Writer to handle writing of custom tag implementations.
+// This is used by the quick_m3u8::Writer to handle writing of custom tag implementations.
 impl<'a> WritableCustomTag<'a> for CustomImageTag {
     fn into_writable_tag(self) -> known::WritableTag<'a> {
         match self {
@@ -325,7 +325,7 @@ content).
 Below is an example demonstrating the flexibility as applied to the `VideoRange` enumerated string
 on the `EXT-X-STREAM-INF` tag:
 ```rust
-use m3u8::{
+use quick_m3u8::{
     Reader,
     config::ParsingOptionsBuilder,
     line::HlsLine,
@@ -398,7 +398,7 @@ the link from the tag).
 Below is an example demonstrating the flexibility as applied to the `Cue` enumerated string list on
 the `EXT-X-DATERANGE` tag:
 ```rust
-use m3u8::{
+use quick_m3u8::{
     Reader,
     config::ParsingOptionsBuilder,
     line::HlsLine,
@@ -468,7 +468,7 @@ each of these are built on top of what has been discussed above for `EnumeratedS
 
 Below is a demonstration of the features that each wrapping type provides:
 ```rust
-use m3u8::{
+use quick_m3u8::{
     Reader,
     config::ParsingOptionsBuilder,
     line::HlsLine,
@@ -596,14 +596,14 @@ to parse fully into `m3u8::tag::hls::Tag` instances. For example, if information
 only `EXTINF` tags are desired, then the user can specify the parsing options using the
 `ParsingOptionsBuilder` as
 ```rust
-use m3u8::config::ParsingOptionsBuilder;
+use quick_m3u8::config::ParsingOptionsBuilder;
 // Parse only EXTINF
 ParsingOptionsBuilder::new().with_parsing_for_inf().build();
 ```
 Alternatively, if most tags are desired, but a few tags can be ignored, then the user can set all
 tags for parsing and remove the undesired tags as such:
 ```rust
-use m3u8::config::ParsingOptionsBuilder;
+use quick_m3u8::config::ParsingOptionsBuilder;
 // Parse everything except from EXT-X-BITRATE and EXT-X-PROGRAM-DATE-TIME
 ParsingOptionsBuilder::new()
     .with_parsing_for_all_tags()
@@ -629,7 +629,7 @@ Some basic validation can still be done on `m3u8::tag::unknown::Tag`. For exampl
 converted to a `m3u8::tag::hls::TagName` and then you can check the `TagType` for some
 generic reasoning on the tag position/semantics without parsing the values:
 ```rust
-use m3u8::{
+use quick_m3u8::{
     error::ValidationError,
     tag::{
         hls::{TagName, TagType},
@@ -659,7 +659,7 @@ into `Tag::try_from`.
 The library provides a `Writer` to write parsed tags back into data. For example, this can be used
 to parse a playlist, mutate the data, then write back the changed tags. Below is a toy example:
 ```rust
-use m3u8::{
+use quick_m3u8::{
     config::ParsingOptions,
     line::HlsLine,
     tag::{hls, known},

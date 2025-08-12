@@ -146,7 +146,7 @@ impl<'a> ContentSteering<'a> {
     ///
     /// For example, we could construct a `ContentSteering` as such:
     /// ```
-    /// # use m3u8::tag::hls::ContentSteering;
+    /// # use quick_m3u8::tag::hls::ContentSteering;
     /// let content_steering = ContentSteering::builder()
     ///     .with_server_uri("https://example.com/steering.json")
     ///     .with_pathway_id("1234")
@@ -155,7 +155,7 @@ impl<'a> ContentSteering<'a> {
     /// Note that the `finish` method is only callable if the builder has set `server_uri`. The
     /// following fail to compile:
     /// ```compile_fail
-    /// # use m3u8::tag::hls::ContentSteering;
+    /// # use quick_m3u8::tag::hls::ContentSteering;
     /// let content_steering = ContentSteering::builder().finish();
     /// ```
     pub fn builder() -> ContentSteeringBuilder<'a, ContentSteeringServerUriNeedsToBeSet> {

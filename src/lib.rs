@@ -72,7 +72,7 @@
 //! ```
 //! We can use the Reader to read information about each line in the playlist as such:
 //! ```
-//! # use m3u8::{
+//! # use quick_m3u8::{
 //! #     config::ParsingOptionsBuilder,
 //! #     line::HlsLine,
 //! #     tag::hls::{ Endlist, Inf, M3u, Targetduration, Version },
@@ -136,7 +136,7 @@
 //! in a proxy layer. Below is a toy example; however, the repo benchmark demonstrates a more
 //! complex example of how one may implement a HLS delta update (acting as a proxy layer).
 //! ```
-//! # use m3u8::{
+//! # use quick_m3u8::{
 //! #     config::ParsingOptions,
 //! #     line::HlsLine,
 //! #     tag::{hls, known},

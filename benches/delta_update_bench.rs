@@ -1,6 +1,8 @@
 use criterion::{Criterion, criterion_group, criterion_main};
 use hls_m3u8::MediaPlaylist;
-use m3u8::{
+use m3u8_rs::{ExtTag, parse_media_playlist_res};
+use pretty_assertions::assert_eq;
+use quick_m3u8::{
     Reader, Writer,
     config::ParsingOptionsBuilder,
     line::HlsLine,
@@ -9,8 +11,6 @@ use m3u8::{
         known,
     },
 };
-use m3u8_rs::{ExtTag, parse_media_playlist_res};
-use pretty_assertions::assert_eq;
 use std::{borrow::Cow, error::Error, hint::black_box, io::Write};
 
 const LONG_MEDIA_PLAYLIST: &str = include_str!("long_media_playlist.m3u8");
@@ -188,7 +188,7 @@ fn make_delta_update<W: Write>(input: &[u8], output: &mut W) -> Result<(), Box<d
         .build();
     let mut reader = Reader::from_bytes(input, parsing_options);
 
-    // Wrap the output in a m3u8::Writer to make writing HLS lines easier.
+    // Wrap the output in a quick_m3u8::Writer to make writing HLS lines easier.
     let mut writer = Writer::new(output);
 
     // Here we initialize some state variables to help with the delta update.
