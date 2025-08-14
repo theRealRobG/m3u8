@@ -7,6 +7,7 @@ use crate::{
     },
     utils::AsStaticCow,
 };
+use memchr::{memchr, memmem};
 use std::{borrow::Cow, collections::HashMap, fmt::Display, marker::PhantomData};
 
 /// Corresponds to the `#EXT-X-STREAM-INF:HDCP-LEVEL` attribute.
@@ -224,7 +225,7 @@ const PROJ_EQUI: &str = "PROJ-EQUI";
 const PROJ_HEQU: &str = "PROJ-HEQU";
 const PROJ_PRIM: &str = "PROJ-PRIM";
 
-/// Corresponds to the `#EXT-X-REQ-VIDEO-LAYOUT` attribute.
+/// Corresponds to the `#EXT-X-STREAM-INF:REQ-VIDEO-LAYOUT` attribute.
 ///
 /// See [`StreamInf`] for a link to the HLS documentation for this attribute.
 ///
@@ -405,6 +406,489 @@ impl AsRef<str> for VideoLayout<'_> {
 impl<'a> From<VideoLayout<'a>> for Cow<'a, str> {
     fn from(value: VideoLayout<'a>) -> Self {
         value.inner
+    }
+}
+
+/// Corresponds to `#EXT-X-STREAM-INF:ALLOWED-CPC` values defined for FairPlay streaming.
+///
+/// See the [Apple HLS authoring specification for Apple devices] for more information.
+///
+/// [Apple HLS authoring specification for Apple devices]: https://developer.apple.com/documentation/http-live-streaming/hls-authoring-specification-for-apple-devices-appendixes#ALLOWED-CPC-values-for-FairPlay-Streaming
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum FairPlayCpcLabel {
+    /// Any Apple platform that supports FairPlay Streaming.
+    AppleBaseline,
+    /// Any Apple platform that supports FairPlay Streaming and guarantees enhanced content
+    /// protection robustness (sufficient for studio 4K/HDR playback).
+    AppleMain,
+    /// Any non-Apple platform that supports FairPlay Streaming. For example, any AirPlay 2-enabled
+    /// smart TV.
+    Baseline,
+    /// Any non-Apple platform that supports FairPlay Streaming and guarantees enhanced content
+    /// protection robustness (sufficient for studio 4K/HDR playback).
+    Main,
+}
+impl<'a> TryFrom<&'a str> for FairPlayCpcLabel {
+    type Error = UnrecognizedEnumerationError<'a>;
+    fn try_from(value: &'a str) -> Result<Self, Self::Error> {
+        match value {
+            APPLE_BASELINE => Ok(Self::AppleBaseline),
+            APPLE_MAIN => Ok(Self::AppleMain),
+            BASELINE => Ok(Self::Baseline),
+            MAIN => Ok(Self::Main),
+            _ => Err(UnrecognizedEnumerationError::new(value)),
+        }
+    }
+}
+impl Display for FairPlayCpcLabel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_cow())
+    }
+}
+impl AsStaticCow for FairPlayCpcLabel {
+    fn as_cow(&self) -> Cow<'static, str> {
+        match self {
+            Self::AppleBaseline => Cow::Borrowed(APPLE_BASELINE),
+            Self::AppleMain => Cow::Borrowed(APPLE_MAIN),
+            Self::Baseline => Cow::Borrowed(BASELINE),
+            Self::Main => Cow::Borrowed(MAIN),
+        }
+    }
+}
+impl From<FairPlayCpcLabel> for Cow<'_, str> {
+    fn from(value: FairPlayCpcLabel) -> Self {
+        value.as_cow()
+    }
+}
+impl From<FairPlayCpcLabel> for EnumeratedString<'_, FairPlayCpcLabel> {
+    fn from(value: FairPlayCpcLabel) -> Self {
+        Self::Known(value)
+    }
+}
+const APPLE_BASELINE: &str = "AppleBaseline";
+const APPLE_MAIN: &str = "AppleMain";
+const BASELINE: &str = "Baseline";
+const MAIN: &str = "Main";
+
+/// Corresponds to the `#EXT-X-STREAM-INF:ALLOWED-CPC` attribute.
+///
+/// See [`StreamInf`] for a link to the HLS documentation for this attribute.
+///
+/// The format described in HLS is a comma-separated list of `KEYFORMAT` to allowed Content
+/// Protection Configuration (CPC) labels (where `KEYFORMAT` is separated from the labels by `:`).
+/// Apple only defines the FairPlay keyformat which is identified by the string
+/// `"com.apple.streamingkeydelivery"`. That being said, `KEYFORMAT` (as defined within the text for
+/// the `EXT-X-KEY` tag) does not stipulate any limitations on what characters can be included in
+/// the identifier, therefore we cannot make a generic list of mappings (since the `KEYFORMAT`
+/// string could contain `,` or `/`, or `:`, indeed, the Widevine `KEYFORMAT` includes `:` as it is
+/// `urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed`). Due to this, the abstraction we offer requires
+/// the user to test against a known format they are checking against.
+///
+/// It is always possible to return back to working with strings directly by using the
+/// [`Self::as_ref`] method.
+#[derive(Debug, PartialEq, Clone)]
+pub struct AllowedCpc<'a> {
+    inner: Cow<'a, str>,
+}
+impl<'a> AllowedCpc<'a> {
+    /// The `KEYFORMAT` identifier for FairPlay DRM.
+    pub const fn fair_play_keyformat() -> &'static str {
+        "com.apple.streamingkeydelivery"
+    }
+
+    /// Provides an iterator over the `ALLOWED-CPC` values present for FairPlay streaming.
+    ///
+    /// For example
+    /// ```
+    /// # use quick_m3u8::tag::hls::{AllowedCpc, FairPlayCpcLabel, EnumeratedString};
+    /// let allowed_cpc = AllowedCpc::from("com.apple.streamingkeydelivery:AppleMain/Main");
+    /// let mut fair_play_allowed = allowed_cpc.allowed_cpc_for_fair_play();
+    /// assert_eq!(
+    ///     Some(EnumeratedString::Known(FairPlayCpcLabel::AppleMain)),
+    ///     fair_play_allowed.next()
+    /// );
+    /// assert_eq!(
+    ///     Some(EnumeratedString::Known(FairPlayCpcLabel::Main)),
+    ///     fair_play_allowed.next()
+    /// );
+    /// assert_eq!(None, fair_play_allowed.next());
+    /// ```
+    pub fn allowed_cpc_for_fair_play(
+        &self,
+    ) -> impl Iterator<Item = EnumeratedString<FairPlayCpcLabel>> {
+        self.allowed_cpc_for_keyformat(Self::fair_play_keyformat())
+            .map(EnumeratedString::from)
+    }
+
+    /// Inserts the provied FairPlay CPC label for the FairPlay `KEYFORMAT` entry.
+    ///
+    /// If there is no FairPlay `KEYFORMAT` entry, then this creates it with the provided value.
+    ///
+    /// For example, if entry exists:
+    /// ```
+    /// # use quick_m3u8::tag::hls::{AllowedCpc, FairPlayCpcLabel, EnumeratedString};
+    /// let mut allowed_cpc = AllowedCpc::from("com.apple.streamingkeydelivery:AppleMain");
+    /// allowed_cpc.insert_cpc_for_fair_play(FairPlayCpcLabel::Main);
+    /// assert_eq!("com.apple.streamingkeydelivery:AppleMain/Main", allowed_cpc.as_ref());
+    /// ```
+    /// For example, if entry does not exist:
+    /// ```
+    /// # use quick_m3u8::tag::hls::{AllowedCpc, FairPlayCpcLabel, EnumeratedString};
+    /// let mut allowed_cpc = AllowedCpc::from("com.example.drm1:SMART-TV/PC");
+    /// allowed_cpc.insert_cpc_for_fair_play(FairPlayCpcLabel::Main);
+    /// assert_eq!(
+    ///     "com.example.drm1:SMART-TV/PC,com.apple.streamingkeydelivery:Main",
+    ///     allowed_cpc.as_ref()
+    /// );
+    /// ```
+    ///
+    /// The value returns true if the insert was successful, and false otherwise.
+    /// ```
+    /// # use quick_m3u8::tag::hls::{AllowedCpc, FairPlayCpcLabel, EnumeratedString};
+    /// let mut allowed_cpc = AllowedCpc::from("com.apple.streamingkeydelivery:AppleMain");
+    /// assert_eq!(
+    ///     false,
+    ///     allowed_cpc.insert_cpc_for_fair_play(FairPlayCpcLabel::AppleMain),
+    ///     "AppleMain already exists and so the insert will return false"
+    /// );
+    /// assert_eq!(
+    ///     true,
+    ///     allowed_cpc.insert_cpc_for_fair_play(FairPlayCpcLabel::Main),
+    ///     "Main does not exist already and so the insert will return true"
+    /// );
+    /// ```
+    pub fn insert_cpc_for_fair_play(
+        &mut self,
+        cpc_label: impl Into<EnumeratedString<'a, FairPlayCpcLabel>>,
+    ) -> bool {
+        self.insert_cpc_for_keyformat(Self::fair_play_keyformat(), cpc_label.into().as_cow())
+    }
+
+    /// Removes the provied FairPlay CPC label from the FairPlay `KEYFORMAT` entry.
+    ///
+    /// If the label is the last for the FairPlay `KEYFORMAT` entry, then this removes the entry.
+    ///
+    /// For example, if not last label:
+    /// ```
+    /// # use quick_m3u8::tag::hls::{AllowedCpc, FairPlayCpcLabel, EnumeratedString};
+    /// let mut allowed_cpc = AllowedCpc::from("com.apple.streamingkeydelivery:AppleMain/Main");
+    /// allowed_cpc.remove_cpc_for_fair_play(FairPlayCpcLabel::Main);
+    /// assert_eq!("com.apple.streamingkeydelivery:AppleMain", allowed_cpc.as_ref());
+    /// ```
+    /// For example, if label is last:
+    /// ```
+    /// # use quick_m3u8::tag::hls::{AllowedCpc, FairPlayCpcLabel, EnumeratedString};
+    /// let mut allowed_cpc = AllowedCpc::from("com.apple.streamingkeydelivery:AppleMain");
+    /// allowed_cpc.remove_cpc_for_fair_play(FairPlayCpcLabel::AppleMain);
+    /// assert_eq!("", allowed_cpc.as_ref());
+    /// ```
+    ///
+    /// The value returns true if the remove was successful, and false otherwise.
+    /// ```
+    /// # use quick_m3u8::tag::hls::{AllowedCpc, FairPlayCpcLabel, EnumeratedString};
+    /// let mut allowed_cpc = AllowedCpc::from("com.apple.streamingkeydelivery:AppleMain");
+    /// assert_eq!(
+    ///     false,
+    ///     allowed_cpc.remove_cpc_for_fair_play(FairPlayCpcLabel::Main),
+    ///     "Main is not in the list of labels and so the remove will return false"
+    /// );
+    /// assert_eq!(
+    ///     true,
+    ///     allowed_cpc.remove_cpc_for_fair_play(FairPlayCpcLabel::AppleMain),
+    ///     "AppleMain is in the list of labels and so the remove will return true"
+    /// );
+    /// ```
+    pub fn remove_cpc_for_fair_play(
+        &mut self,
+        cpc_label: impl Into<EnumeratedString<'a, FairPlayCpcLabel>>,
+    ) -> bool {
+        self.remove_cpc_for_keyformat(Self::fair_play_keyformat(), cpc_label.into().as_cow())
+    }
+
+    /// Indicates whether the list of `KEYFORMAT` mappings is empty.
+    pub fn is_empty(&self) -> bool {
+        self.inner.is_empty()
+    }
+
+    /// Provides an iterator over the `ALLOWED-CPC` values present for the given `KEYFORMAT`.
+    ///
+    /// For example
+    /// ```
+    /// # use quick_m3u8::tag::hls::AllowedCpc;
+    /// let allowed_cpc = AllowedCpc::from("com.example.drm1:SMART-TV/PC");
+    /// let mut drm1_allowed = allowed_cpc.allowed_cpc_for_keyformat("com.example.drm1");
+    /// assert_eq!(Some("SMART-TV"), drm1_allowed.next());
+    /// assert_eq!(Some("PC"), drm1_allowed.next());
+    /// assert_eq!(None, drm1_allowed.next());
+    /// ```
+    pub fn allowed_cpc_for_keyformat(
+        &self,
+        keyformat: impl AsRef<str>,
+    ) -> impl Iterator<Item = &str> {
+        if let Some((start, end)) = self.keyformat_value_start_and_end_indices(keyformat) {
+            self.inner_value(start, end)
+        } else {
+            ""
+        }
+        .split_terminator('/')
+    }
+
+    /// Inserts the CPC label for the given `KEYFORMAT`.
+    ///
+    /// If there is no `KEYFORMAT` entry of the provided type, then this creates it with the
+    /// provided CPC value.
+    ///
+    /// For example, if entry exists:
+    /// ```
+    /// # use quick_m3u8::tag::hls::AllowedCpc;
+    /// let mut allowed_cpc = AllowedCpc::from("com.example.drm1:SMART-TV");
+    /// allowed_cpc.insert_cpc_for_keyformat("com.example.drm1", "PC");
+    /// assert_eq!("com.example.drm1:SMART-TV/PC", allowed_cpc.as_ref());
+    /// ```
+    /// For example, if entry does not exist:
+    /// ```
+    /// # use quick_m3u8::tag::hls::AllowedCpc;
+    /// let mut allowed_cpc = AllowedCpc::from("com.example.drm1:SMART-TV");
+    /// allowed_cpc.insert_cpc_for_keyformat("com.example.drm2", "HW");
+    /// assert_eq!("com.example.drm1:SMART-TV,com.example.drm2:HW", allowed_cpc.as_ref());
+    /// ```
+    ///
+    /// The value returns true if the insert was successful, and false otherwise.
+    /// ```
+    /// # use quick_m3u8::tag::hls::AllowedCpc;
+    /// let mut allowed_cpc = AllowedCpc::from("com.example.drm1:SMART-TV");
+    /// assert_eq!(
+    ///     false,
+    ///     allowed_cpc.insert_cpc_for_keyformat("com.example.drm1", "SMART-TV"),
+    ///     "SMART-TV already exists and so the insert will return false"
+    /// );
+    /// assert_eq!(
+    ///     true,
+    ///     allowed_cpc.insert_cpc_for_keyformat("com.example.drm1", "PC"),
+    ///     "PC does not exist already and so the insert will return true"
+    /// );
+    /// ```
+    pub fn insert_cpc_for_keyformat(
+        &mut self,
+        keyformat: impl AsRef<str>,
+        cpc_label: impl AsRef<str>,
+    ) -> bool {
+        if let Some((start, end)) = self.keyformat_value_start_and_end_indices(&keyformat) {
+            let value = self.inner_value(start, end);
+            if value
+                .split_terminator('/')
+                .find(|c| *c == cpc_label.as_ref())
+                .is_some()
+            {
+                false
+            } else {
+                let value_is_empty = value.is_empty();
+                let mut new_string = std::mem::take(&mut self.inner).into_owned();
+                if let Some(end) = end {
+                    if value_is_empty {
+                        new_string.insert_str(end, cpc_label.as_ref());
+                    } else {
+                        let string = format!("/{}", cpc_label.as_ref());
+                        new_string.insert_str(end, &string);
+                    }
+                } else {
+                    if value_is_empty {
+                        new_string.push_str(cpc_label.as_ref());
+                    } else {
+                        let string = format!("/{}", cpc_label.as_ref());
+                        new_string.push_str(&string);
+                    }
+                }
+                self.inner = Cow::Owned(new_string);
+                true
+            }
+        } else {
+            let mut new_string = std::mem::take(&mut self.inner).into_owned();
+            if !new_string.is_empty() {
+                new_string.push(',');
+            }
+            new_string.push_str(keyformat.as_ref());
+            new_string.push(':');
+            new_string.push_str(cpc_label.as_ref());
+            self.inner = Cow::Owned(new_string);
+            true
+        }
+    }
+
+    /// Removes the CPC label from the provided `KEYFORMAT`.
+    ///
+    /// If the label is the last for the `KEYFORMAT` entry, then this removes the entry.
+    ///
+    /// For example, if not last label:
+    /// ```
+    /// # use quick_m3u8::tag::hls::AllowedCpc;
+    /// let mut allowed_cpc = AllowedCpc::from("com.example.drm1:SMART-TV/PC");
+    /// allowed_cpc.remove_cpc_for_keyformat("com.example.drm1", "PC");
+    /// assert_eq!("com.example.drm1:SMART-TV", allowed_cpc.as_ref());
+    /// ```
+    /// For example, if label is last:
+    /// ```
+    /// # use quick_m3u8::tag::hls::AllowedCpc;
+    /// let mut allowed_cpc = AllowedCpc::from("com.example.drm1:SMART-TV");
+    /// allowed_cpc.remove_cpc_for_keyformat("com.example.drm1", "SMART-TV");
+    /// assert_eq!("", allowed_cpc.as_ref());
+    /// ```
+    ///
+    /// The value returns true if the remove was successful, and false otherwise.
+    /// ```
+    /// # use quick_m3u8::tag::hls::AllowedCpc;
+    /// let mut allowed_cpc = AllowedCpc::from("com.example.drm1:SMART-TV");
+    /// assert_eq!(
+    ///     false,
+    ///     allowed_cpc.remove_cpc_for_keyformat("com.example.drm1", "PC"),
+    ///     "PC is not in the list of labels and so the remove will return false"
+    /// );
+    /// assert_eq!(
+    ///     true,
+    ///     allowed_cpc.remove_cpc_for_keyformat("com.example.drm1", "SMART-TV"),
+    ///     "SMART-TV is in the list of labels and so the remove will return true"
+    /// );
+    /// ```
+    pub fn remove_cpc_for_keyformat(
+        &mut self,
+        keyformat: impl AsRef<str>,
+        cpc_label: impl AsRef<str>,
+    ) -> bool {
+        let keyformat_length = keyformat.as_ref().as_bytes().len();
+        if let Some((start, end)) = self.keyformat_value_start_and_end_indices(keyformat) {
+            let value = self.inner_value(start, end);
+            if value
+                .split_terminator('/')
+                .find(|c| *c == cpc_label.as_ref())
+                .is_some()
+            {
+                let new_value = value
+                    .split_terminator('/')
+                    .filter(|c| *c != cpc_label.as_ref())
+                    .collect::<Vec<&str>>()
+                    .join("/");
+                let mut new_string = std::mem::take(&mut self.inner).into_owned();
+                if let Some(end) = end {
+                    if new_value.is_empty() {
+                        let start = start - (keyformat_length + 1); // +1 for ':'
+                        let end = end + 1;
+                        new_string.drain(start..end);
+                    } else {
+                        new_string.insert_str(end, &new_value);
+                        new_string.drain(start..end);
+                    }
+                } else {
+                    if new_value.is_empty() {
+                        let start = start - (keyformat_length + 1); // +1 for ':'
+                        new_string.drain(start..);
+                    } else {
+                        new_string.drain(start..);
+                        new_string.push_str(&new_value);
+                    }
+                }
+                if new_string.as_bytes().iter().next_back() == Some(&b',') {
+                    new_string.pop();
+                }
+                self.inner = Cow::Owned(new_string);
+                true
+            } else {
+                false
+            }
+        } else {
+            false
+        }
+    }
+
+    /// This overrides the default `to_owned` provided as part of `#[derive(Clone)]`.
+    ///
+    /// The reason this exists is to provide better lifetime semantics by completely breaking ties
+    /// to the reference data. This is done by converting the inner into an owned String.
+    ///
+    /// This method is important as otherwise it won't be possible to take a value from a tag,
+    /// mutate the list, and then set it back onto the tag. Providing this method makes that
+    /// possible.
+    pub fn to_owned<'b>(&self) -> AllowedCpc<'b> {
+        AllowedCpc::from(self.to_string())
+    }
+
+    fn keyformat_value_start_and_end_indices(
+        &self,
+        keyformat: impl AsRef<str>,
+    ) -> Option<(usize, Option<usize>)> {
+        let keyformat_bytes = keyformat.as_ref().as_bytes();
+        let inner_bytes = self.inner.as_bytes();
+        let bytes_count = keyformat_bytes.len();
+        let finder = memmem::find_iter(inner_bytes, keyformat_bytes);
+        for i in finder {
+            // if the match does not end with b':' then it is not a real match and we should
+            // continue searching
+            if inner_bytes[i + bytes_count] == b':' {
+                // we have a real match so there is at least something (though maybe just b',')
+                let start = i + bytes_count + 1;
+                if let Some(n) = memchr(b',', &inner_bytes[start..]) {
+                    let end = start + n;
+                    return Some((start, Some(end)));
+                } else {
+                    return Some((start, None));
+                }
+            }
+        }
+        None
+    }
+
+    fn inner_value(&self, start: usize, end: Option<usize>) -> &str {
+        if let Some(end) = end {
+            &self.inner[start..end]
+        } else {
+            &self.inner[start..]
+        }
+    }
+}
+impl<'a> AsRef<str> for AllowedCpc<'a> {
+    fn as_ref(&self) -> &str {
+        &self.inner
+    }
+}
+impl Display for AllowedCpc<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.inner)
+    }
+}
+impl From<String> for AllowedCpc<'_> {
+    fn from(value: String) -> Self {
+        Self {
+            inner: Cow::Owned(value),
+        }
+    }
+}
+impl<'a> From<&'a str> for AllowedCpc<'a> {
+    fn from(value: &'a str) -> Self {
+        Self {
+            inner: Cow::Borrowed(value),
+        }
+    }
+}
+impl<'a> From<AllowedCpc<'a>> for Cow<'a, str> {
+    fn from(value: AllowedCpc<'a>) -> Self {
+        value.inner
+    }
+}
+impl<const N: usize> From<[FairPlayCpcLabel; N]> for AllowedCpc<'_> {
+    fn from(value: [FairPlayCpcLabel; N]) -> Self {
+        let mut list = Self::from("");
+        for item in value {
+            list.insert_cpc_for_fair_play(item);
+        }
+        list
+    }
+}
+impl From<Vec<FairPlayCpcLabel>> for AllowedCpc<'_> {
+    fn from(value: Vec<FairPlayCpcLabel>) -> Self {
+        let mut list = Self::from("");
+        for item in value {
+            list.insert_cpc_for_fair_play(item);
+        }
+        list
     }
 }
 
@@ -598,6 +1082,24 @@ impl<'a, BandwidthStatus> StreamInfBuilder<'a, BandwidthStatus> {
         self
     }
     /// Add the provided `allowed_cpc` to the attributes built into `StreamInf`.
+    ///
+    /// Note that [`AllowedCpc`] implements `Into<Cow<str>>` and therefore can be used directly
+    /// here. `AllowedCpc` has several convenience initializers to help make this easier. For
+    /// example, when setting FairPlay values specifically, the array format can be used:
+    /// ```
+    /// # use quick_m3u8::tag::hls::{StreamInfBuilder, AllowedCpc, FairPlayCpcLabel};
+    /// let builder = StreamInfBuilder::new()
+    ///     .with_allowed_cpc(AllowedCpc::from([
+    ///         FairPlayCpcLabel::AppleMain, FairPlayCpcLabel::Main
+    ///     ]));
+    /// ```
+    /// Alternatively, a string slice can be used, but care should be taken to follow the correct
+    /// syntax defined for `ALLOWED-CPC`.
+    /// ```
+    /// # use quick_m3u8::tag::hls::StreamInfBuilder;
+    /// let builder = StreamInfBuilder::new()
+    ///     .with_allowed_cpc("com.apple.streamingkeydelivery:AppleMain/Main");
+    /// ```
     pub fn with_allowed_cpc(mut self, allowed_cpc: impl Into<Cow<'a, str>>) -> Self {
         self.attribute_list.allowed_cpc = Some(allowed_cpc.into());
         self
@@ -967,13 +1469,72 @@ impl<'a> StreamInf<'a> {
     /// Corresponds to the `ALLOWED-CPC` attribute.
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
-    pub fn allowed_cpc(&self) -> Option<&str> {
+    ///
+    /// The `AllowedCpc` struct provides a strongly typed convenience wrapper around the string
+    /// value of the `ALLOWED-CPC` attribute. It abstracts the access to the CPC label values for
+    /// each `KEYFORMAT` entry; however, the user must define the `KEYFORMAT` they are looking for,
+    /// with the exception of FairPlay where the struct provides convenience access methods.
+    /// ```
+    /// # use quick_m3u8::{Reader, HlsLine, config::ParsingOptions, tag::{known, hls}};
+    /// # use quick_m3u8::tag::hls::{StreamInf, EnumeratedString, AllowedCpc, FairPlayCpcLabel};
+    /// let tag = concat!(
+    ///     "#EXT-X-STREAM-INF:BANDWIDTH=10000000,",
+    ///     r#"ALLOWED-CPC="com.apple.streamingkeydelivery:AppleMain/Main,com.example.drm2:HW""#,
+    /// );
+    /// let mut reader = Reader::from_str(tag, ParsingOptions::default());
+    /// match reader.read_line() {
+    ///     Ok(Some(HlsLine::KnownTag(known::Tag::Hls(hls::Tag::StreamInf(mut stream_inf))))) => {
+    ///         let mut allowed_cpc = stream_inf.allowed_cpc().expect("should be defined");
+    ///         // Check FairPlay CPC labels
+    ///         let mut fair_play = allowed_cpc.allowed_cpc_for_fair_play();
+    ///         assert_eq!(
+    ///             Some(EnumeratedString::Known(FairPlayCpcLabel::AppleMain)),
+    ///             fair_play.next()
+    ///         );
+    ///         assert_eq!(
+    ///             Some(EnumeratedString::Known(FairPlayCpcLabel::Main)),
+    ///             fair_play.next()
+    ///         );
+    ///         assert_eq!(None, fair_play.next());
+    ///         drop(fair_play);
+    ///         // Check com.example.drm2 CPC labels
+    ///         let mut drm2 = allowed_cpc.allowed_cpc_for_keyformat("com.example.drm2");
+    ///         assert_eq!(Some("HW"), drm2.next());
+    ///         assert_eq!(None, drm2.next());
+    ///         drop(drm2);
+    ///         // We can also mutate the retrieved `AllowedCpc`
+    ///         allowed_cpc.remove_cpc_for_fair_play(FairPlayCpcLabel::Main);
+    ///         allowed_cpc.remove_cpc_for_keyformat("com.example.drm2", "HW");
+    ///         allowed_cpc.insert_cpc_for_keyformat("com.example.drm1", "SMART-TV");
+    ///         // And set it back on the tag
+    ///         stream_inf.set_allowed_cpc(allowed_cpc.to_owned());
+    ///         let new_allowed_cpc = stream_inf.allowed_cpc().expect("should be defined");
+    ///         // And we can get the underlying string value via the `as_ref` method
+    ///         assert_eq!(
+    ///             "com.apple.streamingkeydelivery:AppleMain,com.example.drm1:SMART-TV",
+    ///             new_allowed_cpc.as_ref(),
+    ///         );
+    ///         // We also have convenience initializers for FairPlay specific CPC labels, as
+    ///         // demonstrated below
+    ///         stream_inf.set_allowed_cpc(AllowedCpc::from([
+    ///             FairPlayCpcLabel::AppleBaseline, FairPlayCpcLabel::Baseline
+    ///         ]));
+    ///         assert_eq!(
+    ///             "com.apple.streamingkeydelivery:AppleBaseline/Baseline",
+    ///             stream_inf.allowed_cpc().expect("should be defined").as_ref()
+    ///         );
+    ///     }
+    ///     r => panic!("unexpected result {r:?}"),
+    /// }
+    /// ```
+    pub fn allowed_cpc(&self) -> Option<AllowedCpc> {
         if let Some(allowed_cpc) = &self.allowed_cpc {
-            Some(allowed_cpc)
+            Some(AllowedCpc::from(allowed_cpc.as_ref()))
         } else {
             self.attribute_list
                 .get(ALLOWED_CPC)
                 .and_then(AttributeValue::quoted)
+                .map(AllowedCpc::from)
         }
     }
 
@@ -1733,6 +2294,227 @@ mod tests {
         );
     }
 
+    #[test]
+    fn allowed_cpc_should_get_cpc_labels_for_keyformat_as_iterator() {
+        let allowed_cpc = AllowedCpc {
+            inner: Cow::Borrowed(concat!(
+                "com.example.drm1:SMART-TV/PC,",
+                "com.example.drm2:HW,",
+                "com.apple.streamingkeydelivery:AppleMain/Main",
+            )),
+        };
+        let mut drm1_cpc = allowed_cpc.allowed_cpc_for_keyformat("com.example.drm1");
+        assert_eq!(Some("SMART-TV"), drm1_cpc.next());
+        assert_eq!(Some("PC"), drm1_cpc.next());
+        assert_eq!(None, drm1_cpc.next());
+        let mut drm2_cpc = allowed_cpc.allowed_cpc_for_keyformat("com.example.drm2");
+        assert_eq!(Some("HW"), drm2_cpc.next());
+        assert_eq!(None, drm2_cpc.next());
+        let mut fairplay_cpc = allowed_cpc.allowed_cpc_for_fair_play();
+        assert_eq!(
+            Some(EnumeratedString::Known(FairPlayCpcLabel::AppleMain)),
+            fairplay_cpc.next()
+        );
+        assert_eq!(
+            Some(EnumeratedString::Known(FairPlayCpcLabel::Main)),
+            fairplay_cpc.next()
+        );
+    }
+
+    #[test]
+    fn allowed_cpc_should_return_empty_if_missing_keyformat() {
+        let allowed_cpc = AllowedCpc {
+            inner: Cow::Borrowed("com.example.drm1:SMART-TV/PC"),
+        };
+        assert!(
+            allowed_cpc
+                .allowed_cpc_for_keyformat("com.example.drm2")
+                .count()
+                == 0
+        );
+        assert!(allowed_cpc.allowed_cpc_for_fair_play().count() == 0);
+    }
+
+    #[test]
+    fn allowed_cpc_should_return_empty_if_no_cpc_labels() {
+        let allowed_cpc = AllowedCpc {
+            inner: Cow::Borrowed(concat!(
+                "com.example.drm1:,",
+                "com.apple.streamingkeydelivery:",
+            )),
+        };
+        assert!(
+            allowed_cpc
+                .allowed_cpc_for_keyformat("com.example.drm1")
+                .count()
+                == 0
+        );
+        assert!(allowed_cpc.allowed_cpc_for_fair_play().count() == 0);
+    }
+
+    #[test]
+    fn allowed_cpc_remove_should_remove_cpc_label() {
+        let mut allowed_cpc = AllowedCpc {
+            inner: Cow::Borrowed(concat!(
+                "com.example.drm1:SMART-TV/PC,",
+                "com.example.drm2:HW,",
+                "com.apple.streamingkeydelivery:AppleMain/Main",
+            )),
+        };
+        assert!(
+            allowed_cpc.remove_cpc_for_fair_play(FairPlayCpcLabel::Main),
+            "remove should be successful"
+        );
+        assert!(
+            allowed_cpc.remove_cpc_for_keyformat("com.example.drm1", "SMART-TV"),
+            "remove should be successful"
+        );
+        assert_eq!(
+            "com.example.drm1:PC,com.example.drm2:HW,com.apple.streamingkeydelivery:AppleMain",
+            allowed_cpc.as_ref()
+        );
+    }
+
+    #[test]
+    fn allowed_cpc_remove_should_remove_keyformat_when_last_cpc_label() {
+        let mut allowed_cpc = AllowedCpc {
+            inner: Cow::Borrowed(concat!(
+                "com.example.drm1:SMART-TV/PC,",
+                "com.example.drm2:HW,",
+                "com.apple.streamingkeydelivery:AppleMain",
+            )),
+        };
+        assert!(
+            allowed_cpc.remove_cpc_for_fair_play(FairPlayCpcLabel::AppleMain),
+            "remove should be successful"
+        );
+        assert!(
+            allowed_cpc.remove_cpc_for_keyformat("com.example.drm2", "HW"),
+            "remove should be successful"
+        );
+        assert_eq!("com.example.drm1:SMART-TV/PC", allowed_cpc.as_ref());
+        assert!(
+            allowed_cpc.remove_cpc_for_keyformat("com.example.drm1", "SMART-TV"),
+            "remove should be successful"
+        );
+        assert!(
+            allowed_cpc.remove_cpc_for_keyformat("com.example.drm1", "PC"),
+            "remove should be successful"
+        );
+        assert_eq!("", allowed_cpc.as_ref());
+    }
+
+    #[test]
+    fn allowed_cpc_insert_should_insert_cpc_label() {
+        let mut allowed_cpc = AllowedCpc {
+            inner: Cow::Borrowed(concat!(
+                "com.example.drm1:SMART-TV/PC,",
+                "com.apple.streamingkeydelivery:AppleMain",
+            )),
+        };
+        assert!(
+            allowed_cpc.insert_cpc_for_fair_play(FairPlayCpcLabel::Main),
+            "insert should be successful"
+        );
+        assert!(
+            allowed_cpc.insert_cpc_for_keyformat("com.example.drm1", "MOBILE"),
+            "insert should be successful"
+        );
+        assert_eq!(
+            "com.example.drm1:SMART-TV/PC/MOBILE,com.apple.streamingkeydelivery:AppleMain/Main",
+            allowed_cpc.as_ref()
+        );
+    }
+
+    #[test]
+    fn allowed_cpc_insert_should_create_key_format_if_does_not_exist() {
+        let mut allowed_cpc = AllowedCpc {
+            inner: Cow::Borrowed("com.example.drm1:PC"),
+        };
+        assert!(
+            allowed_cpc.insert_cpc_for_fair_play(FairPlayCpcLabel::Baseline),
+            "insert should be successful"
+        );
+        assert!(
+            allowed_cpc.insert_cpc_for_keyformat("com.example.drm2", "SW"),
+            "insert should be successful"
+        );
+        assert_eq!(
+            "com.example.drm1:PC,com.apple.streamingkeydelivery:Baseline,com.example.drm2:SW",
+            allowed_cpc.as_ref()
+        );
+    }
+
+    #[test]
+    fn allowed_cpc_insert_should_insert_even_if_keyformat_is_empty() {
+        let mut allowed_cpc = AllowedCpc {
+            inner: Cow::Borrowed(concat!(
+                "com.example.drm1:,",
+                "com.apple.streamingkeydelivery:",
+            )),
+        };
+        assert!(
+            allowed_cpc.insert_cpc_for_fair_play(FairPlayCpcLabel::AppleMain),
+            "remove should be successful"
+        );
+        assert!(
+            allowed_cpc.insert_cpc_for_keyformat("com.example.drm1", "PC"),
+            "remove should be successful"
+        );
+        assert_eq!(
+            "com.example.drm1:PC,com.apple.streamingkeydelivery:AppleMain",
+            allowed_cpc.as_ref()
+        );
+    }
+
+    #[test]
+    fn allowed_cpc_insert_returns_false_if_trying_to_insert_existing_label() {
+        let mut allowed_cpc = AllowedCpc {
+            inner: Cow::Borrowed(concat!(
+                "com.example.drm1:SMART-TV/PC,",
+                "com.apple.streamingkeydelivery:AppleMain",
+            )),
+        };
+        assert_eq!(
+            false,
+            allowed_cpc.insert_cpc_for_fair_play(FairPlayCpcLabel::AppleMain)
+        );
+        assert_eq!(
+            false,
+            allowed_cpc.insert_cpc_for_keyformat("com.example.drm1", "PC")
+        );
+        assert_eq!(
+            "com.example.drm1:SMART-TV/PC,com.apple.streamingkeydelivery:AppleMain",
+            allowed_cpc.as_ref()
+        );
+    }
+
+    #[test]
+    fn allowed_cpc_remove_returns_false_if_trying_to_remove_non_existing_label() {
+        let mut allowed_cpc = AllowedCpc {
+            inner: Cow::Borrowed(concat!(
+                "com.example.drm1:SMART-TV/PC,",
+                "com.apple.streamingkeydelivery:AppleMain",
+            )),
+        };
+        assert_eq!(
+            false,
+            allowed_cpc.remove_cpc_for_fair_play(FairPlayCpcLabel::Main)
+        );
+        assert_eq!(
+            false,
+            allowed_cpc.remove_cpc_for_keyformat("com.example.drm1", "MOBILE")
+        );
+        assert_eq!(
+            false,
+            allowed_cpc.remove_cpc_for_keyformat("com.example.drm2", "HW")
+        );
+        assert_eq!(
+            "com.example.drm1:SMART-TV/PC,com.apple.streamingkeydelivery:AppleMain",
+            allowed_cpc.as_ref()
+        );
+    }
+
     mutation_tests!(
         StreamInf::builder()
             .with_bandwidth(10000000)
@@ -1764,7 +2546,11 @@ mod tests {
         (resolution, @Option DecimalResolution { width: 2, height: 4 }, @Attr="RESOLUTION=2x4"),
         (frame_rate, @Option 60.0, @Attr="FRAME-RATE=60"),
         (hdcp_level, @Option EnumeratedString::Known(HdcpLevel::None), @Attr="HDCP-LEVEL=NONE"),
-        (allowed_cpc, @Option "example", @Attr="ALLOWED-CPC=\"example\""),
+        (
+            allowed_cpc,
+            @Option AllowedCpc::from("com.example.drm2:HW"),
+            @Attr="ALLOWED-CPC=\"com.example.drm2:HW\""
+        ),
         (video_range, @Option EnumeratedString::Known(VideoRange::Hlg), @Attr="VIDEO-RANGE=HLG"),
         (
             req_video_layout,
