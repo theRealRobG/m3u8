@@ -213,7 +213,7 @@ where
     /// assert!(list.is_empty());
     /// ```
     pub fn is_empty(&self) -> bool {
-        self.inner.trim().is_empty()
+        self.inner.is_empty()
     }
 
     /// Inserts an item into the list. Returns true if the insertion was successful.
@@ -357,10 +357,7 @@ where
     }
 }
 
-impl<T> Display for EnumeratedStringList<'_, T>
-where
-    T: Display,
-{
+impl<T> Display for EnumeratedStringList<'_, T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.inner)
     }
@@ -673,5 +670,21 @@ mod tests {
             "should not have removed THREE"
         );
         assert_eq!(Cow::Borrowed("ONE,TWO"), list.inner);
+    }
+
+    #[test]
+    fn enumerated_string_list_is_empty_should_be_equal_to_iter_count_0() {
+        for inner in [" ", ",", " , ", "", ",,", ", ,"] {
+            let list = EnumeratedStringList {
+                inner: Cow::Borrowed(inner),
+                t: PhantomData::<TestEnum>,
+            };
+            let list_iter = list.iter();
+            assert_eq!(
+                list.is_empty(),
+                list_iter.count() == 0,
+                "failed for `{inner}`"
+            );
+        }
     }
 }
