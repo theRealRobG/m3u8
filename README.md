@@ -462,9 +462,8 @@ match reader.read_line() {
 
 HLS defines a few attribute values using "slash separated lists". This library currently supports
 (strongly types) the `EXT-X-MEDIA:CHANNELS` attribute and the `EXT-X-STREAM-INF:REQ-VIDEO-LAYOUT`
-attribute. In the future it may also add support for `EXT-X-STREAM-INF:ALLOWED-CPC`. The support for
-each of these are built on top of what has been discussed above for `EnumeratedString` and
-`EnumeratedStringList`.
+attribute. The support for each of these are built on top of what has been discussed above for
+`EnumeratedString` and `EnumeratedStringList`.
 
 Below is a demonstration of the features that each wrapping type provides:
 ```rust
