@@ -388,17 +388,22 @@ impl<'a, T> From<EnumeratedStringList<'a, T>> for Cow<'a, str> {
         value.inner
     }
 }
+macro_rules! from_iter_impl {
+    ($iter:expr) => {{
+        let mut list = EnumeratedStringList::from("");
+        for item in $iter {
+            list.insert(item);
+        }
+        list
+    }};
+}
 impl<'a, T, S, const N: usize> From<[S; N]> for EnumeratedStringList<'a, T>
 where
     T: AsStaticCow + Copy + Display,
     S: Into<EnumeratedString<'a, T>>,
 {
     fn from(value: [S; N]) -> Self {
-        let mut list = EnumeratedStringList::from("");
-        for item in value {
-            list.insert(item.into());
-        }
-        list
+        from_iter_impl!(value)
     }
 }
 impl<'a, T, S> From<Vec<S>> for EnumeratedStringList<'a, T>
@@ -407,11 +412,16 @@ where
     S: Into<EnumeratedString<'a, T>>,
 {
     fn from(value: Vec<S>) -> Self {
-        let mut list = EnumeratedStringList::from("");
-        for item in value {
-            list.insert(item.into());
-        }
-        list
+        from_iter_impl!(value)
+    }
+}
+impl<'a, T, S> FromIterator<S> for EnumeratedStringList<'a, T>
+where
+    T: AsStaticCow + Copy + Display,
+    S: Into<EnumeratedString<'a, T>>,
+{
+    fn from_iter<I: IntoIterator<Item = S>>(iter: I) -> Self {
+        from_iter_impl!(iter)
     }
 }
 
@@ -686,5 +696,17 @@ mod tests {
                 "failed for `{inner}`"
             );
         }
+    }
+
+    #[test]
+    fn enumerated_string_list_from_iter_works() {
+        let iter = [TestEnum::One, TestEnum::Two, TestEnum::Three].into_iter();
+        assert_eq!(
+            EnumeratedStringList {
+                inner: Cow::Borrowed("ONE,TWO,THREE"),
+                t: PhantomData::<TestEnum>
+            },
+            iter.collect()
+        );
     }
 }
