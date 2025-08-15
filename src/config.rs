@@ -81,6 +81,10 @@ impl ParsingOptions {
 }
 
 /// A builder type to provide convenience for constructing [`ParsingOptions`].
+///
+/// Follows the "non-consuming" pattern defined in "[The builder pattern]".
+///
+/// [The builder pattern]: https://doc.rust-lang.org/1.12.0/style/ownership/builders.html
 #[derive(Default, Debug)]
 pub struct ParsingOptionsBuilder {
     hls_tag_names_to_parse: HashSet<TagName>,
@@ -95,405 +99,405 @@ impl ParsingOptionsBuilder {
     }
 
     /// Finish building, consume the builder, and generate the [`ParsingOptions`].
-    pub fn build(self) -> ParsingOptions {
+    pub fn build(&self) -> ParsingOptions {
         ParsingOptions {
-            hls_tag_names_to_parse: self.hls_tag_names_to_parse,
+            hls_tag_names_to_parse: self.hls_tag_names_to_parse.clone(),
         }
     }
 
     /// Include parsing of all known HLS tags.
-    pub fn with_parsing_for_all_tags(mut self) -> Self {
+    pub fn with_parsing_for_all_tags(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse.extend(ALL_KNOWN_HLS_TAG_NAMES);
         self
     }
 
     /// Include parsing of [`crate::tag::hls::M3u`].
-    pub fn with_parsing_for_m3u(mut self) -> Self {
+    pub fn with_parsing_for_m3u(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse.insert(TagName::M3u);
         self
     }
 
     /// Ignore parsing of [`crate::tag::hls::M3u`].
-    pub fn without_parsing_for_m3u(mut self) -> Self {
+    pub fn without_parsing_for_m3u(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse.remove(&TagName::M3u);
         self
     }
 
     /// Include parsing of [`crate::tag::hls::Version`].
-    pub fn with_parsing_for_version(mut self) -> Self {
+    pub fn with_parsing_for_version(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse.insert(TagName::Version);
         self
     }
 
     /// Ignore parsing of [`crate::tag::hls::Version`].
-    pub fn without_parsing_for_version(mut self) -> Self {
+    pub fn without_parsing_for_version(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse.remove(&TagName::Version);
         self
     }
 
     /// Include parsing of [`crate::tag::hls::IndependentSegments`].
-    pub fn with_parsing_for_independent_segments(mut self) -> Self {
+    pub fn with_parsing_for_independent_segments(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse
             .insert(TagName::IndependentSegments);
         self
     }
 
     /// Ignore parsing of [`crate::tag::hls::IndependentSegments`].
-    pub fn without_parsing_for_independent_segments(mut self) -> Self {
+    pub fn without_parsing_for_independent_segments(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse
             .remove(&TagName::IndependentSegments);
         self
     }
 
     /// Include parsing of [`crate::tag::hls::Start`].
-    pub fn with_parsing_for_start(mut self) -> Self {
+    pub fn with_parsing_for_start(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse.insert(TagName::Start);
         self
     }
 
     /// Ignore parsing of [`crate::tag::hls::Start`].
-    pub fn without_parsing_for_start(mut self) -> Self {
+    pub fn without_parsing_for_start(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse.remove(&TagName::Start);
         self
     }
 
     /// Include parsing of [`crate::tag::hls::Define`].
-    pub fn with_parsing_for_define(mut self) -> Self {
+    pub fn with_parsing_for_define(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse.insert(TagName::Define);
         self
     }
 
     /// Ignore parsing of [`crate::tag::hls::Define`].
-    pub fn without_parsing_for_define(mut self) -> Self {
+    pub fn without_parsing_for_define(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse.remove(&TagName::Define);
         self
     }
 
     /// Include parsing of [`crate::tag::hls::Targetduration`].
-    pub fn with_parsing_for_targetduration(mut self) -> Self {
+    pub fn with_parsing_for_targetduration(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse.insert(TagName::Targetduration);
         self
     }
 
     /// Ignore parsing of [`crate::tag::hls::Targetduration`].
-    pub fn without_parsing_for_targetduration(mut self) -> Self {
+    pub fn without_parsing_for_targetduration(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse.remove(&TagName::Targetduration);
         self
     }
 
     /// Include parsing of [`crate::tag::hls::MediaSequence`].
-    pub fn with_parsing_for_media_sequence(mut self) -> Self {
+    pub fn with_parsing_for_media_sequence(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse.insert(TagName::MediaSequence);
         self
     }
 
     /// Ignore parsing of [`crate::tag::hls::MediaSequence`].
-    pub fn without_parsing_for_media_sequence(mut self) -> Self {
+    pub fn without_parsing_for_media_sequence(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse.remove(&TagName::MediaSequence);
         self
     }
 
     /// Include parsing of [`crate::tag::hls::DiscontinuitySequence`].
-    pub fn with_parsing_for_discontinuity_sequence(mut self) -> Self {
+    pub fn with_parsing_for_discontinuity_sequence(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse
             .insert(TagName::DiscontinuitySequence);
         self
     }
 
     /// Ignore parsing of [`crate::tag::hls::DiscontinuitySequence`].
-    pub fn without_parsing_for_discontinuity_sequence(mut self) -> Self {
+    pub fn without_parsing_for_discontinuity_sequence(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse
             .remove(&TagName::DiscontinuitySequence);
         self
     }
 
     /// Include parsing of [`crate::tag::hls::Endlist`].
-    pub fn with_parsing_for_endlist(mut self) -> Self {
+    pub fn with_parsing_for_endlist(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse.insert(TagName::Endlist);
         self
     }
 
     /// Ignore parsing of [`crate::tag::hls::Endlist`].
-    pub fn without_parsing_for_endlist(mut self) -> Self {
+    pub fn without_parsing_for_endlist(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse.remove(&TagName::Endlist);
         self
     }
 
     /// Include parsing of [`crate::tag::hls::PlaylistType`].
-    pub fn with_parsing_for_playlist_type(mut self) -> Self {
+    pub fn with_parsing_for_playlist_type(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse.insert(TagName::PlaylistType);
         self
     }
 
     /// Ignore parsing of [`crate::tag::hls::PlaylistType`].
-    pub fn without_parsing_for_playlist_type(mut self) -> Self {
+    pub fn without_parsing_for_playlist_type(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse.remove(&TagName::PlaylistType);
         self
     }
 
     /// Include parsing of [`crate::tag::hls::IFramesOnly`].
-    pub fn with_parsing_for_i_frames_only(mut self) -> Self {
+    pub fn with_parsing_for_i_frames_only(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse.insert(TagName::IFramesOnly);
         self
     }
 
     /// Ignore parsing of [`crate::tag::hls::IFramesOnly`].
-    pub fn without_parsing_for_i_frames_only(mut self) -> Self {
+    pub fn without_parsing_for_i_frames_only(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse.remove(&TagName::IFramesOnly);
         self
     }
 
     /// Include parsing of [`crate::tag::hls::PartInf`].
-    pub fn with_parsing_for_part_inf(mut self) -> Self {
+    pub fn with_parsing_for_part_inf(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse.insert(TagName::PartInf);
         self
     }
 
     /// Ignore parsing of [`crate::tag::hls::PartInf`].
-    pub fn without_parsing_for_part_inf(mut self) -> Self {
+    pub fn without_parsing_for_part_inf(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse.remove(&TagName::PartInf);
         self
     }
 
     /// Include parsing of [`crate::tag::hls::ServerControl`].
-    pub fn with_parsing_for_server_control(mut self) -> Self {
+    pub fn with_parsing_for_server_control(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse.insert(TagName::ServerControl);
         self
     }
 
     /// Ignore parsing of [`crate::tag::hls::ServerControl`].
-    pub fn without_parsing_for_server_control(mut self) -> Self {
+    pub fn without_parsing_for_server_control(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse.remove(&TagName::ServerControl);
         self
     }
 
     /// Include parsing of [`crate::tag::hls::Inf`].
-    pub fn with_parsing_for_inf(mut self) -> Self {
+    pub fn with_parsing_for_inf(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse.insert(TagName::Inf);
         self
     }
 
     /// Ignore parsing of [`crate::tag::hls::Inf`].
-    pub fn without_parsing_for_inf(mut self) -> Self {
+    pub fn without_parsing_for_inf(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse.remove(&TagName::Inf);
         self
     }
 
     /// Include parsing of [`crate::tag::hls::Byterange`].
-    pub fn with_parsing_for_byterange(mut self) -> Self {
+    pub fn with_parsing_for_byterange(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse.insert(TagName::Byterange);
         self
     }
 
     /// Ignore parsing of [`crate::tag::hls::Byterange`].
-    pub fn without_parsing_for_byterange(mut self) -> Self {
+    pub fn without_parsing_for_byterange(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse.remove(&TagName::Byterange);
         self
     }
 
     /// Include parsing of [`crate::tag::hls::Discontinuity`].
-    pub fn with_parsing_for_discontinuity(mut self) -> Self {
+    pub fn with_parsing_for_discontinuity(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse.insert(TagName::Discontinuity);
         self
     }
 
     /// Ignore parsing of [`crate::tag::hls::Discontinuity`].
-    pub fn without_parsing_for_discontinuity(mut self) -> Self {
+    pub fn without_parsing_for_discontinuity(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse.remove(&TagName::Discontinuity);
         self
     }
 
     /// Include parsing of [`crate::tag::hls::Key`].
-    pub fn with_parsing_for_key(mut self) -> Self {
+    pub fn with_parsing_for_key(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse.insert(TagName::Key);
         self
     }
 
     /// Ignore parsing of [`crate::tag::hls::Key`].
-    pub fn without_parsing_for_key(mut self) -> Self {
+    pub fn without_parsing_for_key(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse.remove(&TagName::Key);
         self
     }
 
     /// Include parsing of [`crate::tag::hls::Map`].
-    pub fn with_parsing_for_map(mut self) -> Self {
+    pub fn with_parsing_for_map(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse.insert(TagName::Map);
         self
     }
 
     /// Ignore parsing of [`crate::tag::hls::Map`].
-    pub fn without_parsing_for_map(mut self) -> Self {
+    pub fn without_parsing_for_map(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse.remove(&TagName::Map);
         self
     }
 
     /// Include parsing of [`crate::tag::hls::ProgramDateTime`].
-    pub fn with_parsing_for_program_date_time(mut self) -> Self {
+    pub fn with_parsing_for_program_date_time(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse.insert(TagName::ProgramDateTime);
         self
     }
 
     /// Ignore parsing of [`crate::tag::hls::ProgramDateTime`].
-    pub fn without_parsing_for_program_date_time(mut self) -> Self {
+    pub fn without_parsing_for_program_date_time(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse
             .remove(&TagName::ProgramDateTime);
         self
     }
 
     /// Include parsing of [`crate::tag::hls::Gap`].
-    pub fn with_parsing_for_gap(mut self) -> Self {
+    pub fn with_parsing_for_gap(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse.insert(TagName::Gap);
         self
     }
 
     /// Ignore parsing of [`crate::tag::hls::Gap`].
-    pub fn without_parsing_for_gap(mut self) -> Self {
+    pub fn without_parsing_for_gap(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse.remove(&TagName::Gap);
         self
     }
 
     /// Include parsing of [`crate::tag::hls::Bitrate`].
-    pub fn with_parsing_for_bitrate(mut self) -> Self {
+    pub fn with_parsing_for_bitrate(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse.insert(TagName::Bitrate);
         self
     }
 
     /// Ignore parsing of [`crate::tag::hls::Bitrate`].
-    pub fn without_parsing_for_bitrate(mut self) -> Self {
+    pub fn without_parsing_for_bitrate(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse.remove(&TagName::Bitrate);
         self
     }
 
     /// Include parsing of [`crate::tag::hls::Part`].
-    pub fn with_parsing_for_part(mut self) -> Self {
+    pub fn with_parsing_for_part(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse.insert(TagName::Part);
         self
     }
 
     /// Ignore parsing of [`crate::tag::hls::Part`].
-    pub fn without_parsing_for_part(mut self) -> Self {
+    pub fn without_parsing_for_part(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse.remove(&TagName::Part);
         self
     }
 
     /// Include parsing of [`crate::tag::hls::Daterange`].
-    pub fn with_parsing_for_daterange(mut self) -> Self {
+    pub fn with_parsing_for_daterange(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse.insert(TagName::Daterange);
         self
     }
 
     /// Ignore parsing of [`crate::tag::hls::Daterange`].
-    pub fn without_parsing_for_daterange(mut self) -> Self {
+    pub fn without_parsing_for_daterange(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse.remove(&TagName::Daterange);
         self
     }
 
     /// Include parsing of [`crate::tag::hls::Skip`].
-    pub fn with_parsing_for_skip(mut self) -> Self {
+    pub fn with_parsing_for_skip(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse.insert(TagName::Skip);
         self
     }
 
     /// Ignore parsing of [`crate::tag::hls::Skip`].
-    pub fn without_parsing_for_skip(mut self) -> Self {
+    pub fn without_parsing_for_skip(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse.remove(&TagName::Skip);
         self
     }
 
     /// Include parsing of [`crate::tag::hls::PreloadHint`].
-    pub fn with_parsing_for_preload_hint(mut self) -> Self {
+    pub fn with_parsing_for_preload_hint(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse.insert(TagName::PreloadHint);
         self
     }
 
     /// Ignore parsing of [`crate::tag::hls::PreloadHint`].
-    pub fn without_parsing_for_preload_hint(mut self) -> Self {
+    pub fn without_parsing_for_preload_hint(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse.remove(&TagName::PreloadHint);
         self
     }
 
     /// Include parsing of [`crate::tag::hls::RenditionReport`].
-    pub fn with_parsing_for_rendition_report(mut self) -> Self {
+    pub fn with_parsing_for_rendition_report(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse.insert(TagName::RenditionReport);
         self
     }
 
     /// Ignore parsing of [`crate::tag::hls::RenditionReport`].
-    pub fn without_parsing_for_rendition_report(mut self) -> Self {
+    pub fn without_parsing_for_rendition_report(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse
             .remove(&TagName::RenditionReport);
         self
     }
 
     /// Include parsing of [`crate::tag::hls::Media`].
-    pub fn with_parsing_for_media(mut self) -> Self {
+    pub fn with_parsing_for_media(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse.insert(TagName::Media);
         self
     }
 
     /// Ignore parsing of [`crate::tag::hls::Media`].
-    pub fn without_parsing_for_media(mut self) -> Self {
+    pub fn without_parsing_for_media(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse.remove(&TagName::Media);
         self
     }
 
     /// Include parsing of [`crate::tag::hls::StreamInf`].
-    pub fn with_parsing_for_stream_inf(mut self) -> Self {
+    pub fn with_parsing_for_stream_inf(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse.insert(TagName::StreamInf);
         self
     }
 
     /// Ignore parsing of [`crate::tag::hls::StreamInf`].
-    pub fn without_parsing_for_stream_inf(mut self) -> Self {
+    pub fn without_parsing_for_stream_inf(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse.remove(&TagName::StreamInf);
         self
     }
 
     /// Include parsing of [`crate::tag::hls::IFrameStreamInf`].
-    pub fn with_parsing_for_i_frame_stream_inf(mut self) -> Self {
+    pub fn with_parsing_for_i_frame_stream_inf(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse.insert(TagName::IFrameStreamInf);
         self
     }
 
     /// Ignore parsing of [`crate::tag::hls::IFrameStreamInf`].
-    pub fn without_parsing_for_i_frame_stream_inf(mut self) -> Self {
+    pub fn without_parsing_for_i_frame_stream_inf(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse
             .remove(&TagName::IFrameStreamInf);
         self
     }
 
     /// Include parsing of [`crate::tag::hls::SessionData`].
-    pub fn with_parsing_for_session_data(mut self) -> Self {
+    pub fn with_parsing_for_session_data(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse.insert(TagName::SessionData);
         self
     }
 
     /// Ignore parsing of [`crate::tag::hls::SessionData`].
-    pub fn without_parsing_for_session_data(mut self) -> Self {
+    pub fn without_parsing_for_session_data(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse.remove(&TagName::SessionData);
         self
     }
 
     /// Include parsing of [`crate::tag::hls::SessionKey`].
-    pub fn with_parsing_for_session_key(mut self) -> Self {
+    pub fn with_parsing_for_session_key(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse.insert(TagName::SessionKey);
         self
     }
 
     /// Ignore parsing of [`crate::tag::hls::SessionKey`].
-    pub fn without_parsing_for_session_key(mut self) -> Self {
+    pub fn without_parsing_for_session_key(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse.remove(&TagName::SessionKey);
         self
     }
 
     /// Include parsing of [`crate::tag::hls::ContentSteering`].
-    pub fn with_parsing_for_content_steering(mut self) -> Self {
+    pub fn with_parsing_for_content_steering(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse.insert(TagName::ContentSteering);
         self
     }
 
     /// Ignore parsing of [`crate::tag::hls::ContentSteering`].
-    pub fn without_parsing_for_content_steering(mut self) -> Self {
+    pub fn without_parsing_for_content_steering(&mut self) -> &mut Self {
         self.hls_tag_names_to_parse
             .remove(&TagName::ContentSteering);
         self
@@ -536,7 +540,8 @@ mod tests {
         let options = ParsingOptionsBuilder::new()
             .with_parsing_for_all_tags()
             .without_parsing_for_define()
-            .without_parsing_for_i_frame_stream_inf();
+            .without_parsing_for_i_frame_stream_inf()
+            .build();
         assert!(!options.hls_tag_names_to_parse.contains(&TagName::Define));
         assert!(
             !options
