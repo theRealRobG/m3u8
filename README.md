@@ -777,9 +777,7 @@ problems listed above, hls_m3u8 also has the following issues:
   recognize.
 
 Again, similar to m3u8-rs, it isn't really possible to implement a delta update using this library.
-Perhaps my test is unfair? I really thought that delta updates seemed like a good use-case to test
-as (for me at least) it had a realistic application, was relatively simple, but yet complex enough
-to test the library implementation details. Anyway, from what I could produce, here are the results:
+From what I could produce, here are the results:
 
 ```sh
 Playlist delta update implementation using hls_m3u8 library
