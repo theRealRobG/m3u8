@@ -93,8 +93,10 @@ impl<'a> TagValue<'a> {
     /// For example:
     /// ```
     /// let tag = quick_m3u8::tag::unknown::parse("#EXT-X-EXAMPLE:100")?.parsed;
-    /// let value = tag.value().expect("should have value defined");
-    /// assert_eq!(100, value.try_as_decimal_integer()?);
+    /// if let Some(value) = tag.value() {
+    ///     assert_eq!(100, value.try_as_decimal_integer()?);
+    /// }
+    /// # else { panic!("unexpected empty value" ); }
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     pub fn try_as_decimal_integer(&self) -> Result<u64, ParseNumberError> {
@@ -106,8 +108,10 @@ impl<'a> TagValue<'a> {
     /// For example:
     /// ```
     /// let tag = quick_m3u8::tag::unknown::parse("#EXT-X-EXAMPLE:1024@512")?.parsed;
-    /// let value = tag.value().expect("should have value defined");
-    /// assert_eq!((1024, Some(512)), value.try_as_decimal_integer_range()?);
+    /// if let Some(value) = tag.value() {
+    ///     assert_eq!((1024, Some(512)), value.try_as_decimal_integer_range()?);
+    /// }
+    /// # else { panic!("unexpected empty value" ); }
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     pub fn try_as_decimal_integer_range(
@@ -133,8 +137,10 @@ impl<'a> TagValue<'a> {
     /// ```
     /// # use quick_m3u8::tag::value::HlsPlaylistType;
     /// let tag = quick_m3u8::tag::unknown::parse("#EXT-X-EXAMPLE:VOD")?.parsed;
-    /// let value = tag.value().expect("should have value defined");
-    /// assert_eq!(HlsPlaylistType::Vod, value.try_as_playlist_type()?);
+    /// if let Some(value) = tag.value() {
+    ///     assert_eq!(HlsPlaylistType::Vod, value.try_as_playlist_type()?);
+    /// }
+    /// # else { panic!("unexpected empty value" ); }
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     pub fn try_as_playlist_type(&self) -> Result<HlsPlaylistType, ParsePlaylistTypeError> {
@@ -152,8 +158,10 @@ impl<'a> TagValue<'a> {
     /// For example:
     /// ```
     /// let tag = quick_m3u8::tag::unknown::parse("#EXT-X-EXAMPLE:3.14")?.parsed;
-    /// let value = tag.value().expect("should have value defined");
-    /// assert_eq!(3.14, value.try_as_decimal_floating_point()?);
+    /// if let Some(value) = tag.value() {
+    ///     assert_eq!(3.14, value.try_as_decimal_floating_point()?);
+    /// }
+    /// # else { panic!("unexpected empty value" ); }
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     pub fn try_as_decimal_floating_point(&self) -> Result<f64, ParseFloatError> {
@@ -165,8 +173,10 @@ impl<'a> TagValue<'a> {
     /// For example:
     /// ```
     /// let tag = quick_m3u8::tag::unknown::parse("#EXT-X-EXAMPLE:3.14,pi")?.parsed;
-    /// let value = tag.value().expect("should have value defined");
-    /// assert_eq!((3.14, "pi"), value.try_as_decimal_floating_point_with_title()?);
+    /// if let Some(value) = tag.value() {
+    ///     assert_eq!((3.14, "pi"), value.try_as_decimal_floating_point_with_title()?);
+    /// }
+    /// # else { panic!("unexpected empty value" ); }
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     pub fn try_as_decimal_floating_point_with_title(
@@ -193,8 +203,10 @@ impl<'a> TagValue<'a> {
     /// let tag = quick_m3u8::tag::unknown::parse(
     ///     "#EXT-X-EXAMPLE:2025-08-10T17:27:42.213-05:00"
     /// )?.parsed;
-    /// let value = tag.value().expect("should have value defined");
-    /// assert_eq!(date_time!(2025-08-10 T 17:27:42.213 -05:00), value.try_as_date_time()?);
+    /// if let Some(value) = tag.value() {
+    ///     assert_eq!(date_time!(2025-08-10 T 17:27:42.213 -05:00), value.try_as_date_time()?);
+    /// }
+    /// # else { panic!("unexpected empty value"); }
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     pub fn try_as_date_time(&self) -> Result<DateTime, DateTimeSyntaxError> {
@@ -210,14 +222,16 @@ impl<'a> TagValue<'a> {
     /// let tag = quick_m3u8::tag::unknown::parse(
     ///     "#EXT-X-EXAMPLE:TYPE=LIST,VALUE=\"example\""
     /// )?.parsed;
-    /// let value = tag.value().expect("should have value defined");
-    /// assert_eq!(
-    ///     HashMap::from([
-    ///         ("TYPE", AttributeValue::Unquoted(UnquotedAttributeValue(b"LIST"))),
-    ///         ("VALUE", AttributeValue::Quoted("example"))
-    ///     ]),
-    ///     value.try_as_attribute_list()?
-    /// );
+    /// if let Some(value) = tag.value() {
+    ///     assert_eq!(
+    ///         HashMap::from([
+    ///             ("TYPE", AttributeValue::Unquoted(UnquotedAttributeValue(b"LIST"))),
+    ///             ("VALUE", AttributeValue::Quoted("example"))
+    ///         ]),
+    ///         value.try_as_attribute_list()?
+    ///     );
+    /// }
+    /// # else { panic!("unexpected empty value"); }
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     pub fn try_as_attribute_list(
@@ -396,21 +410,24 @@ impl<'a> AttributeValue<'a> {
 /// ```
 /// # use std::collections::HashMap;
 /// # use quick_m3u8::tag::value::{AttributeValue, UnquotedAttributeValue};
+/// # use quick_m3u8::error::{ParseTagValueError, ValidationError};
 /// let tag = quick_m3u8::tag::unknown::parse("#EXT-X-EXAMPLE:TYPE=PI,NUMBER=3.14")?.parsed;
-/// let value = tag.value().expect("should have value defined");
-/// let list = value.try_as_attribute_list()?;
+/// let list = tag
+///     .value()
+///     .ok_or(ParseTagValueError::UnexpectedEmpty)?
+///     .try_as_attribute_list()?;
 ///
 /// let type_value = list
 ///     .get("TYPE")
 ///     .and_then(AttributeValue::unquoted)
-///     .expect("should be defined and unquoted");
+///     .ok_or(ValidationError::MissingRequiredAttribute("TYPE"))?;
 /// assert_eq!(UnquotedAttributeValue(b"PI"), type_value);
 /// assert_eq!(Ok("PI"), type_value.try_as_utf_8());
 ///
 /// let number_value = list
 ///     .get("NUMBER")
 ///     .and_then(AttributeValue::unquoted)
-///     .expect("should be defined and unquoted");
+///     .ok_or(ValidationError::MissingRequiredAttribute("NUMBER"))?;
 /// assert_eq!(UnquotedAttributeValue(b"3.14"), number_value);
 /// assert_eq!(Ok(3.14), number_value.try_as_decimal_floating_point());
 /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -423,8 +440,12 @@ impl<'a> UnquotedAttributeValue<'a> {
     /// For example:
     /// ```
     /// # use quick_m3u8::tag::value::AttributeValue;
+    /// # use quick_m3u8::error::ParseTagValueError;
     /// let tag = quick_m3u8::tag::unknown::parse("#EXT-X-TEST:EXAMPLE=42")?.parsed;
-    /// let list = tag.value().expect("should have value defined").try_as_attribute_list()?;
+    /// let list = tag
+    ///     .value()
+    ///     .ok_or(ParseTagValueError::UnexpectedEmpty)?
+    ///     .try_as_attribute_list()?;
     /// assert_eq!(
     ///     Some(42),
     ///     list
@@ -443,8 +464,12 @@ impl<'a> UnquotedAttributeValue<'a> {
     /// For example:
     /// ```
     /// # use quick_m3u8::tag::value::AttributeValue;
+    /// # use quick_m3u8::error::ParseTagValueError;
     /// let tag = quick_m3u8::tag::unknown::parse("#EXT-X-TEST:EXAMPLE=3.14")?.parsed;
-    /// let list = tag.value().expect("should have value defined").try_as_attribute_list()?;
+    /// let list = tag
+    ///     .value()
+    ///     .ok_or(ParseTagValueError::UnexpectedEmpty)?
+    ///     .try_as_attribute_list()?;
     /// assert_eq!(
     ///     Some(3.14),
     ///     list
@@ -463,8 +488,12 @@ impl<'a> UnquotedAttributeValue<'a> {
     /// For example:
     /// ```
     /// # use quick_m3u8::tag::value::{AttributeValue, DecimalResolution};
+    /// # use quick_m3u8::error::ParseTagValueError;
     /// let tag = quick_m3u8::tag::unknown::parse("#EXT-X-TEST:EXAMPLE=1920x1080")?.parsed;
-    /// let list = tag.value().expect("should have value defined").try_as_attribute_list()?;
+    /// let list = tag
+    ///     .value()
+    ///     .ok_or(ParseTagValueError::UnexpectedEmpty)?
+    ///     .try_as_attribute_list()?;
     /// assert_eq!(
     ///     Some(DecimalResolution { width: 1920, height: 1080 }),
     ///     list
@@ -493,8 +522,12 @@ impl<'a> UnquotedAttributeValue<'a> {
     /// For example:
     /// ```
     /// # use quick_m3u8::tag::value::AttributeValue;
+    /// # use quick_m3u8::error::ParseTagValueError;
     /// let tag = quick_m3u8::tag::unknown::parse("#EXT-X-TEST:EXAMPLE=ENUMERATED-VALUE")?.parsed;
-    /// let list = tag.value().expect("should have value defined").try_as_attribute_list()?;
+    /// let list = tag
+    ///     .value()
+    ///     .ok_or(ParseTagValueError::UnexpectedEmpty)?
+    ///     .try_as_attribute_list()?;
     /// assert_eq!(
     ///     Some("ENUMERATED-VALUE"),
     ///     list
