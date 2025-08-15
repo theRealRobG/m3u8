@@ -1,6 +1,12 @@
 [package]
 name = "quick-m3u8"
 version = "0.3.0"
+authors = ["Robert Galluccio"]
+description = "Parser for M3U8 Playlist format as defined in HLS draft-pantos-hls-rfc8216"
+license = "Unlicense"
+repository = "https://github.com/theRealRobG/m3u8"
+keywords = ["m3u8", "hls", "parser"]
+categories = ["parser-implementations"]
 edition = "2024"
 exclude = ["/.github", "/benches"]
 
