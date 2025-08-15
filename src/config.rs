@@ -47,11 +47,7 @@ const ALL_KNOWN_HLS_TAG_NAMES: [TagName; 32] = [
 /// struct [ParsingOptionsBuilder] has been provided, to make constructing this struct easier.
 #[derive(Debug, PartialEq, Clone)]
 pub struct ParsingOptions {
-    /// The tag names that will be parsed by the [`crate::Reader`].
-    ///
-    /// HLS tags that are not included in this list will be parsed as
-    /// [`crate::line::HlsLine::UnknownTag`].
-    pub hls_tag_names_to_parse: HashSet<TagName>,
+    hls_tag_names_to_parse: HashSet<TagName>,
 }
 
 impl Default for ParsingOptions {
@@ -63,11 +59,17 @@ impl Default for ParsingOptions {
 }
 
 impl ParsingOptions {
-    /// Construct a new `ParsingOptions` using the provided set of tag names to parse.
-    pub fn new(hls_tag_names_to_parse: HashSet<TagName>) -> Self {
-        Self {
-            hls_tag_names_to_parse,
-        }
+    /// Start a builder for constructing the `ParsingOptions`.
+    pub fn builder() -> ParsingOptionsBuilder {
+        ParsingOptionsBuilder::new()
+    }
+
+    /// The tag names that will be parsed by the [`crate::Reader`].
+    ///
+    /// HLS tags that are not included in this list will be parsed as
+    /// [`crate::line::HlsLine::UnknownTag`].
+    pub fn hls_tag_names_to_parse(&self) -> &HashSet<TagName> {
+        &self.hls_tag_names_to_parse
     }
 
     pub(crate) fn is_known_name(&self, name: &'_ str) -> bool {
