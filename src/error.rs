@@ -485,6 +485,7 @@ impl Display for ParseTagValueError {
         }
     }
 }
+impl Error for ParseTagValueError {}
 impl From<ParseNumberError> for ParseTagValueError {
     fn from(value: ParseNumberError) -> Self {
         Self::DecimalInteger(value)
