@@ -135,8 +135,8 @@ pub enum UnknownTagSyntaxError {
     /// The tag prefix `#EXT` existed but nothing more before the line ended or the `:` character
     /// was found.
     UnexpectedNoTagName,
-    /// An `UnknownTag` was attempted to be parsed directly (via [`crate::tag::unknown::parse`]),
-    /// but the line did not start with `#EXT`.
+    /// An `UnknownTag` was attempted to be parsed directly (via
+    /// [`crate::custom_parsing::tag::parse`]), but the line did not start with `#EXT`.
     InvalidTag,
     /// A generic syntax error that breaks parsing of the line.
     Generic(GenericSyntaxError),
@@ -383,8 +383,8 @@ pub enum ValidationError {
     ErrorExtractingTagValue(ParseTagValueError),
     /// An attribute value within an attribute list could not be parsed.
     ErrorExtractingAttributeListValue(ParseAttributeValueError),
-    /// The enumerated string extracted from [`crate::tag::value::UnquotedAttributeValue`] was not a
-    /// known value.
+    /// The enumerated string extracted from [`crate::tag::UnquotedAttributeValue`] was not a known
+    /// value.
     InvalidEnumeratedString,
 }
 impl Display for ValidationError {

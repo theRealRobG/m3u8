@@ -1,6 +1,6 @@
 use crate::{
     line::HlsLine,
-    tag::known::{IntoInnerTag, WritableCustomTag},
+    tag::{IntoInnerTag, WritableCustomTag},
 };
 use std::{
     borrow::Cow,
@@ -14,9 +14,9 @@ use std::{
 /// An important note to make, is that with every tag implementation within [`crate::tag::hls`], the
 /// reference to the original input data is used directly when writing. This means that we avoid
 /// unnecessary allocations unless the data has been mutated. The same is true of
-/// [`crate::tag::known::Tag::Custom`] tags (described in [`crate::tag::known::CustomTagAccess`]).
-/// Where necessary, the inner [`Write`] can be accessed in any type of ownership semantics (owned
-/// via [`Self::into_inner`], mutable borrow via [`Self::get_mut`], borrow via [`Self::get_ref`]).
+/// [`crate::tag::KnownTag::Custom`] tags (described in [`crate::tag::CustomTagAccess`]). Where
+/// necessary, the inner [`Write`] can be accessed in any type of ownership semantics (owned via
+/// [`Self::into_inner`], mutable borrow via [`Self::get_mut`], borrow via [`Self::get_ref`]).
 ///
 /// ## Mutate data as proxy
 ///
@@ -27,7 +27,7 @@ use std::{
 /// we provide a toy example of this (for a more interesting example, the repository includes an
 /// implementation of a HLS delta update in `benches/delta_update_bench.rs`).
 /// ```
-/// # use quick_m3u8::{ config::ParsingOptions, line::HlsLine, tag::{hls, known}, Reader, Writer };
+/// # use quick_m3u8::{config::ParsingOptions, HlsLine, tag::{hls, KnownTag}, Reader, Writer};
 /// # use std::io::{self, Write};
 /// const INPUT: &str = r#"
 /// #EXTINF:4
@@ -44,7 +44,7 @@ use std::{
 ///     match reader.read_line() {
 ///         // In this branch we match the #EXTINF tag and update the title property to add a
 ///         // message.
-///         Ok(Some(HlsLine::KnownTag(known::Tag::Hls(hls::Tag::Inf(mut tag))))) => {
+///         Ok(Some(HlsLine::KnownTag(KnownTag::Hls(hls::Tag::Inf(mut tag))))) => {
 ///             if added_hello {
 ///                 tag.set_title("World!");
 ///             } else {
@@ -225,23 +225,22 @@ where
     ///
     /// Note that if the custom tag is derived from parsed data (i.e. not user constructed), then
     /// this method should be avoided, as it will allocate data perhaps unnecessarily. In that case
-    /// use [`Self::write_custom_line`] with [`crate::tag::known::CustomTagAccess`], as this will
-    /// use the original parsed data if no mutation has occurred.
+    /// use [`Self::write_custom_line`] with [`crate::tag::CustomTagAccess`], as this will use the
+    /// original parsed data if no mutation has occurred.
     ///
     /// Example:
     /// ```
     /// # use quick_m3u8::Writer;
-    /// # use quick_m3u8::tag::known::{CustomTag, WritableCustomTag, WritableTag};
-    /// # use quick_m3u8::tag::unknown;
+    /// # use quick_m3u8::tag::{CustomTag, WritableCustomTag, WritableTag, UnknownTag};
     /// # use quick_m3u8::error::{ValidationError, ParseTagValueError};
     /// # use std::borrow::Cow;
     /// #[derive(Debug, PartialEq, Clone)]
     /// struct ExampleCustomTag {
     ///     answer: u64,
     /// }
-    /// impl TryFrom<unknown::Tag<'_>> for ExampleCustomTag {
+    /// impl TryFrom<UnknownTag<'_>> for ExampleCustomTag {
     ///     type Error = ValidationError;
-    ///     fn try_from(tag: unknown::Tag) -> Result<Self, Self::Error> {
+    ///     fn try_from(tag: UnknownTag) -> Result<Self, Self::Error> {
     ///         if tag.name() != "-X-MEANING-OF-LIFE" {
     ///             return Err(ValidationError::UnexpectedTagName)
     ///         }
@@ -286,22 +285,21 @@ where
     /// methods are wrappers for this method.
     ///
     /// This method is necessary to use where the input lines carry a custom tag type (other than
-    /// [`crate::tag::known::NoCustomTag`]). For example, say we are parsing some data using a
-    /// reader that supports our own custom defined tag (`SomeCustomTag`).
+    /// [`crate::tag::NoCustomTag`]). For example, say we are parsing some data using a reader that
+    /// supports our own custom defined tag (`SomeCustomTag`).
     /// ```
     /// # use quick_m3u8::{
     /// # Reader,
     /// # config::ParsingOptions,
-    /// # tag::known::{CustomTag, WritableCustomTag, WritableTag},
-    /// # tag::unknown,
+    /// # tag::{CustomTag, WritableCustomTag, WritableTag, UnknownTag},
     /// # error::ValidationError
     /// # };
     /// # use std::marker::PhantomData;
     /// # #[derive(Debug, PartialEq, Clone)]
     /// # struct SomeCustomTag;
-    /// # impl TryFrom<unknown::Tag<'_>> for SomeCustomTag {
+    /// # impl TryFrom<UnknownTag<'_>> for SomeCustomTag {
     /// #     type Error = ValidationError;
-    /// #     fn try_from(_: unknown::Tag) -> Result<Self, Self::Error> { todo!() }
+    /// #     fn try_from(_: UnknownTag) -> Result<Self, Self::Error> { todo!() }
     /// # }
     /// # impl CustomTag<'_> for SomeCustomTag {
     /// #     fn is_known_name(_: &str) -> bool { todo!() }
@@ -318,25 +316,23 @@ where
     /// );
     /// ```
     /// If we tried to use the [`Self::write_line`] method, it would fail to compile (as that method
-    /// expects that the generic `Custom` type is [`crate::tag::known::NoCustomTag`], which is a
-    /// struct provided by the library that never succeeds the
-    /// [`crate::tag::known::CustomTag::is_known_name`] check so is never parsed). Therefore we must
-    /// use the `write_custom_line` method in this case (even if we are not writing the custom tag
-    /// itself):
+    /// expects that the generic `Custom` type is [`crate::tag::NoCustomTag`], which is a struct
+    /// provided by the library that never succeeds the [`crate::tag::CustomTag::is_known_name`]
+    /// check so is never parsed). Therefore we must use the `write_custom_line` method in this case
+    /// (even if we are not writing the custom tag itself):
     /// ```
     /// # use quick_m3u8::{
     /// # Reader, Writer,
     /// # config::ParsingOptions,
-    /// # tag::known::{CustomTag, WritableCustomTag, WritableTag},
-    /// # tag::unknown,
+    /// # tag::{CustomTag, WritableCustomTag, WritableTag, UnknownTag},
     /// # error::ValidationError
     /// # };
     /// # use std::{error::Error, marker::PhantomData};
     /// # #[derive(Debug, PartialEq, Clone)]
     /// # struct SomeCustomTag;
-    /// # impl TryFrom<unknown::Tag<'_>> for SomeCustomTag {
+    /// # impl TryFrom<UnknownTag<'_>> for SomeCustomTag {
     /// #     type Error = ValidationError;
-    /// #     fn try_from(_: unknown::Tag) -> Result<Self, Self::Error> { todo!() }
+    /// #     fn try_from(_: UnknownTag) -> Result<Self, Self::Error> { todo!() }
     /// # }
     /// # impl CustomTag<'_> for SomeCustomTag {
     /// #     fn is_known_name(_: &str) -> bool { todo!() }
@@ -414,10 +410,9 @@ mod tests {
         date_time,
         error::ValidationError,
         tag::{
+            CustomTag, DecimalResolution, UnknownTag, WritableAttributeValue, WritableTag,
+            WritableTagValue,
             hls::{self, Inf, M3u, MediaSequence, Targetduration, Version},
-            known::{CustomTag, WritableTag},
-            unknown,
-            value::{DecimalResolution, WritableAttributeValue, WritableTagValue},
         },
     };
     use pretty_assertions::assert_eq;
@@ -433,10 +428,10 @@ mod tests {
         List,
     }
 
-    impl TryFrom<unknown::Tag<'_>> for TestTag {
+    impl TryFrom<UnknownTag<'_>> for TestTag {
         type Error = ValidationError;
 
-        fn try_from(_: unknown::Tag<'_>) -> Result<Self, Self::Error> {
+        fn try_from(_: UnknownTag<'_>) -> Result<Self, Self::Error> {
             Err(ValidationError::NotImplemented)
         }
     }
