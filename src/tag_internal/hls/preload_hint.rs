@@ -277,7 +277,7 @@ impl<'a> PreloadHint<'a> {
     /// Corresponds to the `TYPE` attribute.
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
-    pub fn hint_type(&self) -> EnumeratedString<PreloadHintType> {
+    pub fn hint_type(&self) -> EnumeratedString<'_, PreloadHintType> {
         EnumeratedString::from(self.hint_type.as_ref())
     }
 

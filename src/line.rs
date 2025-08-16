@@ -479,7 +479,7 @@ where
     }
 }
 
-fn map_err_bytes<E: Into<SyntaxError>>(error: E, input: &[u8]) -> ParseLineBytesError {
+fn map_err_bytes<E: Into<SyntaxError>>(error: E, input: &[u8]) -> ParseLineBytesError<'_> {
     let errored_line_slice = split_on_new_line(input);
     ParseLineBytesError {
         errored_line_slice,

@@ -573,7 +573,7 @@ impl<'a> IFrameStreamInf<'a> {
     ///     .finish();
     /// assert_eq!(Some(HdcpLevel::Type0), tag.hdcp_level().known());
     /// ```
-    pub fn hdcp_level(&self) -> Option<EnumeratedString<HdcpLevel>> {
+    pub fn hdcp_level(&self) -> Option<EnumeratedString<'_, HdcpLevel>> {
         if let Some(hdcp_level) = &self.hdcp_level {
             Some(EnumeratedString::from(hdcp_level.as_ref()))
         } else {
@@ -615,7 +615,7 @@ impl<'a> IFrameStreamInf<'a> {
     ///     .finish();
     /// assert_eq!(Some(VideoRange::Pq), tag.video_range().known());
     /// ```
-    pub fn video_range(&self) -> Option<EnumeratedString<VideoRange>> {
+    pub fn video_range(&self) -> Option<EnumeratedString<'_, VideoRange>> {
         if let Some(video_range) = &self.video_range {
             Some(EnumeratedString::from(video_range.as_ref()))
         } else {
@@ -633,7 +633,7 @@ impl<'a> IFrameStreamInf<'a> {
     ///
     /// See [`crate::tag::hls::StreamInf::req_video_layout`] for more information on usage of
     /// [`VideoLayout`].
-    pub fn req_video_layout(&self) -> Option<VideoLayout> {
+    pub fn req_video_layout(&self) -> Option<VideoLayout<'_>> {
         if let Some(req_video_layout) = &self.req_video_layout {
             Some(VideoLayout::from(req_video_layout.as_ref()))
         } else {

@@ -393,7 +393,7 @@ impl<'a> SessionData<'a> {
     /// Corresponds to the `FORMAT` attribute.
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
-    pub fn format(&self) -> EnumeratedString<Format> {
+    pub fn format(&self) -> EnumeratedString<'_, Format> {
         if let Some(format) = &self.format {
             EnumeratedString::from(format.as_ref())
         } else {

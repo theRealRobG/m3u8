@@ -242,7 +242,7 @@ impl<'a> SessionKey<'a> {
     /// Corresponds to the `METHOD` attribute.
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
-    pub fn method(&self) -> EnumeratedString<Method> {
+    pub fn method(&self) -> EnumeratedString<'_, Method> {
         EnumeratedString::from(self.method.as_ref())
     }
 
