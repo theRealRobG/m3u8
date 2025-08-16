@@ -1,9 +1,9 @@
 use criterion::{Criterion, criterion_group, criterion_main};
 use quick_m3u8::{
-    Reader, Writer,
+    HlsLine, Reader, Writer,
     config::ParsingOptionsBuilder,
-    line::{self, HlsLine},
-    tag::{hls, known},
+    custom_parsing,
+    tag::{KnownTag, hls},
 };
 use std::hint::black_box;
 
@@ -12,7 +12,7 @@ const LONG_MEDIA_PLAYLIST: &'static str = include_str!("long_media_playlist.m3u8
 macro_rules! reader_match {
     (MUTATE, $reader:ident, $writer:ident) => {
         match black_box($reader.read_line()) {
-            Ok(Some(HlsLine::KnownTag(known::Tag::Hls(hls::Tag::Inf(mut tag))))) => {
+            Ok(Some(HlsLine::KnownTag(KnownTag::Hls(hls::Tag::Inf(mut tag))))) => {
                 tag.set_title(black_box(String::from("TEST")));
                 black_box($writer.write_line(HlsLine::from(tag)).unwrap());
             }
@@ -74,9 +74,9 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         .build();
 
     // Benchmark our own parsing of EXT-X-DATERANGE
-    assert!(line::parse(daterange_str, &daterange_opt).is_ok());
+    assert!(custom_parsing::line::parse(daterange_str, &daterange_opt).is_ok());
     c.bench_function("Bench EXT-X-DATERANGE", |b| {
-        b.iter(|| line::parse(daterange_str, &daterange_opt));
+        b.iter(|| custom_parsing::line::parse(daterange_str, &daterange_opt));
     });
 
     // Check some longer parsing of a whole manifest, once with all tags parsing bench, and once
@@ -87,8 +87,8 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     let playlist_no_tags_parse_options = ParsingOptionsBuilder::new().build();
     let playlist_lines = LONG_MEDIA_PLAYLIST.lines();
     for line in playlist_lines {
-        assert!(line::parse(line, &playlist_all_tags_parse_options).is_ok());
-        assert!(line::parse(line, &playlist_no_tags_parse_options).is_ok());
+        assert!(custom_parsing::line::parse(line, &playlist_all_tags_parse_options).is_ok());
+        assert!(custom_parsing::line::parse(line, &playlist_no_tags_parse_options).is_ok());
     }
     // no write benches
     reader_bench!(

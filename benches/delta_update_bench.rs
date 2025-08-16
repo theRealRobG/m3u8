@@ -3,12 +3,11 @@ use hls_m3u8::MediaPlaylist;
 use m3u8_rs::{ExtTag, parse_media_playlist_res};
 use pretty_assertions::assert_eq;
 use quick_m3u8::{
-    Reader, Writer,
+    HlsLine, Reader, Writer,
     config::ParsingOptionsBuilder,
-    line::HlsLine,
     tag::{
+        KnownTag,
         hls::{self, ServerControl, Skip, TagName, TagType, Version},
-        known,
     },
 };
 use std::{borrow::Cow, error::Error, hint::black_box, io::Write};
@@ -196,7 +195,7 @@ fn make_delta_update<W: Write>(input: &[u8], output: &mut W) -> Result<(), Box<d
 
     // This check is required to validate that this seems like a valid playlist.
     match reader.read_line().map_err(|e| e.error)? {
-        Some(HlsLine::KnownTag(known::Tag::Hls(hls::Tag::M3u(tag)))) => {
+        Some(HlsLine::KnownTag(KnownTag::Hls(hls::Tag::M3u(tag)))) => {
             writer.write_line(HlsLine::from(tag))?;
         }
         line => return Err(format!("unexpected first line: {line:?}").into()),
@@ -213,7 +212,7 @@ fn make_delta_update<W: Write>(input: &[u8], output: &mut W) -> Result<(), Box<d
         let mut uri_count = 0;
         for (index, line) in state.lines.iter().enumerate().rev() {
             match line {
-                HlsLine::KnownTag(known::Tag::Hls(hls::Tag::Inf(tag))) => {
+                HlsLine::KnownTag(KnownTag::Hls(hls::Tag::Inf(tag))) => {
                     backwards_segment_duration += tag.duration()
                 }
                 HlsLine::Uri(_) => {
@@ -249,7 +248,7 @@ fn make_delta_update<W: Write>(input: &[u8], output: &mut W) -> Result<(), Box<d
     loop {
         match reader.read_line() {
             Ok(Some(line)) => match line {
-                HlsLine::KnownTag(known::Tag::Hls(hls::Tag::Targetduration(ref tag))) => {
+                HlsLine::KnownTag(KnownTag::Hls(hls::Tag::Targetduration(ref tag))) => {
                     // We use EXT-X-TARGETDURATION to set the CAN-SKIP-UNTIL.
                     let calculated_skip_until = 6.0 * (tag.target_duration() as f64);
                     if state.skip_until.is_none() {
@@ -257,7 +256,7 @@ fn make_delta_update<W: Write>(input: &[u8], output: &mut W) -> Result<(), Box<d
                     }
                     writer.write_line(line)?;
                 }
-                HlsLine::KnownTag(known::Tag::Hls(hls::Tag::ServerControl(mut tag))) => {
+                HlsLine::KnownTag(KnownTag::Hls(hls::Tag::ServerControl(mut tag))) => {
                     // If the upstream playlist already has EXT-X-SERVER-CONTROL, then we either use
                     // the CAN-SKIP-UNTIL that exists, or update the tag to use the value we are
                     // defining. If we don't know the value yet (if the EXT-X-SERVER-CONTROL appears
@@ -278,7 +277,7 @@ fn make_delta_update<W: Write>(input: &[u8], output: &mut W) -> Result<(), Box<d
                         state.existing_server_control = Some(tag);
                     }
                 }
-                HlsLine::KnownTag(known::Tag::Hls(hls::Tag::Version(mut tag))) => {
+                HlsLine::KnownTag(KnownTag::Hls(hls::Tag::Version(mut tag))) => {
                     if tag.version() < 9 {
                         tag.set_version(9);
                     }
@@ -393,8 +392,8 @@ fn make_delta_update<W: Write>(input: &[u8], output: &mut W) -> Result<(), Box<d
 fn is_media_segment_tag(line: &HlsLine) -> bool {
     let tag_name = match line {
         HlsLine::KnownTag(tag) => match tag {
-            known::Tag::Hls(tag) => Some(tag.name()),
-            known::Tag::Custom(_) => unimplemented!(),
+            KnownTag::Hls(tag) => Some(tag.name()),
+            KnownTag::Custom(_) => unimplemented!(),
         },
         HlsLine::UnknownTag(tag) => TagName::try_from(tag.name()).ok(),
         HlsLine::Uri(_) => return true,

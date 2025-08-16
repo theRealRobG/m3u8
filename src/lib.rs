@@ -17,9 +17,9 @@
 //! for XML). The syntax (and name) is inspired by [quick-xml]. The [`Reader`] attempts to be almost
 //! zero-copy while still supporting mutation of the parsed data by utilizing [`std::borrow::Cow`]
 //! (Copy On Write) as much as possible. The library provides flexibility via support for custom tag
-//! registration ([`tag::known::CustomTag`]), which gives the user the ability to support parsing of
-//! tags not part of the main HLS specification, or overwrite parsing behavior of tags provided by
-//! the library.
+//! registration ([`tag::CustomTag`]), which gives the user the ability to support parsing of tags
+//! not part of the main HLS specification, or overwrite parsing behavior of tags provided by the
+//! library.
 //!
 //! When parsing M3U8 data quick-m3u8 aims to be very lenient when it comes to validation. The
 //! philosophy is that the library does not want to get in the way of extracting meaningful
@@ -41,7 +41,7 @@
 //!   with `#` is considered to be a URI line).
 //! * Enumerated strings (within [attribute-lists]) are not validated to have no whitespace.
 //! * A tag with a known name that fails the `TryFrom<ParsedTag>` conversion does not fail the line
-//!   and instead is presented as [`tag::unknown::Tag`].
+//!   and instead is presented as [`tag::UnknownTag`].
 //!
 //! With that being said, the library does validate proper UTF-8 conversion from `&[u8]` input,
 //! enumerated strings and enumerated string lists are wrapped in convenience types
@@ -73,10 +73,9 @@
 //! We can use the Reader to read information about each line in the playlist as such:
 //! ```
 //! # use quick_m3u8::{
+//! #     HlsLine, Reader,
 //! #     config::ParsingOptionsBuilder,
-//! #     line::HlsLine,
-//! #     tag::hls::{ Endlist, Inf, M3u, Targetduration, Version },
-//! #     Reader,
+//! #     tag::hls::{Endlist, Inf, M3u, Targetduration, Version},
 //! # };
 //! #
 //! # const EXAMPLE_MANIFEST: &str = r#"#EXTM3U
@@ -117,9 +116,9 @@
 //! Each case of the [`HlsLine`] is documented thoroughly; however, it's worth mentioning that in
 //! addition to what the HLS specification defines, the library also allows for `UnknownTag` (which
 //! is a tag, based on the `#EXT` prefix, but not one that we know about), and also allows
-//! `CustomTag`. The [`tag::known::CustomTag`] is a means for the user of the library to define
-//! support for their own custom tag specification in addition to what is provided via the HLS
-//! specification. The documentation for `CustomTag` provides more details on how that is achieved.
+//! `CustomTag`. The [`tag::CustomTag`] is a means for the user of the library to define support for
+//! their own custom tag specification in addition to what is provided via the HLS specification.
+//! The documentation for `CustomTag` provides more details on how that is achieved.
 //!
 //! The `Reader` also takes a configuration that allows the user to select what HLS tags the reader
 //! should parse. [`config::ParsingOptions`] provides more details, but in short, better performance
@@ -137,10 +136,9 @@
 //! complex example of how one may implement a HLS delta update (acting as a proxy layer).
 //! ```
 //! # use quick_m3u8::{
+//! #     HlsLine, Reader, Writer,
 //! #     config::ParsingOptions,
-//! #     line::HlsLine,
-//! #     tag::{hls, known},
-//! #     Reader, Writer,
+//! #     tag::{hls, KnownTag},
 //! # };
 //! # use std::io;
 //! let input_lines = concat!(
@@ -155,7 +153,7 @@
 //! let mut added_hello = false;
 //! while let Ok(Some(line)) = reader.read_line() {
 //!     match line {
-//!         HlsLine::KnownTag(known::Tag::Hls(hls::Tag::Inf(mut inf))) => {
+//!         HlsLine::KnownTag(KnownTag::Hls(hls::Tag::Inf(mut inf))) => {
 //!             if added_hello {
 //!                 inf.set_title(" World!");
 //!             } else {
@@ -191,11 +189,37 @@
 pub mod config;
 pub mod date;
 pub mod error;
-pub mod line;
+mod line;
 mod reader;
-pub mod tag;
+mod tag_internal;
 mod utils;
 mod writer;
+
+pub mod custom_parsing {
+    //! Methods and types used by the library for parsing M3U8.
+    //!
+    //! The preferred usage of the library is to rely on [`crate::Reader`]; however, these methods
+    //! are exposed to allow for more flexibility in parsing where necessary. The `Reader`
+    //! implementation provided by this library uses these methods internally.
+    pub use crate::line::{ParsedByteSlice, ParsedLineSlice};
+    pub mod line {
+        //! Methods for parsing a single HLS line.
+        //!
+        //! These methods provide responses that include what is parsed and what is remaining from
+        //! the line.
+        pub use crate::line::{parse, parse_bytes, parse_bytes_with_custom, parse_with_custom};
+    }
+    pub mod tag {
+        //! Method for parsing an unknown tag.
+        pub use crate::tag_internal::unknown::parse;
+    }
+}
+
+pub mod tag {
+    //! Container module for all HLS tag related modules, types, and methods.
+    pub use crate::tag_internal::hls;
+    pub use crate::tag_internal::{known::*, unknown::UnknownTag, value::*};
+}
 
 pub use line::HlsLine;
 pub use reader::Reader;

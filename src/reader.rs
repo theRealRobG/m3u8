@@ -2,7 +2,7 @@ use crate::{
     config::ParsingOptions,
     error::{ReaderBytesError, ReaderStrError},
     line::{HlsLine, parse_bytes_with_custom, parse_with_custom},
-    tag::known::{CustomTag, NoCustomTag},
+    tag::{CustomTag, NoCustomTag},
 };
 use std::marker::PhantomData;
 
@@ -20,8 +20,8 @@ use std::marker::PhantomData;
 /// # use quick_m3u8::{HlsLine, Reader};
 /// # use quick_m3u8::config::ParsingOptions;
 /// # use quick_m3u8::tag::{
-/// #     hls::{ self, DiscontinuitySequence, MediaSequence, Targetduration, Version, M3u },
-/// #     known,
+/// #     hls::{self, DiscontinuitySequence, MediaSequence, Targetduration, Version, M3u},
+/// #     KnownTag,
 /// # };
 /// # let playlist = r#"#EXTM3U
 /// # #EXT-X-TARGETDURATION:4
@@ -48,7 +48,7 @@ use std::marker::PhantomData;
 ///
 /// // Validate playlist header
 /// match reader.read_line() {
-///     Ok(Some(HlsLine::KnownTag(known::Tag::Hls(hls::Tag::M3u(tag))))) => {
+///     Ok(Some(HlsLine::KnownTag(KnownTag::Hls(hls::Tag::M3u(tag))))) => {
 ///         lines.push(HlsLine::from(tag))
 ///     }
 ///     _ => return Err(format!("missing playlist header").into()),
@@ -57,19 +57,19 @@ use std::marker::PhantomData;
 /// loop {
 ///     match reader.read_line() {
 ///         Ok(Some(line)) => match line {
-///             HlsLine::KnownTag(known::Tag::Hls(hls::Tag::Version(tag))) => {
+///             HlsLine::KnownTag(KnownTag::Hls(hls::Tag::Version(tag))) => {
 ///                 version = Some(tag.version());
 ///                 lines.push(HlsLine::from(tag));
 ///             }
-///             HlsLine::KnownTag(known::Tag::Hls(hls::Tag::Targetduration(tag))) => {
+///             HlsLine::KnownTag(KnownTag::Hls(hls::Tag::Targetduration(tag))) => {
 ///                 targetduration = Some(tag.target_duration());
 ///                 lines.push(HlsLine::from(tag));
 ///             }
-///             HlsLine::KnownTag(known::Tag::Hls(hls::Tag::MediaSequence(tag))) => {
+///             HlsLine::KnownTag(KnownTag::Hls(hls::Tag::MediaSequence(tag))) => {
 ///                 media_sequence = tag.media_sequence();
 ///                 lines.push(HlsLine::from(tag));
 ///             }
-///             HlsLine::KnownTag(known::Tag::Hls(hls::Tag::DiscontinuitySequence(tag))) => {
+///             HlsLine::KnownTag(KnownTag::Hls(hls::Tag::DiscontinuitySequence(tag))) => {
 ///                 discontinuity_sequence = tag.discontinuity_sequence();
 ///                 lines.push(HlsLine::from(tag));
 ///             }
@@ -140,7 +140,7 @@ use std::marker::PhantomData;
 /// # use quick_m3u8::{
 /// # Reader, HlsLine, Writer,
 /// # config::ParsingOptionsBuilder,
-/// # tag::known,
+/// # tag::KnownTag,
 /// # tag::hls::{self, Cue, Daterange, ExtensionAttributeValue},
 /// # };
 /// # use std::{borrow::Cow, error::Error, io::Write};
@@ -159,7 +159,7 @@ use std::marker::PhantomData;
 ///
 /// loop {
 ///     match reader.read_line() {
-///         Ok(Some(HlsLine::KnownTag(known::Tag::Hls(hls::Tag::Daterange(tag))))) => {
+///         Ok(Some(HlsLine::KnownTag(KnownTag::Hls(hls::Tag::Daterange(tag))))) => {
 ///             if let Some(advert_id) = tag.scte35_out().and_then(advert_id_from_scte35_out) {
 ///                 let id = format!("ADVERT:{}", tag.id());
 ///                 let builder = Daterange::builder()
@@ -222,8 +222,7 @@ use std::marker::PhantomData;
 /// # Reader, HlsLine, Writer,
 /// # config::ParsingOptionsBuilder,
 /// # date::DateTime,
-/// # tag::known::{self, CustomTag, WritableCustomTag},
-/// # tag::unknown,
+/// # tag::{KnownTag, UnknownTag, CustomTag, WritableCustomTag, WritableTag},
 /// # tag::hls::{self, Cue, Daterange, ExtensionAttributeValue},
 /// # error::ValidationError,
 /// # };
@@ -260,9 +259,9 @@ use std::marker::PhantomData;
 ///     No,
 ///     Cont,
 /// }
-/// impl<'a> TryFrom<unknown::Tag<'a>> for Scte35Tag<'a> { // --snip--
+/// impl<'a> TryFrom<UnknownTag<'a>> for Scte35Tag<'a> { // --snip--
 /// #    type Error = ValidationError;
-/// #    fn try_from(value: unknown::Tag<'a>) -> Result<Self, Self::Error> {
+/// #    fn try_from(value: UnknownTag<'a>) -> Result<Self, Self::Error> {
 /// #        todo!()
 /// #    }
 /// }
@@ -272,7 +271,7 @@ use std::marker::PhantomData;
 ///     }
 /// }
 /// impl<'a> WritableCustomTag<'a> for Scte35Tag<'a> { // --snip--
-/// #    fn into_writable_tag(self) -> known::WritableTag<'a> {
+/// #    fn into_writable_tag(self) -> WritableTag<'a> {
 /// #        todo!()
 /// #    }
 /// }
@@ -289,7 +288,7 @@ use std::marker::PhantomData;
 ///
 /// loop {
 ///     match reader.read_line() {
-///         Ok(Some(HlsLine::KnownTag(known::Tag::Custom(tag)))) => {
+///         Ok(Some(HlsLine::KnownTag(KnownTag::Custom(tag)))) => {
 ///             if let Some(advert_id) = advert_id_from_scte35_out(tag.as_ref().cue) {
 ///                 let tag_ref = tag.as_ref();
 ///                 let id = format!("ADVERT:{}", tag_ref.id.unwrap_or(generate_uuid()));
@@ -429,10 +428,8 @@ mod tests {
         config::ParsingOptionsBuilder,
         error::{ParseTagValueError, SyntaxError, UnknownTagSyntaxError, ValidationError},
         tag::{
+            CustomTagAccess, TagValue, UnknownTag,
             hls::{Endlist, Inf, M3u, Targetduration, Version},
-            known::CustomTagAccess,
-            unknown,
-            value::TagValue,
         },
     };
     use pretty_assertions::assert_eq;
@@ -480,7 +477,7 @@ mod tests {
         reader_test!(
             reader,
             read_line,
-            Some(HlsLine::from(unknown::Tag {
+            Some(HlsLine::from(UnknownTag {
                 name: "-X-EXAMPLE-TAG",
                 value: Some(TagValue(b"MEANING-OF-LIFE=42,QUESTION=\"UNKNOWN\"")),
                 original_input: &EXAMPLE_MANIFEST.as_bytes()[50..],
@@ -501,7 +498,7 @@ mod tests {
         reader_test!(
             reader,
             read_line,
-            Some(HlsLine::from(unknown::Tag {
+            Some(HlsLine::from(UnknownTag {
                 name: "-X-EXAMPLE-TAG",
                 value: Some(TagValue(b"MEANING-OF-LIFE=42,QUESTION=\"UNKNOWN\"")),
                 original_input: &EXAMPLE_MANIFEST.as_bytes()[50..],
@@ -585,9 +582,9 @@ mod tests {
             Self { answer, question }
         }
     }
-    impl<'a> TryFrom<unknown::Tag<'a>> for ExampleTag<'a> {
+    impl<'a> TryFrom<UnknownTag<'a>> for ExampleTag<'a> {
         type Error = ValidationError;
-        fn try_from(tag: unknown::Tag<'a>) -> Result<Self, Self::Error> {
+        fn try_from(tag: UnknownTag<'a>) -> Result<Self, Self::Error> {
             let mut attribute_list = tag
                 .value()
                 .ok_or(ParseTagValueError::UnexpectedEmpty)?

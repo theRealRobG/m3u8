@@ -6,10 +6,9 @@
 example is provided below:
 ```rust
 use quick_m3u8::{
+    HlsLine, Reader,
     config::ParsingOptionsBuilder,
-    line::HlsLine,
-    tag::hls::{ Endlist, Inf, M3u, Targetduration, Version },
-    Reader,
+    tag::hls::{Endlist, Inf, M3u, Targetduration, Version},
 };
 
 const EXAMPLE_MANIFEST: &str = r#"#EXTM3U
@@ -51,8 +50,7 @@ The above example demonstrates that a `HlsLine` is an with several potential cas
 The `HlsLine` in `m3u8` is defined as such:
 ```rust
 use quick_m3u8::tag::{
-    known::{self, CustomTag, NoCustomTag},
-    unknown,
+    KnownTag, CustomTag, NoCustomTag, UnknownTag,
 };
 use std::{borrow::Cow, fmt::Debug};
 
@@ -61,8 +59,8 @@ pub enum HlsLine<'a, Custom = NoCustomTag>
 where
     Custom: CustomTag<'a>,
 {
-    KnownTag(known::Tag<'a, Custom>),
-    UnknownTag(unknown::Tag<'a>),
+    KnownTag(KnownTag<'a, Custom>),
+    UnknownTag(UnknownTag<'a>),
     Comment(Cow<'a, str>),
     Uri(Cow<'a, str>),
     Blank,
@@ -104,7 +102,7 @@ structs providing access to all defined values.
 
 The `Custom` case allows for the library user to define their own custom known tag. Custom tag is
 generic but must implement the `CustomTag` trait. This trait requires `Debug`, `PartialEq`, and also
-`TryFrom<unknown::Tag<'a>, Error = ValidationError>` which is what is used to construct the tag from
+`TryFrom<UnknownTag<'a>, Error = ValidationError>` which is what is used to construct the tag from
 parsed data. The trait includes `is_known_name(name: &str) -> bool` which has no `self` requirement,
 as it is used as a test in the parser for whether `try_from` should be attempted for a given tag
 name.
@@ -126,15 +124,13 @@ definition found on the Roku developer website here:
 https://developer.roku.com/docs/developer-program/media-playback/trick-mode/hls-and-dash.md
 ```rust
 use quick_m3u8::{
-    Reader,
+    HlsLine, Reader,
     config::ParsingOptions,
     error::{ParseAttributeValueError, ParseTagValueError, ValidationError},
-    line::HlsLine,
     tag::{
         hls::Inf,
-        known::{self, CustomTag, WritableCustomTag, WritableTag},
-        unknown,
-        value::{AttributeValue, DecimalResolution, WritableAttributeValue, WritableTagValue},
+        KnownTag, CustomTag, WritableCustomTag, WritableTag, UnknownTag, AttributeValue,
+        DecimalResolution, WritableAttributeValue, WritableTagValue,
     },
 };
 use std::{collections::HashMap, marker::PhantomData};
@@ -149,10 +145,10 @@ pub enum CustomImageTag {
 }
 // Here we specialize into our own strongly typed structure what m3u8 was able to parse from the
 // input data.
-impl TryFrom<unknown::Tag<'_>> for CustomImageTag {
+impl TryFrom<UnknownTag<'_>> for CustomImageTag {
     type Error = ValidationError;
 
-    fn try_from(tag: unknown::Tag) -> Result<Self, Self::Error> {
+    fn try_from(tag: UnknownTag) -> Result<Self, Self::Error> {
         match tag.name() {
             "-X-IMAGES-ONLY" => Ok(CustomImageTag::ImagesOnly),
             "-X-TILES" => Ok(CustomImageTag::Tiles(Tiles::try_from(tag)?)),
@@ -171,7 +167,7 @@ impl CustomTag<'_> for CustomImageTag {
 }
 // This is used by the quick_m3u8::Writer to handle writing of custom tag implementations.
 impl<'a> WritableCustomTag<'a> for CustomImageTag {
-    fn into_writable_tag(self) -> known::WritableTag<'a> {
+    fn into_writable_tag(self) -> WritableTag<'a> {
         match self {
             CustomImageTag::ImagesOnly => {
                 WritableTag::new("-X-IMAGES-ONLY", WritableTagValue::Empty)
@@ -203,10 +199,10 @@ pub struct Tiles {
     pub layout: DecimalResolution,
     pub duration: f64,
 }
-impl TryFrom<unknown::Tag<'_>> for Tiles {
+impl TryFrom<UnknownTag<'_>> for Tiles {
     type Error = ValidationError;
 
-    fn try_from(tag: unknown::Tag) -> Result<Self, Self::Error> {
+    fn try_from(tag: UnknownTag) -> Result<Self, Self::Error> {
         let attribute_list = tag
             .value()
             .ok_or(ParseTagValueError::UnexpectedEmpty)?
@@ -266,13 +262,13 @@ let mut reader = Reader::with_custom_from_str(
     PhantomData::<CustomImageTag>,
 );
 match reader.read_line() {
-    Ok(Some(HlsLine::KnownTag(known::Tag::Custom(tag)))) => {
+    Ok(Some(HlsLine::KnownTag(KnownTag::Custom(tag)))) => {
         assert_eq!(tag.as_ref(), &CustomImageTag::ImagesOnly)
     }
     l => panic!("unexpected line {l:?}"),
 }
 match reader.read_line() {
-    Ok(Some(HlsLine::KnownTag(known::Tag::Custom(tag)))) => {
+    Ok(Some(HlsLine::KnownTag(KnownTag::Custom(tag)))) => {
         assert_eq!(
             tag.as_ref(),
             &CustomImageTag::Tiles(Tiles {
@@ -326,12 +322,11 @@ Below is an example demonstrating the flexibility as applied to the `VideoRange`
 on the `EXT-X-STREAM-INF` tag:
 ```rust
 use quick_m3u8::{
-    Reader,
+    HlsLine, Reader,
     config::ParsingOptionsBuilder,
-    line::HlsLine,
     tag::{
         hls::{self, EnumeratedString, VideoRange},
-        known,
+        KnownTag,
     },
 };
 
@@ -342,7 +337,7 @@ let mut reader = Reader::from_str(
         .build(),
 );
 match reader.read_line() {
-    Ok(Some(HlsLine::KnownTag(known::Tag::Hls(hls::Tag::StreamInf(mut tag))))) => {
+    Ok(Some(HlsLine::KnownTag(KnownTag::Hls(hls::Tag::StreamInf(mut tag))))) => {
         // You can see that the value is strongly typed using the VideoRange enum.
         assert_eq!(
             Some(EnumeratedString::Known(VideoRange::Sdr)),
@@ -399,12 +394,11 @@ Below is an example demonstrating the flexibility as applied to the `Cue` enumer
 the `EXT-X-DATERANGE` tag:
 ```rust
 use quick_m3u8::{
-    Reader,
+    HlsLine, Reader,
     config::ParsingOptionsBuilder,
-    line::HlsLine,
     tag::{
         hls::{self, EnumeratedString, EnumeratedStringList, Cue},
-        known,
+        KnownTag,
     },
 };
 
@@ -415,7 +409,7 @@ let mut reader = Reader::from_str(
         .build(),
 );
 match reader.read_line() {
-    Ok(Some(HlsLine::KnownTag(known::Tag::Hls(hls::Tag::Daterange(mut tag))))) => {
+    Ok(Some(HlsLine::KnownTag(KnownTag::Hls(hls::Tag::Daterange(mut tag))))) => {
         // Since the `contains` method accepts `impl Into<Cow<str>>`, and all of the library
         // implementations of `EnumeratedString` also implement `Into<Cow<str>>`, we can use
         // the enumeration directly to validate if a value is contained within the list. The
@@ -468,16 +462,15 @@ attribute. The support for each of these are built on top of what has been discu
 Below is a demonstration of the features that each wrapping type provides:
 ```rust
 use quick_m3u8::{
-    Reader,
+    HlsLine, Reader,
     config::ParsingOptionsBuilder,
-    line::HlsLine,
     tag::{
         hls::{
             self,
             AudioCodingIdentifier, ChannelSpecialUsageIdentifier, Channels, ValidChannels,
             VideoChannelSpecifier, VideoProjectionSpecifier,
         },
-        known,
+        KnownTag,
     },
 };
 
@@ -494,7 +487,7 @@ let mut reader = Reader::from_str(
         .build(),
 );
 match reader.read_line() {
-    Ok(Some(HlsLine::KnownTag(known::Tag::Hls(hls::Tag::Media(mut tag))))) => {
+    Ok(Some(HlsLine::KnownTag(KnownTag::Hls(hls::Tag::Media(mut tag))))) => {
         // Since channels must provide a valid count, the return value is `Channels` which
         // is an enum that has a `Valid` and `Invalid` case. To use the `Valid` case this
         // must be extracted.
@@ -536,7 +529,7 @@ match reader.read_line() {
     _ => panic!("oh no, my demo failed"),
 }
 match reader.read_line() {
-    Ok(Some(HlsLine::KnownTag(known::Tag::Hls(hls::Tag::StreamInf(mut tag))))) => {
+    Ok(Some(HlsLine::KnownTag(KnownTag::Hls(hls::Tag::StreamInf(mut tag))))) => {
         // REQ-VIDEO-LAYOUT has no mandatory parameters and so there is no "valid/invalid"
         // wrapping enum.
         let video_layout = tag.req_video_layout().unwrap();
@@ -624,18 +617,15 @@ Large playlist, no tags, using Reader::from_str, no writing
                         time:   [947.17 µs 948.08 µs 949.12 µs]
 ```
 
-Some basic validation can still be done on `m3u8::tag::unknown::Tag`. For example, the name can be
-converted to a `m3u8::tag::hls::TagName` and then you can check the `TagType` for some
-generic reasoning on the tag position/semantics without parsing the values:
+Some basic validation can still be done on `quick_m3u8::tag::UnknownTag`. For example, the name can
+be converted to a `m3u8::tag::hls::TagName` and then you can check the `TagType` for some generic
+reasoning on the tag position/semantics without parsing the values:
 ```rust
 use quick_m3u8::{
     error::ValidationError,
-    tag::{
-        hls::{TagName, TagType},
-        unknown::Tag,
-    },
+    tag::{UnknownTag, hls::{TagName, TagType}},
 };
-fn handle_unknown_tag(tag: Tag) -> Result<(), ValidationError> {
+fn handle_unknown_tag(tag: UnknownTag) -> Result<(), ValidationError> {
     let tag_name = TagName::try_from(tag.name())?;
     match tag_name.tag_type() {
         TagType::Basic => todo!("handle_basic_tag"),
@@ -659,10 +649,9 @@ The library provides a `Writer` to write parsed tags back into data. For example
 to parse a playlist, mutate the data, then write back the changed tags. Below is a toy example:
 ```rust
 use quick_m3u8::{
+    HlsLine, Reader, Writer,
     config::ParsingOptions,
-    line::HlsLine,
-    tag::{hls, known},
-    Reader, Writer,
+    tag::{hls, KnownTag},
 };
 use std::io;
 
@@ -678,7 +667,7 @@ let mut writer = Writer::new(Vec::new());
 let mut added_hello = false;
 while let Ok(Some(line)) = reader.read_line() {
     match line {
-        HlsLine::KnownTag(known::Tag::Hls(hls::Tag::Inf(mut inf))) => {
+        HlsLine::KnownTag(KnownTag::Hls(hls::Tag::Inf(mut inf))) => {
             if added_hello {
                 inf.set_title(String::from("World!"));
             } else {

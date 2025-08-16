@@ -7,11 +7,8 @@
 use crate::{
     config::ParsingOptions,
     error::{ParseLineBytesError, ParseLineStrError, SyntaxError},
-    tag::{
-        self, hls,
-        known::{self, CustomTag, CustomTagAccess, NoCustomTag},
-        unknown,
-    },
+    tag::{CustomTag, CustomTagAccess, KnownTag, NoCustomTag, UnknownTag, hls},
+    tag_internal::unknown::parse_assuming_ext_taken,
     utils::{split_on_new_line, str_from},
 };
 use std::{borrow::Cow, cmp::PartialEq, fmt::Debug};
@@ -24,7 +21,7 @@ use std::{borrow::Cow, cmp::PartialEq, fmt::Debug};
 /// > character '#' are either comments or tags. Tags begin with #EXT.
 ///
 /// This data structure follows that guidance but also adds [`HlsLine::UnknownTag`] and
-/// [`known::Tag::Custom`]. These cases are described in more detail within their own documentation,
+/// [`KnownTag::Custom`]. These cases are described in more detail within their own documentation,
 /// but in short, the first allows us to capture tags that are not yet known to the library
 /// (providing at least a split between name and value), while the second allows a user of the
 /// library to define their own custom tag specification that can be then parsed into a strongly
@@ -41,13 +38,13 @@ where
     /// the `draft-pantos-hls` Internet-Draft, or via a custom tag registration provided by the user
     /// of the library.
     ///
-    /// See [`known::Tag`] for more information.
-    KnownTag(known::Tag<'a, Custom>),
+    /// See [`KnownTag`] for more information.
+    KnownTag(KnownTag<'a, Custom>),
     /// A tag, as defined by the `#EXT` prefix, but not one that is known to the library, or that is
     /// deliberately ignored via [`ParsingOptions`].
     ///
-    /// See [`unknown::Tag`] for more information.
-    UnknownTag(unknown::Tag<'a>),
+    /// See [`UnknownTag`] for more information.
+    UnknownTag(UnknownTag<'a>),
     /// A comment line. These are lines that begin with `#` and are followed by a string of UTF-8
     /// characters (though not BOM or UTF-8 control characters). The line is terminated by either a
     /// line feed (`\n`) or a carriage return followed by a line feed (`\r\n`).
@@ -57,7 +54,7 @@ where
     /// the `#` (including any whitespace) and does not include the line break characters. Below
     /// demonstrates this:
     /// ```
-    /// # use quick_m3u8::{config::ParsingOptions, line::{HlsLine, parse},
+    /// # use quick_m3u8::{config::ParsingOptions, HlsLine, custom_parsing::line::parse,
     /// # error::ParseLineStrError};
     /// # use std::borrow::Cow;
     /// # let options = ParsingOptions::default();
@@ -82,7 +79,8 @@ where
     /// and also a copy-free reference to the original parsed data. It includes all characters up
     /// until, but not including, the line break characters. The following demonstrates this:
     /// ```
-    /// # use quick_m3u8::{config::ParsingOptions, line::{HlsLine, parse}, error::ParseLineStrError};
+    /// # use quick_m3u8::{config::ParsingOptions, HlsLine, error::ParseLineStrError};
+    /// # use quick_m3u8::custom_parsing::line::parse;
     /// # use std::borrow::Cow;
     /// # let options = ParsingOptions::default();
     /// let expected = "hi.m3u8";
@@ -109,7 +107,8 @@ where
     /// will still be parsed as a URI line, rather than a blank line. As mentioned, it is up to the
     /// user of the library to properly validate URI lines.
     /// ```
-    /// # use quick_m3u8::{config::ParsingOptions, line::{HlsLine, parse}, error::ParseLineStrError};
+    /// # use quick_m3u8::{config::ParsingOptions, HlsLine, error::ParseLineStrError};
+    /// # use quick_m3u8::custom_parsing::line::parse;
     /// # use std::borrow::Cow;
     /// # let options = ParsingOptions::default();
     /// // Demonstrating what is considered a blank line:
@@ -140,7 +139,7 @@ where
     Custom: CustomTag<'a>,
 {
     fn from(tag: hls::Tag<'a>) -> Self {
-        Self::KnownTag(known::Tag::Hls(tag))
+        Self::KnownTag(KnownTag::Hls(tag))
     }
 }
 
@@ -149,34 +148,34 @@ where
     Custom: CustomTag<'a>,
 {
     fn from(tag: CustomTagAccess<'a, Custom>) -> Self {
-        Self::KnownTag(known::Tag::Custom(tag))
+        Self::KnownTag(KnownTag::Custom(tag))
     }
 }
 
-impl<'a, Custom> From<unknown::Tag<'a>> for HlsLine<'a, Custom>
+impl<'a, Custom> From<UnknownTag<'a>> for HlsLine<'a, Custom>
 where
     Custom: CustomTag<'a>,
 {
-    fn from(tag: unknown::Tag<'a>) -> Self {
+    fn from(tag: UnknownTag<'a>) -> Self {
         Self::UnknownTag(tag)
     }
 }
 
 impl<'a> HlsLine<'a> {
     /// Convenience constructor for [`HlsLine::Comment`]. This will construct the line with the
-    /// generic `Custom` in [`HlsLine::KnownTag`] being [`known::NoCustomTag`].
+    /// generic `Custom` in [`HlsLine::KnownTag`] being [`NoCustomTag`].
     pub fn comment(comment: impl Into<Cow<'a, str>>) -> Self {
         Self::Comment(comment.into())
     }
 
     /// Convenience constructor for [`HlsLine::Uri`]. This will construct the line with the generic
-    /// `Custom` in [`HlsLine::KnownTag`] being [`known::NoCustomTag`].
+    /// `Custom` in [`HlsLine::KnownTag`] being [`NoCustomTag`].
     pub fn uri(uri: impl Into<Cow<'a, str>>) -> Self {
         Self::Uri(uri.into())
     }
 
     /// Convenience constructor for [`HlsLine::Blank`]. This will construct the line with the
-    /// generic `Custom` in [`HlsLine::KnownTag`] being [`known::NoCustomTag`].
+    /// generic `Custom` in [`HlsLine::KnownTag`] being [`NoCustomTag`].
     pub fn blank() -> Self {
         Self::Blank
     }
@@ -189,7 +188,7 @@ macro_rules! impl_line_from_tag {
             Custom: CustomTag<'a>,
         {
             fn from(tag: $tag_mod_path) -> Self {
-                Self::KnownTag($crate::tag::known::Tag::Hls(
+                Self::KnownTag($crate::tag::KnownTag::Hls(
                     $crate::tag::hls::Tag::$tag_name(tag),
                 ))
             }
@@ -276,7 +275,7 @@ where
 /// ```
 /// # use quick_m3u8::{
 /// # config::ParsingOptions,
-/// # line::{HlsLine, ParsedLineSlice, parse},
+/// # HlsLine, custom_parsing::{ParsedLineSlice, line::parse},
 /// # error::ParseLineStrError,
 /// # tag::hls::{M3u, Targetduration, Version},
 /// # };
@@ -321,20 +320,20 @@ pub fn parse<'a>(
 /// ## Example
 /// ```
 /// # use quick_m3u8::{
+/// # HlsLine,
 /// # config::ParsingOptions,
-/// # line::{HlsLine, ParsedLineSlice, parse_with_custom},
+/// # custom_parsing::{ParsedLineSlice, line::parse_with_custom},
 /// # error::{ParseLineStrError, ValidationError, ParseTagValueError},
-/// # tag::known::{Tag, CustomTag},
+/// # tag::{KnownTag, CustomTag, UnknownTag},
 /// # tag::hls::{M3u, Targetduration, Version},
-/// # tag::unknown,
 /// # };
 /// #[derive(Debug, Clone, PartialEq)]
 /// struct UserDefinedTag<'a> {
 ///     message: &'a str,
 /// }
-/// impl<'a> TryFrom<unknown::Tag<'a>> for UserDefinedTag<'a> { // --snip--
+/// impl<'a> TryFrom<UnknownTag<'a>> for UserDefinedTag<'a> { // --snip--
 /// #    type Error = ValidationError;
-/// #    fn try_from(tag: unknown::Tag<'a>) -> Result<Self, Self::Error> {
+/// #    fn try_from(tag: UnknownTag<'a>) -> Result<Self, Self::Error> {
 /// #        let mut list = tag
 /// #            .value()
 /// #            .ok_or(ParseTagValueError::UnexpectedEmpty)?
@@ -367,7 +366,7 @@ pub fn parse<'a>(
 ///     parsed,
 ///     remaining
 /// } = parse_with_custom::<UserDefinedTag>(remaining, &options)?;
-/// let HlsLine::KnownTag(Tag::Custom(tag)) = parsed else { return Ok(()) };
+/// let HlsLine::KnownTag(KnownTag::Custom(tag)) = parsed else { return Ok(()) };
 /// assert_eq!(tag.as_ref(), &UserDefinedTag { message: "Hello, World!" });
 ///
 /// let Some(remaining) = remaining else { return Ok(()) };
@@ -432,10 +431,10 @@ where
     } else if input[0] == b'#' {
         if input.get(3) == Some(&b'T') && &input[..3] == b"#EX" {
             let tag_rest = &input[4..];
-            let mut tag = tag::unknown::parse_assuming_ext_taken(tag_rest, input)
+            let mut tag = parse_assuming_ext_taken(tag_rest, input)
                 .map_err(|error| map_err_bytes(error, input))?;
             if options.is_known_name(tag.parsed.name) || Custom::is_known_name(tag.parsed.name) {
-                match known::Tag::try_from(tag.parsed) {
+                match KnownTag::try_from(tag.parsed) {
                     Ok(known_tag) => Ok(ParsedByteSlice {
                         parsed: HlsLine::KnownTag(known_tag),
                         remaining: tag.remaining,
@@ -495,8 +494,8 @@ mod tests {
         config::ParsingOptionsBuilder,
         error::{ParseTagValueError, ValidationError},
         tag::{
+            AttributeValue, TagValue,
             hls::{self, M3u, Start},
-            value::{AttributeValue, TagValue},
         },
     };
     use pretty_assertions::assert_eq;
@@ -543,10 +542,10 @@ mod tests {
             times: u64,
             score: Option<f64>,
         }
-        impl<'a> TryFrom<unknown::Tag<'a>> for TestTag<'a> {
+        impl<'a> TryFrom<UnknownTag<'a>> for TestTag<'a> {
             type Error = ValidationError;
 
-            fn try_from(tag: unknown::Tag<'a>) -> Result<Self, Self::Error> {
+            fn try_from(tag: UnknownTag<'a>) -> Result<Self, Self::Error> {
                 let value = tag.value().ok_or(ParseTagValueError::UnexpectedEmpty)?;
                 let list = value.try_as_attribute_list()?;
                 let Some(greeting_type) = list
@@ -612,7 +611,7 @@ mod tests {
             parse("#EXT-X-START:TIME-OFFSET=-18", &ParsingOptions::default()).map(|p| p.parsed)
         );
         assert_eq!(
-            Ok(HlsLine::UnknownTag(unknown::Tag {
+            Ok(HlsLine::UnknownTag(UnknownTag {
                 name: "-X-START",
                 value: Some(TagValue(b"TIME-OFFSET=-18")),
                 original_input: b"#EXT-X-START:TIME-OFFSET=-18",
