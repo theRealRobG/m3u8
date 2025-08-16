@@ -282,9 +282,7 @@ use std::marker::PhantomData;
 ///
 /// let mut reader = Reader::with_custom_from_bytes(
 ///     upstream_playlist,
-///     ParsingOptionsBuilder::new()
-///         .with_parsing_for_daterange()
-///         .build(),
+///     ParsingOptionsBuilder::new().build(),
 ///     PhantomData::<Scte35Tag>,
 /// );
 /// let mut writer = Writer::new(output);
