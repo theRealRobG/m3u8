@@ -674,11 +674,7 @@ impl<'a> AllowedCpc<'a> {
     ) -> bool {
         if let Some((start, end)) = self.keyformat_value_start_and_end_indices(&keyformat) {
             let value = self.inner_value(start, end);
-            if value
-                .split_terminator('/')
-                .find(|c| *c == cpc_label.as_ref())
-                .is_some()
-            {
+            if value.split_terminator('/').any(|c| c == cpc_label.as_ref()) {
                 false
             } else {
                 let value_is_empty = value.is_empty();
@@ -690,13 +686,11 @@ impl<'a> AllowedCpc<'a> {
                         let string = format!("/{}", cpc_label.as_ref());
                         new_string.insert_str(end, &string);
                     }
+                } else if value_is_empty {
+                    new_string.push_str(cpc_label.as_ref());
                 } else {
-                    if value_is_empty {
-                        new_string.push_str(cpc_label.as_ref());
-                    } else {
-                        let string = format!("/{}", cpc_label.as_ref());
-                        new_string.push_str(&string);
-                    }
+                    let string = format!("/{}", cpc_label.as_ref());
+                    new_string.push_str(&string);
                 }
                 self.inner = Cow::Owned(new_string);
                 true
@@ -753,14 +747,10 @@ impl<'a> AllowedCpc<'a> {
         keyformat: impl AsRef<str>,
         cpc_label: impl AsRef<str>,
     ) -> bool {
-        let keyformat_length = keyformat.as_ref().as_bytes().len();
+        let keyformat_length = keyformat.as_ref().len();
         if let Some((start, end)) = self.keyformat_value_start_and_end_indices(keyformat) {
             let value = self.inner_value(start, end);
-            if value
-                .split_terminator('/')
-                .find(|c| *c == cpc_label.as_ref())
-                .is_some()
-            {
+            if value.split_terminator('/').any(|c| c == cpc_label.as_ref()) {
                 let new_value = value
                     .split_terminator('/')
                     .filter(|c| *c != cpc_label.as_ref())
@@ -776,14 +766,12 @@ impl<'a> AllowedCpc<'a> {
                         new_string.insert_str(end, &new_value);
                         new_string.drain(start..end);
                     }
+                } else if new_value.is_empty() {
+                    let start = start - (keyformat_length + 1); // +1 for ':'
+                    new_string.drain(start..);
                 } else {
-                    if new_value.is_empty() {
-                        let start = start - (keyformat_length + 1); // +1 for ':'
-                        new_string.drain(start..);
-                    } else {
-                        new_string.drain(start..);
-                        new_string.push_str(&new_value);
-                    }
+                    new_string.drain(start..);
+                    new_string.push_str(&new_value);
                 }
                 if new_string.as_bytes().iter().next_back() == Some(&b',') {
                     new_string.pop();
