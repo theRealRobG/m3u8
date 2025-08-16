@@ -119,7 +119,7 @@ impl<'a> UnknownTag<'a> {
 /// This method is at the root of parsing in this library and what other higher level types are
 /// built on top of. It helps by splitting the input on a new line and providing a name and value
 /// slice for the line we are parsing (assuming it is a tag line).
-pub fn parse(input: &str) -> Result<ParsedLineSlice<UnknownTag>, UnknownTagSyntaxError> {
+pub fn parse(input: &str) -> Result<ParsedLineSlice<'_, UnknownTag<'_>>, UnknownTagSyntaxError> {
     let input = input.as_bytes();
     if input.get(3) == Some(&b'T') && &input[..3] == b"#EX" {
         let ParsedByteSlice { parsed, remaining } = parse_assuming_ext_taken(&input[4..], input)?;

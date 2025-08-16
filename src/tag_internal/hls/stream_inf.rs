@@ -323,7 +323,7 @@ impl VideoLayout<'_> {
     /// assert!(video_layout.channels().contains("CH-3D"));
     /// assert_eq!("CH-3D", video_layout.as_ref());
     /// ```
-    pub fn channels(&self) -> EnumeratedStringList<VideoChannelSpecifier> {
+    pub fn channels(&self) -> EnumeratedStringList<'_, VideoChannelSpecifier> {
         let split = self.inner.split('/');
         for entries in split {
             if entries.starts_with("CH") {
@@ -358,7 +358,7 @@ impl VideoLayout<'_> {
     /// assert!(video_layout.projection().contains("PROJ-360"));
     /// assert_eq!("PROJ-360", video_layout.as_ref());
     /// ```
-    pub fn projection(&self) -> EnumeratedStringList<VideoProjectionSpecifier> {
+    pub fn projection(&self) -> EnumeratedStringList<'_, VideoProjectionSpecifier> {
         let split = self.inner.split('/');
         for entries in split {
             if entries.starts_with("PROJ") {
@@ -514,7 +514,7 @@ impl<'a> AllowedCpc<'a> {
     /// ```
     pub fn allowed_cpc_for_fair_play(
         &self,
-    ) -> impl Iterator<Item = EnumeratedString<FairPlayCpcLabel>> {
+    ) -> impl Iterator<Item = EnumeratedString<'_, FairPlayCpcLabel>> {
         self.allowed_cpc_for_keyformat(Self::fair_play_keyformat())
             .map(EnumeratedString::from)
     }
@@ -1441,7 +1441,7 @@ impl<'a> StreamInf<'a> {
     ///     .finish();
     /// assert_eq!(Some(HdcpLevel::Type0), tag.hdcp_level().known());
     /// ```
-    pub fn hdcp_level(&self) -> Option<EnumeratedString<HdcpLevel>> {
+    pub fn hdcp_level(&self) -> Option<EnumeratedString<'_, HdcpLevel>> {
         if let Some(hdcp_level) = &self.hdcp_level {
             Some(EnumeratedString::from(hdcp_level.as_ref()))
         } else {
@@ -1514,7 +1514,7 @@ impl<'a> StreamInf<'a> {
     ///     r => panic!("unexpected result {r:?}"),
     /// }
     /// ```
-    pub fn allowed_cpc(&self) -> Option<AllowedCpc> {
+    pub fn allowed_cpc(&self) -> Option<AllowedCpc<'_>> {
         if let Some(allowed_cpc) = &self.allowed_cpc {
             Some(AllowedCpc::from(allowed_cpc.as_ref()))
         } else {
@@ -1541,7 +1541,7 @@ impl<'a> StreamInf<'a> {
     ///     .finish();
     /// assert_eq!(Some(VideoRange::Pq), tag.video_range().known());
     /// ```
-    pub fn video_range(&self) -> Option<EnumeratedString<VideoRange>> {
+    pub fn video_range(&self) -> Option<EnumeratedString<'_, VideoRange>> {
         if let Some(video_range) = &self.video_range {
             Some(EnumeratedString::from(video_range.as_ref()))
         } else {
@@ -1589,7 +1589,7 @@ impl<'a> StreamInf<'a> {
     ///     r => panic!("unexpected result {r:?}"),
     /// }
     /// ```
-    pub fn req_video_layout(&self) -> Option<VideoLayout> {
+    pub fn req_video_layout(&self) -> Option<VideoLayout<'_>> {
         if let Some(req_video_layout) = &self.req_video_layout {
             Some(VideoLayout::from(req_video_layout.as_ref()))
         } else {

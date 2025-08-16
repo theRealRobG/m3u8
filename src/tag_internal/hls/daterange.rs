@@ -526,7 +526,7 @@ impl<'a> Daterange<'a> {
     ///     r => panic!("unexpected result {r:?}")
     /// }
     /// ```
-    pub fn cue(&self) -> Option<EnumeratedStringList<Cue>> {
+    pub fn cue(&self) -> Option<EnumeratedStringList<'_, Cue>> {
         if let Some(cue) = &self.cue {
             Some(EnumeratedStringList::from(cue.as_ref()))
         } else {
@@ -607,13 +607,13 @@ impl<'a> Daterange<'a> {
     ///     r => panic!("unexpected result {r:?}")
     /// }
     /// ```
-    pub fn extension_attributes(&self) -> HashMap<&str, ExtensionAttributeValue> {
+    pub fn extension_attributes(&self) -> HashMap<&str, ExtensionAttributeValue<'_>> {
         let mut map = HashMap::new();
         for (key, value) in &self.attribute_list {
-            if key.starts_with("X-") {
-                if let Ok(value) = ExtensionAttributeValue::try_from(*value) {
-                    map.insert(*key, value);
-                }
+            if key.starts_with("X-")
+                && let Ok(value) = ExtensionAttributeValue::try_from(*value)
+            {
+                map.insert(*key, value);
             }
         }
         for (key, value) in &self.extension_attributes {

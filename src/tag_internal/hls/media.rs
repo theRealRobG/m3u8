@@ -410,7 +410,7 @@ impl ValidChannels<'_> {
     /// Identifies the presence of spatial audio of some kind, for example, object-based audio, in
     /// the Rendition. This is described as a list of audio coding identifiers (which can be codec
     /// specific).
-    pub fn spatial_audio(&self) -> EnumeratedStringList<AudioCodingIdentifier> {
+    pub fn spatial_audio(&self) -> EnumeratedStringList<'_, AudioCodingIdentifier> {
         let mut split = self.inner.splitn(3, '/');
         split.next();
         let Some(aci_str) = split.next().map(str::trim) else {
@@ -423,7 +423,7 @@ impl ValidChannels<'_> {
     }
     /// Provides supplementary indications of special channel usage that are necessary for informed
     /// selection and processing.
-    pub fn special_usage(&self) -> EnumeratedStringList<ChannelSpecialUsageIdentifier> {
+    pub fn special_usage(&self) -> EnumeratedStringList<'_, ChannelSpecialUsageIdentifier> {
         let mut split = self.inner.splitn(4, '/');
         split.next();
         split.next();
@@ -438,7 +438,7 @@ impl ValidChannels<'_> {
     /// At the time of writing the HLS specification only defined 3 parameters (described here via
     /// [`Self::count`], [`Self::spatial_audio`], and [`Self::special_usage`]). In case more
     /// parameters are added later, this method will expose those as a split on `'/'`.
-    pub fn unknown_parameters(&self) -> Split<char> {
+    pub fn unknown_parameters(&self) -> Split<'_, char> {
         let mut split = self.inner.split('/');
         split.next();
         split.next();
@@ -1018,7 +1018,7 @@ impl<'a> Media<'a> {
     /// Corresponds to the `TYPE` attribute.
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
-    pub fn media_type(&self) -> EnumeratedString<MediaType> {
+    pub fn media_type(&self) -> EnumeratedString<'_, MediaType> {
         EnumeratedString::from(self.media_type.as_ref())
     }
     /// Corresponds to the `NAME` attribute.
@@ -1138,7 +1138,7 @@ impl<'a> Media<'a> {
     ///     .finish();
     /// assert_eq!(Some(InstreamId::Cea608(Cea608InstreamId::Cc1)), tag.instream_id().known());
     /// ```
-    pub fn instream_id(&self) -> Option<EnumeratedString<InstreamId>> {
+    pub fn instream_id(&self) -> Option<EnumeratedString<'_, InstreamId>> {
         if let Some(instream_id) = &self.instream_id {
             Some(EnumeratedString::from(instream_id.as_ref()))
         } else {
@@ -1177,7 +1177,7 @@ impl<'a> Media<'a> {
     /// Corresponds to the `CHARACTERISTICS` attribute.
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
-    pub fn characteristics(&self) -> Option<EnumeratedStringList<MediaCharacteristicTag>> {
+    pub fn characteristics(&self) -> Option<EnumeratedStringList<'_, MediaCharacteristicTag>> {
         if let Some(characteristics) = &self.characteristics {
             Some(EnumeratedStringList::from(characteristics.as_ref()))
         } else {
@@ -1225,7 +1225,7 @@ impl<'a> Media<'a> {
     ///     r => panic!("unexpected result {r:?}"),
     /// }
     /// ```
-    pub fn channels(&self) -> Option<Channels> {
+    pub fn channels(&self) -> Option<Channels<'_>> {
         if let Some(channels) = &self.channels {
             Some(Channels::from(channels.as_ref()))
         } else {
