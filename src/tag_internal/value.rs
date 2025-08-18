@@ -237,7 +237,34 @@ impl<'a> TagValue<'a> {
     pub fn try_as_attribute_list(
         &self,
     ) -> Result<HashMap<&'a str, AttributeValue<'a>>, AttributeListParsingError> {
-        let mut attribute_list = HashMap::new();
+        self.try_as_ordered_attribute_list().map(HashMap::from_iter)
+    }
+
+    /// Attempt to convert the tag value bytes into an ordered attribute list.
+    ///
+    /// For example:
+    /// ```
+    /// # use std::collections::HashMap;
+    /// # use quick_m3u8::tag::{AttributeValue, UnquotedAttributeValue};
+    /// let tag = quick_m3u8::custom_parsing::tag::parse(
+    ///     "#EXT-X-EXAMPLE:TYPE=LIST,VALUE=\"example\""
+    /// )?.parsed;
+    /// if let Some(value) = tag.value() {
+    ///     assert_eq!(
+    ///         vec![
+    ///             ("TYPE", AttributeValue::Unquoted(UnquotedAttributeValue(b"LIST"))),
+    ///             ("VALUE", AttributeValue::Quoted("example"))
+    ///         ],
+    ///         value.try_as_ordered_attribute_list()?
+    ///     );
+    /// }
+    /// # else { panic!("unexpected empty value"); }
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn try_as_ordered_attribute_list(
+        &self,
+    ) -> Result<Vec<(&'a str, AttributeValue<'a>)>, AttributeListParsingError> {
+        let mut attribute_list = Vec::new();
         let mut list_iter = memchr3_iter(b'=', b',', b'"', self.0);
         // Name in first position is special because we want to capture the whole value from the
         // previous_match_index (== 0), rather than in the rest of cases, where we want to capture
@@ -296,7 +323,7 @@ impl<'a> TagValue<'a> {
                             // an empty unquoted value is unexpected (only quoted may be empty)
                             return Err(AttributeListParsingError::EmptyUnquotedValue);
                         }
-                        attribute_list.insert(name, AttributeValue::Unquoted(value));
+                        attribute_list.push((name, AttributeValue::Unquoted(value)));
                         state = AttributeListParsingState::ReadingName;
                     } else {
                         // b'=' is unexpected while reading value (only b',' or b'"' are expected)
@@ -306,7 +333,7 @@ impl<'a> TagValue<'a> {
                 }
                 AttributeListParsingState::FinishedReadingQuotedValue { name, value } => {
                     if byte == b',' {
-                        attribute_list.insert(name, AttributeValue::Quoted(value));
+                        attribute_list.push((name, AttributeValue::Quoted(value)));
                         state = AttributeListParsingState::ReadingName;
                     } else {
                         // b',' (or end of line) must come after end of quote - all else is invalid
@@ -328,13 +355,13 @@ impl<'a> TagValue<'a> {
                     // an empty unquoted value is unexpected (only quoted may be empty)
                     return Err(AttributeListParsingError::EmptyUnquotedValue);
                 }
-                attribute_list.insert(name, AttributeValue::Unquoted(value));
+                attribute_list.push((name, AttributeValue::Unquoted(value)));
             }
             AttributeListParsingState::ReadingQuotedValue { name: _ } => {
                 return Err(AttributeListParsingError::EndOfLineWhileReadingQuotedValue);
             }
             AttributeListParsingState::FinishedReadingQuotedValue { name, value } => {
-                attribute_list.insert(name, AttributeValue::Quoted(value));
+                attribute_list.push((name, AttributeValue::Quoted(value)));
             }
         }
         Ok(attribute_list)
@@ -885,14 +912,21 @@ mod tests {
         macro_rules! unquoted_value_test {
             (TagValue is $tag_value:literal $($name_lit:literal=$val:literal expects $exp:literal from $method:ident)+) => {
                 let value = TagValue($tag_value);
-                let list = value.try_as_attribute_list().expect("should be valid list");
                 assert_eq!(
-                    list,
+                    value.try_as_attribute_list().expect("should be valid list"),
                     HashMap::from([
                         $(
                             ($name_lit, AttributeValue::Unquoted(UnquotedAttributeValue($val))),
                         )+
                     ])
+                );
+                assert_eq!(
+                    value.try_as_ordered_attribute_list().expect("should be valid ordered list"),
+                    vec![
+                        $(
+                            ($name_lit, AttributeValue::Unquoted(UnquotedAttributeValue($val))),
+                        )+
+                    ]
                 );
                 $(
                     assert_eq!(Ok($exp), UnquotedAttributeValue($val).$method());
@@ -903,14 +937,21 @@ mod tests {
         macro_rules! quoted_value_test {
             (TagValue is $tag_value:literal $($name_lit:literal expects $exp:literal)+) => {
                 let value = TagValue($tag_value);
-                let list = value.try_as_attribute_list().expect("should be valid list");
                 assert_eq!(
-                    list,
+                    value.try_as_attribute_list().expect("should be valid list"),
                     HashMap::from([
                         $(
                             ($name_lit, AttributeValue::Quoted($exp)),
                         )+
                     ])
+                );
+                assert_eq!(
+                    value.try_as_ordered_attribute_list().expect("should be valid list"),
+                    vec![
+                        $(
+                            ($name_lit, AttributeValue::Quoted($exp)),
+                        )+
+                    ]
                 );
             };
         }
