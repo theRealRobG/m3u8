@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog], and this project adheres to
 
 ## [Unreleased]
 
+### Added
+
+- `TagValue::try_as_ordered_attribute_list` which provides a `Vec` over
+  the tag attributes (instead of the `HashMap` that the previous
+  attribute list offers). This can be used if order of attributes is
+  important for the user.
+
 ## [0.5.0] - 2025-08-16
 
 ### Changed
