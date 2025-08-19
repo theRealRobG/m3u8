@@ -10,6 +10,8 @@ The format is based on [Keep a Changelog], and this project adheres to
 
 ## [Unreleased]
 
+## [0.6.0] - 2025-08-19
+
 ### Added
 
 - `TagValue::try_as_ordered_attribute_list` which provides a `Vec` over
@@ -88,6 +90,7 @@ The format is based on [Keep a Changelog], and this project adheres to
 - Made `EnumeratedStringList::is_empty` behavior match
   `EnumeratedStringListIter::count` is zero behvior.
 
-[unreleased]: https://github.com/theRealRobG/m3u8/compare/0.5.0...HEAD
+[unreleased]: https://github.com/theRealRobG/m3u8/compare/0.6.0...HEAD
+[0.6.0]: https://github.com/theRealRobG/m3u8/compare/0.5.0...0.6.0
 [0.5.0]: https://github.com/theRealRobG/m3u8/compare/0.4.0...0.5.0
 [0.4.0]: https://github.com/theRealRobG/m3u8/releases/tag/0.4.0
