@@ -632,7 +632,7 @@ impl<'a> Daterange<'a> {
                 }
                 LazyAttribute::Unparsed(v) => ExtensionAttributeValue::try_from(*v)
                     .ok()
-                    .and_then(|v| Some((key.as_ref(), v))),
+                    .map(|v| (key.as_ref(), v)),
                 LazyAttribute::None => None,
             }
         }))
