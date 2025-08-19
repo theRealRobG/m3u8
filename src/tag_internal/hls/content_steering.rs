@@ -1,11 +1,11 @@
 use crate::{
     error::{ParseTagValueError, ValidationError},
     tag::{
-        AttributeValue, UnknownTag,
-        hls::{TagName, into_inner_tag},
+        UnknownTag,
+        hls::{LazyAttribute, TagName, into_inner_tag},
     },
 };
-use std::{borrow::Cow, collections::HashMap, marker::PhantomData};
+use std::{borrow::Cow, marker::PhantomData};
 
 /// The attribute list for the tag (`#EXT-X-CONTENT-STEERING:<attribute-list>`).
 ///
@@ -88,10 +88,9 @@ impl<'a> Default for ContentSteeringBuilder<'a, ContentSteeringServerUriNeedsToB
 #[derive(Debug, Clone)]
 pub struct ContentSteering<'a> {
     server_uri: Cow<'a, str>,
-    pathway_id: Option<Cow<'a, str>>,
-    attribute_list: HashMap<&'a str, AttributeValue<'a>>, // Original attribute list
-    output_line: Cow<'a, [u8]>,                           // Used with Writer
-    output_line_is_dirty: bool,                           // If should recalculate output_line
+    pathway_id: LazyAttribute<'a, Cow<'a, str>>,
+    output_line: Cow<'a, [u8]>, // Used with Writer
+    output_line_is_dirty: bool, // If should recalculate output_line
 }
 
 impl<'a> PartialEq for ContentSteering<'a> {
@@ -107,17 +106,22 @@ impl<'a> TryFrom<UnknownTag<'a>> for ContentSteering<'a> {
         let attribute_list = tag
             .value()
             .ok_or(ParseTagValueError::UnexpectedEmpty)?
-            .try_as_attribute_list()?;
-        let Some(server_uri) = attribute_list
-            .get(SERVER_URI)
-            .and_then(AttributeValue::quoted)
-        else {
+            .try_as_ordered_attribute_list()?;
+        let mut server_uri = None;
+        let mut pathway_id = LazyAttribute::None;
+        for (name, value) in attribute_list {
+            match name {
+                SERVER_URI => server_uri = value.quoted(),
+                PATHWAY_ID => pathway_id.found(value),
+                _ => (),
+            }
+        }
+        let Some(server_uri) = server_uri else {
             return Err(super::ValidationError::MissingRequiredAttribute(SERVER_URI));
         };
         Ok(Self {
             server_uri: Cow::Borrowed(server_uri),
-            pathway_id: None,
-            attribute_list,
+            pathway_id,
             output_line: Cow::Borrowed(tag.original_input),
             output_line_is_dirty: false,
         })
@@ -134,8 +138,7 @@ impl<'a> ContentSteering<'a> {
         } = attribute_list;
         Self {
             server_uri,
-            pathway_id,
-            attribute_list: HashMap::new(),
+            pathway_id: pathway_id.map(LazyAttribute::new).unwrap_or_default(),
             output_line,
             output_line_is_dirty: false,
         }
@@ -172,12 +175,10 @@ impl<'a> ContentSteering<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn pathway_id(&self) -> Option<&str> {
-        if let Some(pathway_id) = &self.pathway_id {
-            Some(pathway_id)
-        } else {
-            self.attribute_list
-                .get(PATHWAY_ID)
-                .and_then(AttributeValue::quoted)
+        match &self.pathway_id {
+            LazyAttribute::UserDefined(s) => Some(s.as_ref()),
+            LazyAttribute::Unparsed(v) => v.quoted(),
+            LazyAttribute::None => None,
         }
     }
 
@@ -185,7 +186,6 @@ impl<'a> ContentSteering<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_server_uri(&mut self, server_uri: impl Into<Cow<'a, str>>) {
-        self.attribute_list.remove(SERVER_URI);
         self.server_uri = server_uri.into();
         self.output_line_is_dirty = true;
     }
@@ -194,8 +194,7 @@ impl<'a> ContentSteering<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_pathway_id(&mut self, pathway_id: impl Into<Cow<'a, str>>) {
-        self.attribute_list.remove(PATHWAY_ID);
-        self.pathway_id = Some(pathway_id.into());
+        self.pathway_id.set(pathway_id.into());
         self.output_line_is_dirty = true;
     }
 
@@ -203,8 +202,7 @@ impl<'a> ContentSteering<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_pathway_id(&mut self) {
-        self.attribute_list.remove(PATHWAY_ID);
-        self.pathway_id = None;
+        self.pathway_id.unset();
         self.output_line_is_dirty = true;
     }
 

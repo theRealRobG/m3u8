@@ -1,12 +1,12 @@
 use crate::{
     error::{ParseTagValueError, UnrecognizedEnumerationError, ValidationError},
     tag::{
-        AttributeValue, UnknownTag,
-        hls::{EnumeratedString, into_inner_tag},
+        UnknownTag,
+        hls::{EnumeratedString, LazyAttribute, into_inner_tag},
     },
     utils::AsStaticCow,
 };
-use std::{borrow::Cow, collections::HashMap, fmt::Display, marker::PhantomData};
+use std::{borrow::Cow, fmt::Display, marker::PhantomData};
 
 /// Corresponds to the `#EXT-X-PRELOAD-HINT:TYPE` attribute.
 ///
@@ -176,11 +176,10 @@ impl<'a> Default
 pub struct PreloadHint<'a> {
     hint_type: Cow<'a, str>,
     uri: Cow<'a, str>,
-    byterange_start: Option<u64>,
-    byterange_length: Option<u64>,
-    attribute_list: HashMap<&'a str, AttributeValue<'a>>, // Original attribute list
-    output_line: Cow<'a, [u8]>,                           // Used with Writer
-    output_line_is_dirty: bool,                           // If should recalculate output_line
+    byterange_start: LazyAttribute<'a, u64>,
+    byterange_length: LazyAttribute<'a, u64>,
+    output_line: Cow<'a, [u8]>, // Used with Writer
+    output_line_is_dirty: bool, // If should recalculate output_line
 }
 
 impl<'a> PartialEq for PreloadHint<'a> {
@@ -199,23 +198,31 @@ impl<'a> TryFrom<UnknownTag<'a>> for PreloadHint<'a> {
         let attribute_list = tag
             .value()
             .ok_or(ParseTagValueError::UnexpectedEmpty)?
-            .try_as_attribute_list()?;
-        let Some(hint_type) = attribute_list
-            .get(TYPE)
-            .and_then(AttributeValue::unquoted)
-            .and_then(|v| v.try_as_utf_8().ok())
-        else {
+            .try_as_ordered_attribute_list()?;
+        let mut hint_type = None;
+        let mut uri = None;
+        let mut byterange_start = LazyAttribute::None;
+        let mut byterange_length = LazyAttribute::None;
+        for (name, value) in attribute_list {
+            match name {
+                TYPE => hint_type = value.unquoted().and_then(|v| v.try_as_utf_8().ok()),
+                URI => uri = value.quoted(),
+                BYTERANGE_START => byterange_start.found(value),
+                BYTERANGE_LENGTH => byterange_length.found(value),
+                _ => (),
+            }
+        }
+        let Some(hint_type) = hint_type else {
             return Err(ValidationError::MissingRequiredAttribute(TYPE));
         };
-        let Some(uri) = attribute_list.get(URI).and_then(AttributeValue::quoted) else {
+        let Some(uri) = uri else {
             return Err(ValidationError::MissingRequiredAttribute(URI));
         };
         Ok(Self {
             hint_type: Cow::Borrowed(hint_type),
             uri: Cow::Borrowed(uri),
-            byterange_start: None,
-            byterange_length: None,
-            attribute_list,
+            byterange_start,
+            byterange_length,
             output_line: Cow::Borrowed(tag.original_input),
             output_line_is_dirty: false,
         })
@@ -235,9 +242,8 @@ impl<'a> PreloadHint<'a> {
         Self {
             hint_type,
             uri,
-            byterange_start,
-            byterange_length,
-            attribute_list: HashMap::new(),
+            byterange_start: byterange_start.map(LazyAttribute::new).unwrap_or_default(),
+            byterange_length: byterange_length.map(LazyAttribute::new).unwrap_or_default(),
             output_line,
             output_line_is_dirty: false,
         }
@@ -292,14 +298,13 @@ impl<'a> PreloadHint<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn byterange_start(&self) -> u64 {
-        if let Some(byterange_start) = self.byterange_start {
-            byterange_start
-        } else {
-            self.attribute_list
-                .get(BYTERANGE_START)
-                .and_then(AttributeValue::unquoted)
+        match &self.byterange_start {
+            LazyAttribute::UserDefined(d) => *d,
+            LazyAttribute::Unparsed(v) => v
+                .unquoted()
                 .and_then(|v| v.try_as_decimal_integer().ok())
-                .unwrap_or(0)
+                .unwrap_or(0),
+            LazyAttribute::None => 0,
         }
     }
 
@@ -307,13 +312,12 @@ impl<'a> PreloadHint<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn byterange_length(&self) -> Option<u64> {
-        if let Some(byterange_length) = self.byterange_length {
-            Some(byterange_length)
-        } else {
-            self.attribute_list
-                .get(BYTERANGE_LENGTH)
-                .and_then(AttributeValue::unquoted)
-                .and_then(|v| v.try_as_decimal_integer().ok())
+        match &self.byterange_length {
+            LazyAttribute::UserDefined(d) => Some(*d),
+            LazyAttribute::Unparsed(v) => {
+                v.unquoted().and_then(|v| v.try_as_decimal_integer().ok())
+            }
+            LazyAttribute::None => None,
         }
     }
 
@@ -321,7 +325,6 @@ impl<'a> PreloadHint<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_hint_type(&mut self, hint_type: impl Into<Cow<'a, str>>) {
-        self.attribute_list.remove(TYPE);
         self.hint_type = hint_type.into();
         self.output_line_is_dirty = true;
     }
@@ -330,7 +333,6 @@ impl<'a> PreloadHint<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_uri(&mut self, uri: impl Into<Cow<'a, str>>) {
-        self.attribute_list.remove(URI);
         self.uri = uri.into();
         self.output_line_is_dirty = true;
     }
@@ -339,8 +341,7 @@ impl<'a> PreloadHint<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_byterange_start(&mut self, byterange_start: u64) {
-        self.attribute_list.remove(BYTERANGE_START);
-        self.byterange_start = Some(byterange_start);
+        self.byterange_start.set(byterange_start);
         self.output_line_is_dirty = true;
     }
 
@@ -348,8 +349,7 @@ impl<'a> PreloadHint<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_byterange_start(&mut self) {
-        self.attribute_list.remove(BYTERANGE_START);
-        self.byterange_start = None;
+        self.byterange_start.unset();
         self.output_line_is_dirty = true;
     }
 
@@ -357,8 +357,7 @@ impl<'a> PreloadHint<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_byterange_length(&mut self, byterange_length: u64) {
-        self.attribute_list.remove(BYTERANGE_LENGTH);
-        self.byterange_length = Some(byterange_length);
+        self.byterange_length.set(byterange_length);
         self.output_line_is_dirty = true;
     }
 
@@ -366,8 +365,7 @@ impl<'a> PreloadHint<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_byterange_length(&mut self) {
-        self.attribute_list.remove(BYTERANGE_LENGTH);
-        self.byterange_length = None;
+        self.byterange_length.unset();
         self.output_line_is_dirty = true;
     }
 

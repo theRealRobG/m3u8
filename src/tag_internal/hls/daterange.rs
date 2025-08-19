@@ -3,7 +3,7 @@ use crate::{
     error::{ParseTagValueError, UnrecognizedEnumerationError, ValidationError},
     tag::{
         AttributeValue, UnknownTag, UnquotedAttributeValue,
-        hls::{EnumeratedString, EnumeratedStringList, TagName, into_inner_tag},
+        hls::{EnumeratedString, EnumeratedStringList, LazyAttribute, TagName, into_inner_tag},
     },
     utils::AsStaticCow,
 };
@@ -330,19 +330,18 @@ impl<'a> Default for DaterangeBuilder<'a, DaterangeIdNeedsToBeSet, DaterangeStar
 pub struct Daterange<'a> {
     id: Cow<'a, str>,
     start_date: DateTime,
-    class: Option<Cow<'a, str>>,
-    cue: Option<Cow<'a, str>>,
-    end_date: Option<DateTime>,
-    duration: Option<f64>,
-    planned_duration: Option<f64>,
-    extension_attributes: HashMap<Cow<'a, str>, ExtensionAttributeValue<'a>>,
-    end_on_next: Option<bool>,
-    scte35_cmd: Option<Cow<'a, str>>,
-    scte35_out: Option<Cow<'a, str>>,
-    scte35_in: Option<Cow<'a, str>>,
-    attribute_list: HashMap<&'a str, AttributeValue<'a>>, // Original attribute list
-    output_line: Cow<'a, [u8]>,                           // Used with Writer
-    output_line_is_dirty: bool,                           // If should recalculate output_line
+    class: LazyAttribute<'a, Cow<'a, str>>,
+    cue: LazyAttribute<'a, Cow<'a, str>>,
+    end_date: LazyAttribute<'a, DateTime>,
+    duration: LazyAttribute<'a, f64>,
+    planned_duration: LazyAttribute<'a, f64>,
+    extension_attributes: Vec<(Cow<'a, str>, LazyAttribute<'a, ExtensionAttributeValue<'a>>)>,
+    end_on_next: LazyAttribute<'a, bool>,
+    scte35_cmd: LazyAttribute<'a, Cow<'a, str>>,
+    scte35_out: LazyAttribute<'a, Cow<'a, str>>,
+    scte35_in: LazyAttribute<'a, Cow<'a, str>>,
+    output_line: Cow<'a, [u8]>, // Used with Writer
+    output_line_is_dirty: bool, // If should recalculate output_line
 }
 
 impl<'a> PartialEq for Daterange<'a> {
@@ -369,31 +368,57 @@ impl<'a> TryFrom<UnknownTag<'a>> for Daterange<'a> {
         let attribute_list = tag
             .value()
             .ok_or(ParseTagValueError::UnexpectedEmpty)?
-            .try_as_attribute_list()?;
-        let Some(id) = attribute_list.get(ID).and_then(AttributeValue::quoted) else {
+            .try_as_ordered_attribute_list()?;
+        let mut id = None;
+        let mut start_date = None;
+        let mut class = LazyAttribute::None;
+        let mut cue = LazyAttribute::None;
+        let mut end_date = LazyAttribute::None;
+        let mut duration = LazyAttribute::None;
+        let mut planned_duration = LazyAttribute::None;
+        let mut extension_attributes = Vec::new();
+        let mut end_on_next = LazyAttribute::None;
+        let mut scte35_cmd = LazyAttribute::None;
+        let mut scte35_out = LazyAttribute::None;
+        let mut scte35_in = LazyAttribute::None;
+        for (name, value) in attribute_list {
+            match name {
+                ID => id = value.quoted(),
+                START_DATE => start_date = value.quoted().and_then(|s| date::parse(s).ok()),
+                CLASS => class.found(value),
+                CUE => cue.found(value),
+                END_DATE => end_date.found(value),
+                DURATION => duration.found(value),
+                PLANNED_DURATION => planned_duration.found(value),
+                END_ON_NEXT => end_on_next.found(value),
+                SCTE35_CMD => scte35_cmd.found(value),
+                SCTE35_OUT => scte35_out.found(value),
+                SCTE35_IN => scte35_in.found(value),
+                n if n.starts_with("X-") => {
+                    extension_attributes.push((Cow::Borrowed(n), LazyAttribute::Unparsed(value)))
+                }
+                _ => (),
+            }
+        }
+        let Some(id) = id else {
             return Err(ValidationError::MissingRequiredAttribute(ID));
         };
-        let Some(start_date) = attribute_list
-            .get(START_DATE)
-            .and_then(AttributeValue::quoted)
-            .and_then(|s| date::parse(s).ok())
-        else {
+        let Some(start_date) = start_date else {
             return Err(ValidationError::MissingRequiredAttribute(START_DATE));
         };
         Ok(Self {
             id: Cow::Borrowed(id),
             start_date,
-            class: None,
-            cue: None,
-            end_date: None,
-            duration: None,
-            planned_duration: None,
-            extension_attributes: HashMap::new(),
-            end_on_next: None,
-            scte35_cmd: None,
-            scte35_out: None,
-            scte35_in: None,
-            attribute_list,
+            class,
+            cue,
+            end_date,
+            duration,
+            planned_duration,
+            extension_attributes,
+            end_on_next,
+            scte35_cmd,
+            scte35_out,
+            scte35_in,
             output_line: Cow::Borrowed(tag.original_input),
             output_line_is_dirty: false,
         })
@@ -421,17 +446,19 @@ impl<'a> Daterange<'a> {
         Self {
             id,
             start_date,
-            class,
-            cue,
-            end_date,
-            duration,
-            planned_duration,
-            extension_attributes,
-            end_on_next: Some(end_on_next),
-            scte35_cmd,
-            scte35_out,
-            scte35_in,
-            attribute_list: HashMap::new(),
+            class: class.map(LazyAttribute::new).unwrap_or_default(),
+            cue: cue.map(LazyAttribute::new).unwrap_or_default(),
+            end_date: end_date.map(LazyAttribute::new).unwrap_or_default(),
+            duration: duration.map(LazyAttribute::new).unwrap_or_default(),
+            planned_duration: planned_duration.map(LazyAttribute::new).unwrap_or_default(),
+            extension_attributes: extension_attributes
+                .into_iter()
+                .map(|(key, value)| (key, LazyAttribute::new(value)))
+                .collect(),
+            end_on_next: LazyAttribute::new(end_on_next),
+            scte35_cmd: scte35_cmd.map(LazyAttribute::new).unwrap_or_default(),
+            scte35_out: scte35_out.map(LazyAttribute::new).unwrap_or_default(),
+            scte35_in: scte35_in.map(LazyAttribute::new).unwrap_or_default(),
             output_line,
             output_line_is_dirty: false,
         }
@@ -487,12 +514,10 @@ impl<'a> Daterange<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn class(&self) -> Option<&str> {
-        if let Some(class) = &self.class {
-            Some(class)
-        } else {
-            self.attribute_list
-                .get(CLASS)
-                .and_then(AttributeValue::quoted)
+        match &self.class {
+            LazyAttribute::UserDefined(s) => Some(s.as_ref()),
+            LazyAttribute::Unparsed(v) => v.quoted(),
+            LazyAttribute::None => None,
         }
     }
 
@@ -527,13 +552,10 @@ impl<'a> Daterange<'a> {
     /// }
     /// ```
     pub fn cue(&self) -> Option<EnumeratedStringList<'_, Cue>> {
-        if let Some(cue) = &self.cue {
-            Some(EnumeratedStringList::from(cue.as_ref()))
-        } else {
-            self.attribute_list
-                .get(CUE)
-                .and_then(AttributeValue::quoted)
-                .map(EnumeratedStringList::from)
+        match &self.cue {
+            LazyAttribute::UserDefined(s) => Some(EnumeratedStringList::from(s.as_ref())),
+            LazyAttribute::Unparsed(v) => v.quoted().map(EnumeratedStringList::from),
+            LazyAttribute::None => None,
         }
     }
 
@@ -541,13 +563,10 @@ impl<'a> Daterange<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn end_date(&self) -> Option<DateTime> {
-        if let Some(end_date) = self.end_date {
-            Some(end_date)
-        } else {
-            self.attribute_list
-                .get(END_DATE)
-                .and_then(AttributeValue::quoted)
-                .and_then(|s| date::parse(s).ok())
+        match &self.end_date {
+            LazyAttribute::UserDefined(s) => Some(*s),
+            LazyAttribute::Unparsed(v) => v.quoted().and_then(|s| date::parse(s).ok()),
+            LazyAttribute::None => None,
         }
     }
 
@@ -555,13 +574,12 @@ impl<'a> Daterange<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn duration(&self) -> Option<f64> {
-        if let Some(duration) = self.duration {
-            Some(duration)
-        } else {
-            self.attribute_list
-                .get(DURATION)
-                .and_then(AttributeValue::unquoted)
-                .and_then(|d| d.try_as_decimal_floating_point().ok())
+        match &self.duration {
+            LazyAttribute::UserDefined(d) => Some(*d),
+            LazyAttribute::Unparsed(v) => v
+                .unquoted()
+                .and_then(|d| d.try_as_decimal_floating_point().ok()),
+            LazyAttribute::None => None,
         }
     }
 
@@ -569,13 +587,12 @@ impl<'a> Daterange<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn planned_duration(&self) -> Option<f64> {
-        if let Some(planned_duration) = self.planned_duration {
-            Some(planned_duration)
-        } else {
-            self.attribute_list
-                .get(PLANNED_DURATION)
-                .and_then(AttributeValue::unquoted)
-                .and_then(|d| d.try_as_decimal_floating_point().ok())
+        match &self.planned_duration {
+            LazyAttribute::UserDefined(d) => Some(*d),
+            LazyAttribute::Unparsed(v) => v
+                .unquoted()
+                .and_then(|d| d.try_as_decimal_floating_point().ok()),
+            LazyAttribute::None => None,
         }
     }
 
@@ -608,18 +625,17 @@ impl<'a> Daterange<'a> {
     /// }
     /// ```
     pub fn extension_attributes(&self) -> HashMap<&str, ExtensionAttributeValue<'_>> {
-        let mut map = HashMap::new();
-        for (key, value) in &self.attribute_list {
-            if key.starts_with("X-")
-                && let Ok(value) = ExtensionAttributeValue::try_from(*value)
-            {
-                map.insert(*key, value);
+        HashMap::from_iter(self.extension_attributes.iter().filter_map(|(key, value)| {
+            match value {
+                LazyAttribute::UserDefined(a) => {
+                    Some((key.as_ref(), ExtensionAttributeValue::from(a)))
+                }
+                LazyAttribute::Unparsed(v) => ExtensionAttributeValue::try_from(*v)
+                    .ok()
+                    .and_then(|v| Some((key.as_ref(), v))),
+                LazyAttribute::None => None,
             }
-        }
-        for (key, value) in &self.extension_attributes {
-            map.insert(key as &str, ExtensionAttributeValue::from(value));
-        }
-        map
+        }))
     }
 
     /// Corresponds to one of the `X-<extension-attribute>` attributes (keyed by `name`).
@@ -652,13 +668,17 @@ impl<'a> Daterange<'a> {
     /// }
     /// ```
     pub fn extension_attribute<'b>(&'a self, name: &'b str) -> Option<ExtensionAttributeValue<'a>> {
-        if let Some(a) = self.extension_attributes.get(name) {
-            Some(ExtensionAttributeValue::from(a))
-        } else if let Some(a) = self.attribute_list.get(name) {
-            ExtensionAttributeValue::try_from(*a).ok()
-        } else {
-            None
-        }
+        self.extension_attributes.iter().find_map(|(key, value)| {
+            if name == key.as_ref() {
+                match value {
+                    LazyAttribute::UserDefined(v) => Some(ExtensionAttributeValue::from(v)),
+                    LazyAttribute::Unparsed(v) => ExtensionAttributeValue::try_from(*v).ok(),
+                    LazyAttribute::None => None,
+                }
+            } else {
+                None
+            }
+        })
     }
 
     /// Corresponds to the keys of the `X-<extension-attribute>` attributes.
@@ -687,8 +707,8 @@ impl<'a> Daterange<'a> {
     /// ```
     pub fn extension_attribute_keys(&self) -> HashSet<&str> {
         let mut set = HashSet::new();
-        for key in self.extension_attributes().keys() {
-            set.insert(*key);
+        for (key, _) in &self.extension_attributes {
+            set.insert(key.as_ref());
         }
         set
     }
@@ -697,13 +717,12 @@ impl<'a> Daterange<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn end_on_next(&self) -> bool {
-        if let Some(end_on_next) = self.end_on_next {
-            end_on_next
-        } else {
-            matches!(
-                self.attribute_list.get(END_ON_NEXT),
-                Some(AttributeValue::Unquoted(UnquotedAttributeValue(YES)))
-            )
+        match self.end_on_next {
+            LazyAttribute::UserDefined(b) => b,
+            LazyAttribute::Unparsed(v) => {
+                matches!(v, AttributeValue::Unquoted(UnquotedAttributeValue(YES)))
+            }
+            LazyAttribute::None => false,
         }
     }
 
@@ -727,14 +746,13 @@ impl<'a> Daterange<'a> {
     /// parser to be lenient on that requirement and accept both. The implication is that
     /// `#EXT-X-DATERANGE:SCTE35-CMD=0x123` is equivalent to `#EXT-X-DATERANGE:SCTE35-CMD="0x123"`.
     pub fn scte35_cmd(&self) -> Option<&str> {
-        if let Some(scte35_cmd) = &self.scte35_cmd {
-            Some(scte35_cmd)
-        } else {
-            match self.attribute_list.get(SCTE35_CMD) {
-                Some(AttributeValue::Unquoted(v)) => v.try_as_utf_8().ok(),
-                Some(AttributeValue::Quoted(s)) => Some(s),
-                _ => None,
-            }
+        match &self.scte35_cmd {
+            LazyAttribute::UserDefined(s) => Some(s.as_ref()),
+            LazyAttribute::Unparsed(v) => match v {
+                AttributeValue::Unquoted(v) => v.try_as_utf_8().ok(),
+                AttributeValue::Quoted(s) => Some(s),
+            },
+            LazyAttribute::None => None,
         }
     }
 
@@ -750,14 +768,13 @@ impl<'a> Daterange<'a> {
     /// parser to be lenient on that requirement and accept both. The implication is that
     /// `#EXT-X-DATERANGE:SCTE35-OUT=0x123` is equivalent to `#EXT-X-DATERANGE:SCTE35-OUT="0x123"`.
     pub fn scte35_out(&self) -> Option<&str> {
-        if let Some(scte35_out) = &self.scte35_out {
-            Some(scte35_out)
-        } else {
-            match self.attribute_list.get(SCTE35_OUT) {
-                Some(AttributeValue::Unquoted(v)) => v.try_as_utf_8().ok(),
-                Some(AttributeValue::Quoted(s)) => Some(s),
-                _ => None,
-            }
+        match &self.scte35_out {
+            LazyAttribute::UserDefined(s) => Some(s.as_ref()),
+            LazyAttribute::Unparsed(v) => match v {
+                AttributeValue::Unquoted(v) => v.try_as_utf_8().ok(),
+                AttributeValue::Quoted(s) => Some(s),
+            },
+            LazyAttribute::None => None,
         }
     }
 
@@ -773,14 +790,13 @@ impl<'a> Daterange<'a> {
     /// parser to be lenient on that requirement and accept both. The implication is that
     /// `#EXT-X-DATERANGE:SCTE35-IN=0x123` is equivalent to `#EXT-X-DATERANGE:SCTE35-IN="0x123"`.
     pub fn scte35_in(&self) -> Option<&str> {
-        if let Some(scte35_in) = &self.scte35_in {
-            Some(scte35_in)
-        } else {
-            match self.attribute_list.get(SCTE35_IN) {
-                Some(AttributeValue::Unquoted(v)) => v.try_as_utf_8().ok(),
-                Some(AttributeValue::Quoted(s)) => Some(s),
-                _ => None,
-            }
+        match &self.scte35_in {
+            LazyAttribute::UserDefined(s) => Some(s.as_ref()),
+            LazyAttribute::Unparsed(v) => match v {
+                AttributeValue::Unquoted(v) => v.try_as_utf_8().ok(),
+                AttributeValue::Quoted(s) => Some(s),
+            },
+            LazyAttribute::None => None,
         }
     }
 
@@ -790,7 +806,6 @@ impl<'a> Daterange<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_id(&mut self, id: impl Into<Cow<'a, str>>) {
-        self.attribute_list.remove(ID);
         self.id = id.into();
         self.output_line_is_dirty = true;
     }
@@ -799,8 +814,7 @@ impl<'a> Daterange<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_class(&mut self, class: impl Into<Cow<'a, str>>) {
-        self.attribute_list.remove(CLASS);
-        self.class = Some(class.into());
+        self.class.set(class.into());
         self.output_line_is_dirty = true;
     }
 
@@ -808,8 +822,7 @@ impl<'a> Daterange<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_class(&mut self) {
-        self.attribute_list.remove(CLASS);
-        self.class = None;
+        self.class.unset();
         self.output_line_is_dirty = true;
     }
 
@@ -817,7 +830,6 @@ impl<'a> Daterange<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_start_date(&mut self, start_date: DateTime) {
-        self.attribute_list.remove(START_DATE);
         self.start_date = start_date;
         self.output_line_is_dirty = true;
     }
@@ -853,8 +865,7 @@ impl<'a> Daterange<'a> {
     /// }
     /// ```
     pub fn set_cue(&mut self, cue: impl Into<Cow<'a, str>>) {
-        self.attribute_list.remove(CUE);
-        self.cue = Some(cue.into());
+        self.cue.set(cue.into());
         self.output_line_is_dirty = true;
     }
 
@@ -862,8 +873,7 @@ impl<'a> Daterange<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_cue(&mut self) {
-        self.attribute_list.remove(CUE);
-        self.cue = None;
+        self.cue.unset();
         self.output_line_is_dirty = true;
     }
 
@@ -871,8 +881,7 @@ impl<'a> Daterange<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_end_date(&mut self, end_date: DateTime) {
-        self.attribute_list.remove(END_DATE);
-        self.end_date = Some(end_date);
+        self.end_date.set(end_date);
         self.output_line_is_dirty = true;
     }
 
@@ -880,8 +889,7 @@ impl<'a> Daterange<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_end_date(&mut self) {
-        self.attribute_list.remove(END_DATE);
-        self.end_date = None;
+        self.end_date.unset();
         self.output_line_is_dirty = true;
     }
 
@@ -889,8 +897,7 @@ impl<'a> Daterange<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_duration(&mut self, duration: f64) {
-        self.attribute_list.remove(DURATION);
-        self.duration = Some(duration);
+        self.duration.set(duration);
         self.output_line_is_dirty = true;
     }
 
@@ -898,15 +905,13 @@ impl<'a> Daterange<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_duration(&mut self) {
-        self.attribute_list.remove(DURATION);
-        self.duration = None;
+        self.duration.unset();
         self.output_line_is_dirty = true;
     }
 
     /// Sets the `PLANNED-DURATION` attribute.
     pub fn set_planned_duration(&mut self, planned_duration: f64) {
-        self.attribute_list.remove(PLANNED_DURATION);
-        self.planned_duration = Some(planned_duration);
+        self.planned_duration.set(planned_duration);
         self.output_line_is_dirty = true;
     }
 
@@ -914,8 +919,7 @@ impl<'a> Daterange<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_planned_duration(&mut self) {
-        self.attribute_list.remove(PLANNED_DURATION);
-        self.planned_duration = None;
+        self.planned_duration.unset();
         self.output_line_is_dirty = true;
     }
 
@@ -936,8 +940,9 @@ impl<'a> Daterange<'a> {
         if !name.starts_with("X-") {
             return;
         }
-        self.attribute_list.retain(|k, _| *k != name);
-        self.extension_attributes.insert(name, value);
+        self.extension_attributes.retain(|(k, _)| *k != name);
+        self.extension_attributes
+            .push((name, LazyAttribute::new(value)));
         self.output_line_is_dirty = true;
     }
 
@@ -954,8 +959,7 @@ impl<'a> Daterange<'a> {
         if !name.starts_with("X-") {
             return;
         }
-        self.attribute_list.retain(|k, _| *k != name);
-        self.extension_attributes.remove(&name);
+        self.extension_attributes.retain(|(k, _)| *k != name);
         self.output_line_is_dirty = true;
     }
 
@@ -963,8 +967,7 @@ impl<'a> Daterange<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_end_on_next(&mut self, end_on_next: bool) {
-        self.attribute_list.remove(END_ON_NEXT);
-        self.end_on_next = Some(end_on_next);
+        self.end_on_next.set(end_on_next);
         self.output_line_is_dirty = true;
     }
 
@@ -972,8 +975,7 @@ impl<'a> Daterange<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_scte35_cmd(&mut self, scte35_cmd: impl Into<Cow<'a, str>>) {
-        self.attribute_list.remove(SCTE35_CMD);
-        self.scte35_cmd = Some(scte35_cmd.into());
+        self.scte35_cmd.set(scte35_cmd.into());
         self.output_line_is_dirty = true;
     }
 
@@ -981,8 +983,7 @@ impl<'a> Daterange<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_scte35_cmd(&mut self) {
-        self.attribute_list.remove(SCTE35_CMD);
-        self.scte35_cmd = None;
+        self.scte35_cmd.unset();
         self.output_line_is_dirty = true;
     }
 
@@ -990,15 +991,13 @@ impl<'a> Daterange<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_scte35_out(&mut self, scte35_out: impl Into<Cow<'a, str>>) {
-        self.attribute_list.remove(SCTE35_OUT);
-        self.scte35_out = Some(scte35_out.into());
+        self.scte35_out.set(scte35_out.into());
         self.output_line_is_dirty = true;
     }
 
     /// Unsets the `SCTE35-OUT` attribute (sets it to `None`).
     pub fn unset_scte35_out(&mut self) {
-        self.attribute_list.remove(SCTE35_OUT);
-        self.scte35_out = None;
+        self.scte35_out.unset();
         self.output_line_is_dirty = true;
     }
 
@@ -1006,8 +1005,7 @@ impl<'a> Daterange<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_scte35_in(&mut self, scte35_in: impl Into<Cow<'a, str>>) {
-        self.attribute_list.remove(SCTE35_IN);
-        self.scte35_in = Some(scte35_in.into());
+        self.scte35_in.set(scte35_in.into());
         self.output_line_is_dirty = true;
     }
 
@@ -1015,8 +1013,7 @@ impl<'a> Daterange<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_scte35_in(&mut self) {
-        self.attribute_list.remove(SCTE35_IN);
-        self.scte35_in = None;
+        self.scte35_in.unset();
         self.output_line_is_dirty = true;
     }
 

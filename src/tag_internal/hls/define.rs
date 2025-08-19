@@ -1,7 +1,7 @@
 use crate::{
     error::{ParseTagValueError, ValidationError},
     tag::{
-        AttributeValue, IntoInnerTag, UnknownTag,
+        IntoInnerTag, UnknownTag,
         hls::{TagInner, into_inner_tag},
     },
 };
@@ -210,9 +210,22 @@ impl<'a> TryFrom<UnknownTag<'a>> for Define<'a> {
         let attribute_list = tag
             .value()
             .ok_or(ParseTagValueError::UnexpectedEmpty)?
-            .try_as_attribute_list()?;
-        if let Some(AttributeValue::Quoted(name)) = attribute_list.get(NAME) {
-            if let Some(AttributeValue::Quoted(value)) = attribute_list.get(VALUE) {
+            .try_as_ordered_attribute_list()?;
+        let mut name = None;
+        let mut value = None;
+        let mut import = None;
+        let mut queryparam = None;
+        for (n, v) in attribute_list {
+            match n {
+                NAME => name = v.quoted(),
+                VALUE => value = v.quoted(),
+                IMPORT => import = v.quoted(),
+                QUERYPARAM => queryparam = v.quoted(),
+                _ => (),
+            }
+        }
+        if let Some(name) = name {
+            if let Some(value) = value {
                 Ok(Self::Name(Name {
                     name: Cow::Borrowed(name),
                     value: Cow::Borrowed(value),
@@ -222,13 +235,13 @@ impl<'a> TryFrom<UnknownTag<'a>> for Define<'a> {
             } else {
                 Err(super::ValidationError::MissingRequiredAttribute(VALUE))
             }
-        } else if let Some(AttributeValue::Quoted(import)) = attribute_list.get(IMPORT) {
+        } else if let Some(import) = import {
             Ok(Self::Import(Import {
                 import: Cow::Borrowed(import),
                 output_line: Cow::Borrowed(tag.original_input),
                 output_line_is_dirty: false,
             }))
-        } else if let Some(AttributeValue::Quoted(queryparam)) = attribute_list.get(QUERYPARAM) {
+        } else if let Some(queryparam) = queryparam {
             Ok(Self::Queryparam(Queryparam {
                 queryparam: Cow::Borrowed(queryparam),
                 output_line: Cow::Borrowed(tag.original_input),

@@ -1,12 +1,12 @@
 use crate::{
     error::{ParseTagValueError, UnrecognizedEnumerationError, ValidationError},
     tag::{
-        AttributeValue, UnknownTag,
-        hls::{EnumeratedString, into_inner_tag},
+        UnknownTag,
+        hls::{EnumeratedString, LazyAttribute, into_inner_tag},
     },
     utils::AsStaticCow,
 };
-use std::{borrow::Cow, collections::HashMap, fmt::Display, marker::PhantomData};
+use std::{borrow::Cow, fmt::Display, marker::PhantomData};
 
 /// Corresponds to the `#EXT-X-SESSION-DATA:FORMAT` attribute.
 ///
@@ -248,13 +248,12 @@ impl<'a> Default
 #[derive(Debug, Clone)]
 pub struct SessionData<'a> {
     data_id: Cow<'a, str>,
-    value: Option<Cow<'a, str>>,
-    uri: Option<Cow<'a, str>>,
-    format: Option<Cow<'a, str>>,
-    language: Option<Cow<'a, str>>,
-    attribute_list: HashMap<&'a str, AttributeValue<'a>>, // Original attribute list
-    output_line: Cow<'a, [u8]>,                           // Used with Writer
-    output_line_is_dirty: bool,                           // If should recalculate output_line
+    value: LazyAttribute<'a, Cow<'a, str>>,
+    uri: LazyAttribute<'a, Cow<'a, str>>,
+    format: LazyAttribute<'a, Cow<'a, str>>,
+    language: LazyAttribute<'a, Cow<'a, str>>,
+    output_line: Cow<'a, [u8]>, // Used with Writer
+    output_line_is_dirty: bool, // If should recalculate output_line
 }
 
 impl<'a> PartialEq for SessionData<'a> {
@@ -274,17 +273,31 @@ impl<'a> TryFrom<UnknownTag<'a>> for SessionData<'a> {
         let attribute_list = tag
             .value()
             .ok_or(ParseTagValueError::UnexpectedEmpty)?
-            .try_as_attribute_list()?;
-        let Some(data_id) = attribute_list.get(DATA_ID).and_then(AttributeValue::quoted) else {
+            .try_as_ordered_attribute_list()?;
+        let mut data_id = None;
+        let mut value = LazyAttribute::None;
+        let mut uri = LazyAttribute::None;
+        let mut format = LazyAttribute::None;
+        let mut language = LazyAttribute::None;
+        for (name, v) in attribute_list {
+            match name {
+                DATA_ID => data_id = v.quoted(),
+                VALUE => value.found(v),
+                URI => uri.found(v),
+                FORMAT => format.found(v),
+                LANGUAGE => language.found(v),
+                _ => (),
+            }
+        }
+        let Some(data_id) = data_id else {
             return Err(ValidationError::MissingRequiredAttribute(DATA_ID));
         };
         Ok(Self {
             data_id: Cow::Borrowed(data_id),
-            value: None,
-            uri: None,
-            format: None,
-            language: None,
-            attribute_list,
+            value,
+            uri,
+            format,
+            language,
             output_line: Cow::Borrowed(tag.original_input),
             output_line_is_dirty: false,
         })
@@ -304,11 +317,10 @@ impl<'a> SessionData<'a> {
         } = attribute_list;
         Self {
             data_id,
-            value,
-            uri,
-            format,
-            language,
-            attribute_list: HashMap::new(),
+            value: value.map(LazyAttribute::new).unwrap_or_default(),
+            uri: uri.map(LazyAttribute::new).unwrap_or_default(),
+            format: format.map(LazyAttribute::new).unwrap_or_default(),
+            language: language.map(LazyAttribute::new).unwrap_or_default(),
             output_line,
             output_line_is_dirty: false,
         }
@@ -368,12 +380,10 @@ impl<'a> SessionData<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn value(&self) -> Option<&str> {
-        if let Some(value) = &self.value {
-            Some(value)
-        } else {
-            self.attribute_list
-                .get(VALUE)
-                .and_then(AttributeValue::quoted)
+        match &self.value {
+            LazyAttribute::UserDefined(s) => Some(s.as_ref()),
+            LazyAttribute::Unparsed(v) => v.quoted(),
+            LazyAttribute::None => None,
         }
     }
 
@@ -381,12 +391,10 @@ impl<'a> SessionData<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn uri(&self) -> Option<&str> {
-        if let Some(uri) = &self.uri {
-            Some(uri)
-        } else {
-            self.attribute_list
-                .get(URI)
-                .and_then(AttributeValue::quoted)
+        match &self.uri {
+            LazyAttribute::UserDefined(s) => Some(s.as_ref()),
+            LazyAttribute::Unparsed(v) => v.quoted(),
+            LazyAttribute::None => None,
         }
     }
 
@@ -394,15 +402,14 @@ impl<'a> SessionData<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn format(&self) -> EnumeratedString<'_, Format> {
-        if let Some(format) = &self.format {
-            EnumeratedString::from(format.as_ref())
-        } else {
-            self.attribute_list
-                .get(FORMAT)
-                .and_then(AttributeValue::unquoted)
+        match &self.format {
+            LazyAttribute::UserDefined(s) => EnumeratedString::from(s.as_ref()),
+            LazyAttribute::Unparsed(v) => v
+                .unquoted()
                 .and_then(|v| v.try_as_utf_8().ok())
                 .map(EnumeratedString::from)
-                .unwrap_or(EnumeratedString::Known(Format::Json))
+                .unwrap_or(EnumeratedString::Known(Format::Json)),
+            LazyAttribute::None => EnumeratedString::Known(Format::Json),
         }
     }
 
@@ -410,12 +417,10 @@ impl<'a> SessionData<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn language(&self) -> Option<&str> {
-        if let Some(language) = &self.language {
-            Some(language)
-        } else {
-            self.attribute_list
-                .get(LANGUAGE)
-                .and_then(AttributeValue::quoted)
+        match &self.language {
+            LazyAttribute::UserDefined(s) => Some(s.as_ref()),
+            LazyAttribute::Unparsed(v) => v.quoted(),
+            LazyAttribute::None => None,
         }
     }
 
@@ -423,7 +428,6 @@ impl<'a> SessionData<'a> {
     ///
     /// See [`SessionData`] for a link to the HLS documentation for this attribute.
     pub fn set_data_id(&mut self, data_id: impl Into<Cow<'a, str>>) {
-        self.attribute_list.remove(DATA_ID);
         self.data_id = data_id.into();
         self.output_line_is_dirty = true;
     }
@@ -432,8 +436,7 @@ impl<'a> SessionData<'a> {
     ///
     /// See [`SessionData`] for a link to the HLS documentation for this attribute.
     pub fn set_value(&mut self, value: impl Into<Cow<'a, str>>) {
-        self.attribute_list.remove(VALUE);
-        self.value = Some(value.into());
+        self.value.set(value.into());
         self.output_line_is_dirty = true;
     }
 
@@ -441,8 +444,7 @@ impl<'a> SessionData<'a> {
     ///
     /// See [`SessionData`] for a link to the HLS documentation for this attribute.
     pub fn unset_value(&mut self) {
-        self.attribute_list.remove(VALUE);
-        self.value = None;
+        self.value.unset();
         self.output_line_is_dirty = true;
     }
 
@@ -450,8 +452,7 @@ impl<'a> SessionData<'a> {
     ///
     /// See [`SessionData`] for a link to the HLS documentation for this attribute.
     pub fn set_uri(&mut self, uri: impl Into<Cow<'a, str>>) {
-        self.attribute_list.remove(URI);
-        self.uri = Some(uri.into());
+        self.uri.set(uri.into());
         self.output_line_is_dirty = true;
     }
 
@@ -459,8 +460,7 @@ impl<'a> SessionData<'a> {
     ///
     /// See [`SessionData`] for a link to the HLS documentation for this attribute.
     pub fn unset_uri(&mut self) {
-        self.attribute_list.remove(URI);
-        self.uri = None;
+        self.uri.unset();
         self.output_line_is_dirty = true;
     }
 
@@ -468,8 +468,7 @@ impl<'a> SessionData<'a> {
     ///
     /// See [`SessionData`] for a link to the HLS documentation for this attribute.
     pub fn set_format(&mut self, format: impl Into<Cow<'a, str>>) {
-        self.attribute_list.remove(FORMAT);
-        self.format = Some(format.into());
+        self.format.set(format.into());
         self.output_line_is_dirty = true;
     }
 
@@ -477,8 +476,7 @@ impl<'a> SessionData<'a> {
     ///
     /// See [`SessionData`] for a link to the HLS documentation for this attribute.
     pub fn unset_format(&mut self) {
-        self.attribute_list.remove(FORMAT);
-        self.format = None;
+        self.format.unset();
         self.output_line_is_dirty = true;
     }
 
@@ -486,8 +484,7 @@ impl<'a> SessionData<'a> {
     ///
     /// See [`SessionData`] for a link to the HLS documentation for this attribute.
     pub fn set_language(&mut self, language: impl Into<Cow<'a, str>>) {
-        self.attribute_list.remove(LANGUAGE);
-        self.language = Some(language.into());
+        self.language.set(language.into());
         self.output_line_is_dirty = true;
     }
 
@@ -495,8 +492,7 @@ impl<'a> SessionData<'a> {
     ///
     /// See [`SessionData`] for a link to the HLS documentation for this attribute.
     pub fn unset_language(&mut self) {
-        self.attribute_list.remove(LANGUAGE);
-        self.language = None;
+        self.language.unset();
         self.output_line_is_dirty = true;
     }
 

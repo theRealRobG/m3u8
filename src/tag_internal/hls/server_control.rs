@@ -1,8 +1,11 @@
 use crate::{
     error::{ParseTagValueError, ValidationError},
-    tag::{AttributeValue, UnknownTag, UnquotedAttributeValue, hls::into_inner_tag},
+    tag::{
+        AttributeValue, UnknownTag, UnquotedAttributeValue,
+        hls::{LazyAttribute, into_inner_tag},
+    },
 };
-use std::{borrow::Cow, collections::HashMap, marker::PhantomData};
+use std::{borrow::Cow, marker::PhantomData};
 
 /// The attribute list for the tag (`#EXT-X-SERVER-CONTROL:<attribute-list>`).
 ///
@@ -135,14 +138,13 @@ impl Default for ServerControlBuilder<ServerControlAttributeNeedsToBeSet> {
 /// <https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.3.8>
 #[derive(Debug, Clone)]
 pub struct ServerControl<'a> {
-    can_skip_until: Option<f64>,
-    can_skip_dateranges: Option<bool>,
-    hold_back: Option<f64>,
-    part_hold_back: Option<f64>,
-    can_block_reload: Option<bool>,
-    attribute_list: HashMap<&'a str, AttributeValue<'a>>, // Original attribute list
-    output_line: Cow<'a, [u8]>,                           // Used with Writer
-    output_line_is_dirty: bool,                           // If should recalculate output_line
+    can_skip_until: LazyAttribute<'a, f64>,
+    can_skip_dateranges: LazyAttribute<'a, bool>,
+    hold_back: LazyAttribute<'a, f64>,
+    part_hold_back: LazyAttribute<'a, f64>,
+    can_block_reload: LazyAttribute<'a, bool>,
+    output_line: Cow<'a, [u8]>, // Used with Writer
+    output_line_is_dirty: bool, // If should recalculate output_line
 }
 
 impl<'a> PartialEq for ServerControl<'a> {
@@ -162,14 +164,28 @@ impl<'a> TryFrom<UnknownTag<'a>> for ServerControl<'a> {
         let attribute_list = tag
             .value()
             .ok_or(ParseTagValueError::UnexpectedEmpty)?
-            .try_as_attribute_list()?;
+            .try_as_ordered_attribute_list()?;
+        let mut can_skip_until = LazyAttribute::None;
+        let mut can_skip_dateranges = LazyAttribute::None;
+        let mut hold_back = LazyAttribute::None;
+        let mut part_hold_back = LazyAttribute::None;
+        let mut can_block_reload = LazyAttribute::None;
+        for (name, value) in attribute_list {
+            match name {
+                CAN_SKIP_UNTIL => can_skip_until.found(value),
+                CAN_SKIP_DATERANGES => can_skip_dateranges.found(value),
+                HOLD_BACK => hold_back.found(value),
+                PART_HOLD_BACK => part_hold_back.found(value),
+                CAN_BLOCK_RELOAD => can_block_reload.found(value),
+                _ => (),
+            }
+        }
         Ok(Self {
-            can_skip_until: None,
-            can_skip_dateranges: None,
-            hold_back: None,
-            part_hold_back: None,
-            can_block_reload: None,
-            attribute_list,
+            can_skip_until,
+            can_skip_dateranges,
+            hold_back,
+            part_hold_back,
+            can_block_reload,
             output_line: Cow::Borrowed(tag.original_input),
             output_line_is_dirty: false,
         })
@@ -188,12 +204,11 @@ impl<'a> ServerControl<'a> {
             can_block_reload,
         } = attribute_list;
         Self {
-            can_skip_until,
-            can_skip_dateranges: Some(can_skip_dateranges),
-            hold_back,
-            part_hold_back,
-            can_block_reload: Some(can_block_reload),
-            attribute_list: HashMap::new(),
+            can_skip_until: can_skip_until.map(LazyAttribute::new).unwrap_or_default(),
+            can_skip_dateranges: LazyAttribute::new(can_skip_dateranges),
+            hold_back: hold_back.map(LazyAttribute::new).unwrap_or_default(),
+            part_hold_back: part_hold_back.map(LazyAttribute::new).unwrap_or_default(),
+            can_block_reload: LazyAttribute::new(can_block_reload),
             output_line,
             output_line_is_dirty: false,
         }
@@ -223,13 +238,12 @@ impl<'a> ServerControl<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn can_skip_until(&self) -> Option<f64> {
-        if let Some(can_skip_until) = self.can_skip_until {
-            Some(can_skip_until)
-        } else {
-            self.attribute_list
-                .get(CAN_SKIP_UNTIL)
-                .and_then(AttributeValue::unquoted)
-                .and_then(|v| v.try_as_decimal_floating_point().ok())
+        match self.can_skip_until {
+            LazyAttribute::UserDefined(n) => Some(n),
+            LazyAttribute::Unparsed(v) => v
+                .unquoted()
+                .and_then(|v| v.try_as_decimal_floating_point().ok()),
+            LazyAttribute::None => None,
         }
     }
 
@@ -237,13 +251,12 @@ impl<'a> ServerControl<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn can_skip_dateranges(&self) -> bool {
-        if let Some(can_skip_dateranges) = self.can_skip_dateranges {
-            can_skip_dateranges
-        } else {
-            matches!(
-                self.attribute_list.get(CAN_SKIP_DATERANGES),
-                Some(AttributeValue::Unquoted(UnquotedAttributeValue(YES)))
-            )
+        match self.can_skip_dateranges {
+            LazyAttribute::UserDefined(b) => b,
+            LazyAttribute::Unparsed(v) => {
+                matches!(v, AttributeValue::Unquoted(UnquotedAttributeValue(YES)))
+            }
+            LazyAttribute::None => false,
         }
     }
 
@@ -251,26 +264,24 @@ impl<'a> ServerControl<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn hold_back(&self) -> Option<f64> {
-        if let Some(hold_back) = self.hold_back {
-            Some(hold_back)
-        } else {
-            self.attribute_list
-                .get(HOLD_BACK)
-                .and_then(AttributeValue::unquoted)
-                .and_then(|v| v.try_as_decimal_floating_point().ok())
+        match self.hold_back {
+            LazyAttribute::UserDefined(n) => Some(n),
+            LazyAttribute::Unparsed(v) => v
+                .unquoted()
+                .and_then(|v| v.try_as_decimal_floating_point().ok()),
+            LazyAttribute::None => None,
         }
     }
     /// Corresponds to the `PART-HOLD-BACK` attribute.
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn part_hold_back(&self) -> Option<f64> {
-        if let Some(part_hold_back) = self.part_hold_back {
-            Some(part_hold_back)
-        } else {
-            self.attribute_list
-                .get(PART_HOLD_BACK)
-                .and_then(AttributeValue::unquoted)
-                .and_then(|v| v.try_as_decimal_floating_point().ok())
+        match self.part_hold_back {
+            LazyAttribute::UserDefined(n) => Some(n),
+            LazyAttribute::Unparsed(v) => v
+                .unquoted()
+                .and_then(|v| v.try_as_decimal_floating_point().ok()),
+            LazyAttribute::None => None,
         }
     }
 
@@ -278,13 +289,12 @@ impl<'a> ServerControl<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn can_block_reload(&self) -> bool {
-        if let Some(can_block_reload) = self.can_block_reload {
-            can_block_reload
-        } else {
-            matches!(
-                self.attribute_list.get(CAN_BLOCK_RELOAD),
-                Some(AttributeValue::Unquoted(UnquotedAttributeValue(YES)))
-            )
+        match self.can_block_reload {
+            LazyAttribute::UserDefined(b) => b,
+            LazyAttribute::Unparsed(v) => {
+                matches!(v, AttributeValue::Unquoted(UnquotedAttributeValue(YES)))
+            }
+            LazyAttribute::None => false,
         }
     }
 
@@ -292,8 +302,7 @@ impl<'a> ServerControl<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_can_skip_until(&mut self, can_skip_until: f64) {
-        self.attribute_list.remove(CAN_SKIP_UNTIL);
-        self.can_skip_until = Some(can_skip_until);
+        self.can_skip_until.set(can_skip_until);
         self.output_line_is_dirty = true;
     }
 
@@ -301,8 +310,7 @@ impl<'a> ServerControl<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_can_skip_until(&mut self) {
-        self.attribute_list.remove(CAN_SKIP_UNTIL);
-        self.can_skip_until = None;
+        self.can_skip_until.unset();
         self.output_line_is_dirty = true;
     }
 
@@ -310,8 +318,7 @@ impl<'a> ServerControl<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_can_skip_dateranges(&mut self, can_skip_dateranges: bool) {
-        self.attribute_list.remove(CAN_SKIP_DATERANGES);
-        self.can_skip_dateranges = Some(can_skip_dateranges);
+        self.can_skip_dateranges.set(can_skip_dateranges);
         self.output_line_is_dirty = true;
     }
 
@@ -319,8 +326,7 @@ impl<'a> ServerControl<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_hold_back(&mut self, hold_back: f64) {
-        self.attribute_list.remove(HOLD_BACK);
-        self.hold_back = Some(hold_back);
+        self.hold_back.set(hold_back);
         self.output_line_is_dirty = true;
     }
 
@@ -328,8 +334,7 @@ impl<'a> ServerControl<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_hold_back(&mut self) {
-        self.attribute_list.remove(HOLD_BACK);
-        self.hold_back = None;
+        self.hold_back.unset();
         self.output_line_is_dirty = true;
     }
 
@@ -337,8 +342,7 @@ impl<'a> ServerControl<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_part_hold_back(&mut self, part_hold_back: f64) {
-        self.attribute_list.remove(PART_HOLD_BACK);
-        self.part_hold_back = Some(part_hold_back);
+        self.part_hold_back.set(part_hold_back);
         self.output_line_is_dirty = true;
     }
 
@@ -346,8 +350,7 @@ impl<'a> ServerControl<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_part_hold_back(&mut self) {
-        self.attribute_list.remove(PART_HOLD_BACK);
-        self.part_hold_back = None;
+        self.part_hold_back.unset();
         self.output_line_is_dirty = true;
     }
 
@@ -355,8 +358,7 @@ impl<'a> ServerControl<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_can_block_reload(&mut self, can_block_reload: bool) {
-        self.attribute_list.remove(CAN_BLOCK_RELOAD);
-        self.can_block_reload = Some(can_block_reload);
+        self.can_block_reload.set(can_block_reload);
         self.output_line_is_dirty = true;
     }
 

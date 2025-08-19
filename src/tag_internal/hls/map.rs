@@ -1,8 +1,11 @@
 use crate::{
     error::{ParseTagValueError, ValidationError},
-    tag::{AttributeValue, UnknownTag, hls::into_inner_tag},
+    tag::{
+        UnknownTag,
+        hls::{LazyAttribute, into_inner_tag},
+    },
 };
-use std::{borrow::Cow, collections::HashMap, fmt::Display, marker::PhantomData};
+use std::{borrow::Cow, fmt::Display, marker::PhantomData};
 
 /// The attribute list for the tag (`#EXT-X-MAP:<attribute-list>`).
 ///
@@ -82,10 +85,9 @@ impl<'a> Default for MapBuilder<'a, MapUriNeedsToBeSet> {
 #[derive(Debug, Clone)]
 pub struct Map<'a> {
     uri: Cow<'a, str>,
-    byterange: Option<MapByterange>,
-    attribute_list: HashMap<&'a str, AttributeValue<'a>>, // Original attribute list
-    output_line: Cow<'a, [u8]>,                           // Used with Writer
-    output_line_is_dirty: bool,                           // If should recalculate output_line
+    byterange: LazyAttribute<'a, MapByterange>,
+    output_line: Cow<'a, [u8]>, // Used with Writer
+    output_line_is_dirty: bool, // If should recalculate output_line
 }
 
 impl<'a> PartialEq for Map<'a> {
@@ -116,17 +118,25 @@ impl<'a> TryFrom<UnknownTag<'a>> for Map<'a> {
     type Error = ValidationError;
 
     fn try_from(tag: UnknownTag<'a>) -> Result<Self, Self::Error> {
-        let mut attribute_list = tag
+        let attribute_list = tag
             .value()
             .ok_or(ParseTagValueError::UnexpectedEmpty)?
-            .try_as_attribute_list()?;
-        let Some(AttributeValue::Quoted(uri)) = attribute_list.remove(URI) else {
+            .try_as_ordered_attribute_list()?;
+        let mut uri = None;
+        let mut byterange = LazyAttribute::None;
+        for (name, value) in attribute_list {
+            match name {
+                URI => uri = value.quoted(),
+                BYTERANGE => byterange.found(value),
+                _ => (),
+            }
+        }
+        let Some(uri) = uri else {
             return Err(super::ValidationError::MissingRequiredAttribute(URI));
         };
         Ok(Self {
             uri: Cow::Borrowed(uri),
-            byterange: None,
-            attribute_list,
+            byterange,
             output_line: Cow::Borrowed(tag.original_input),
             output_line_is_dirty: false,
         })
@@ -140,8 +150,7 @@ impl<'a> Map<'a> {
         let MapAttributeList { uri, byterange } = attribute_list;
         Self {
             uri,
-            byterange,
-            attribute_list: HashMap::new(),
+            byterange: byterange.map(LazyAttribute::new).unwrap_or_default(),
             output_line,
             output_line_is_dirty: false,
         }
@@ -178,22 +187,19 @@ impl<'a> Map<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn byterange(&self) -> Option<MapByterange> {
-        if let Some(byterange) = self.byterange {
-            Some(byterange)
-        } else {
-            self.attribute_list
-                .get(BYTERANGE)
-                .and_then(AttributeValue::quoted)
-                .and_then(|byterange_str| {
-                    let mut parts = byterange_str.splitn(2, '@');
-                    let Some(Ok(length)) = parts.next().map(str::parse::<u64>) else {
-                        return None;
-                    };
-                    let Some(Ok(offset)) = parts.next().map(str::parse::<u64>) else {
-                        return None;
-                    };
-                    Some(MapByterange { length, offset })
-                })
+        match &self.byterange {
+            LazyAttribute::UserDefined(b) => Some(*b),
+            LazyAttribute::Unparsed(v) => v.quoted().and_then(|byterange_str| {
+                let mut parts = byterange_str.splitn(2, '@');
+                let Some(Ok(length)) = parts.next().map(str::parse::<u64>) else {
+                    return None;
+                };
+                let Some(Ok(offset)) = parts.next().map(str::parse::<u64>) else {
+                    return None;
+                };
+                Some(MapByterange { length, offset })
+            }),
+            LazyAttribute::None => None,
         }
     }
 
@@ -201,7 +207,6 @@ impl<'a> Map<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_uri(&mut self, uri: impl Into<Cow<'a, str>>) {
-        self.attribute_list.remove(URI);
         self.uri = uri.into();
         self.output_line_is_dirty = true;
     }
@@ -210,8 +215,7 @@ impl<'a> Map<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_byterange(&mut self, byterange: MapByterange) {
-        self.attribute_list.remove(BYTERANGE);
-        self.byterange = Some(byterange);
+        self.byterange.set(byterange);
         self.output_line_is_dirty = true;
     }
 
@@ -219,8 +223,7 @@ impl<'a> Map<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_byterange(&mut self) {
-        self.attribute_list.remove(BYTERANGE);
-        self.byterange = None;
+        self.byterange.unset();
         self.output_line_is_dirty = true;
     }
 

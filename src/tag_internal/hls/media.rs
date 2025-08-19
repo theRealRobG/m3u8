@@ -2,11 +2,11 @@ use crate::{
     error::{ParseTagValueError, UnrecognizedEnumerationError, ValidationError},
     tag::{
         AttributeValue, UnknownTag, UnquotedAttributeValue,
-        hls::{EnumeratedString, EnumeratedStringList, into_inner_tag},
+        hls::{EnumeratedString, EnumeratedStringList, LazyAttribute, into_inner_tag},
     },
     utils::AsStaticCow,
 };
-use std::{borrow::Cow, collections::HashMap, fmt::Display, marker::PhantomData, str::Split};
+use std::{borrow::Cow, fmt::Display, marker::PhantomData, str::Split};
 
 /// Corresponds to the `#EXT-X-MEDIA:TYPE` attribute.
 ///
@@ -818,21 +818,20 @@ pub struct Media<'a> {
     media_type: Cow<'a, str>,
     group_id: Cow<'a, str>,
     name: Cow<'a, str>,
-    uri: Option<Cow<'a, str>>,
-    language: Option<Cow<'a, str>>,
-    assoc_language: Option<Cow<'a, str>>,
-    stable_rendition_id: Option<Cow<'a, str>>,
-    default: Option<bool>,
-    autoselect: Option<bool>,
-    forced: Option<bool>,
-    instream_id: Option<Cow<'a, str>>,
-    bit_depth: Option<u64>,
-    sample_rate: Option<u64>,
-    characteristics: Option<Cow<'a, str>>,
-    channels: Option<Cow<'a, str>>,
-    attribute_list: HashMap<&'a str, AttributeValue<'a>>, // Original attribute list
-    output_line: Cow<'a, [u8]>,                           // Used with Writer
-    output_line_is_dirty: bool,                           // If should recalculate output_line
+    uri: LazyAttribute<'a, Cow<'a, str>>,
+    language: LazyAttribute<'a, Cow<'a, str>>,
+    assoc_language: LazyAttribute<'a, Cow<'a, str>>,
+    stable_rendition_id: LazyAttribute<'a, Cow<'a, str>>,
+    default: LazyAttribute<'a, bool>,
+    autoselect: LazyAttribute<'a, bool>,
+    forced: LazyAttribute<'a, bool>,
+    instream_id: LazyAttribute<'a, Cow<'a, str>>,
+    bit_depth: LazyAttribute<'a, u64>,
+    sample_rate: LazyAttribute<'a, u64>,
+    characteristics: LazyAttribute<'a, Cow<'a, str>>,
+    channels: LazyAttribute<'a, Cow<'a, str>>,
+    output_line: Cow<'a, [u8]>, // Used with Writer
+    output_line_is_dirty: bool, // If should recalculate output_line
 }
 
 impl<'a> PartialEq for Media<'a> {
@@ -862,40 +861,67 @@ impl<'a> TryFrom<UnknownTag<'a>> for Media<'a> {
         let attribute_list = tag
             .value()
             .ok_or(ParseTagValueError::UnexpectedEmpty)?
-            .try_as_attribute_list()?;
-        let Some(media_type) = attribute_list
-            .get(TYPE)
-            .and_then(AttributeValue::unquoted)
-            .and_then(|v| v.try_as_utf_8().ok())
-        else {
+            .try_as_ordered_attribute_list()?;
+        let mut media_type = None;
+        let mut group_id = None;
+        let mut name = None;
+        let mut uri = LazyAttribute::None;
+        let mut language = LazyAttribute::None;
+        let mut assoc_language = LazyAttribute::None;
+        let mut stable_rendition_id = LazyAttribute::None;
+        let mut default = LazyAttribute::None;
+        let mut autoselect = LazyAttribute::None;
+        let mut forced = LazyAttribute::None;
+        let mut instream_id = LazyAttribute::None;
+        let mut bit_depth = LazyAttribute::None;
+        let mut sample_rate = LazyAttribute::None;
+        let mut characteristics = LazyAttribute::None;
+        let mut channels = LazyAttribute::None;
+        for (attr_name, value) in attribute_list {
+            match attr_name {
+                TYPE => media_type = value.unquoted().and_then(|v| v.try_as_utf_8().ok()),
+                GROUP_ID => group_id = value.quoted(),
+                NAME => name = value.quoted(),
+                URI => uri.found(value),
+                LANGUAGE => language.found(value),
+                ASSOC_LANGUAGE => assoc_language.found(value),
+                STABLE_RENDITION_ID => stable_rendition_id.found(value),
+                DEFAULT => default.found(value),
+                AUTOSELECT => autoselect.found(value),
+                FORCED => forced.found(value),
+                INSTREAM_ID => instream_id.found(value),
+                BIT_DEPTH => bit_depth.found(value),
+                SAMPLE_RATE => sample_rate.found(value),
+                CHARACTERISTICS => characteristics.found(value),
+                CHANNELS => channels.found(value),
+                _ => (),
+            }
+        }
+        let Some(media_type) = media_type else {
             return Err(super::ValidationError::MissingRequiredAttribute(TYPE));
         };
-        let Some(group_id) = attribute_list
-            .get(GROUP_ID)
-            .and_then(AttributeValue::quoted)
-        else {
+        let Some(group_id) = group_id else {
             return Err(super::ValidationError::MissingRequiredAttribute(GROUP_ID));
         };
-        let Some(name) = attribute_list.get(NAME).and_then(AttributeValue::quoted) else {
+        let Some(name) = name else {
             return Err(super::ValidationError::MissingRequiredAttribute(NAME));
         };
         Ok(Self {
             media_type: Cow::Borrowed(media_type),
             group_id: Cow::Borrowed(group_id),
             name: Cow::Borrowed(name),
-            uri: None,
-            language: None,
-            assoc_language: None,
-            stable_rendition_id: None,
-            default: None,
-            autoselect: None,
-            forced: None,
-            instream_id: None,
-            bit_depth: None,
-            sample_rate: None,
-            characteristics: None,
-            channels: None,
-            attribute_list,
+            uri,
+            language,
+            assoc_language,
+            stable_rendition_id,
+            default,
+            autoselect,
+            forced,
+            instream_id,
+            bit_depth,
+            sample_rate,
+            characteristics,
+            channels,
             output_line: Cow::Borrowed(tag.original_input),
             output_line_is_dirty: false,
         })
@@ -927,19 +953,20 @@ impl<'a> Media<'a> {
             media_type,
             group_id,
             name,
-            uri,
-            language,
-            assoc_language,
-            stable_rendition_id,
-            default: Some(default),
-            autoselect: Some(autoselect),
-            forced: Some(forced),
-            instream_id,
-            bit_depth,
-            sample_rate,
-            characteristics,
-            channels,
-            attribute_list: HashMap::new(),
+            uri: uri.map(LazyAttribute::new).unwrap_or_default(),
+            language: language.map(LazyAttribute::new).unwrap_or_default(),
+            assoc_language: assoc_language.map(LazyAttribute::new).unwrap_or_default(),
+            stable_rendition_id: stable_rendition_id
+                .map(LazyAttribute::new)
+                .unwrap_or_default(),
+            default: LazyAttribute::new(default),
+            autoselect: LazyAttribute::new(autoselect),
+            forced: LazyAttribute::new(forced),
+            instream_id: instream_id.map(LazyAttribute::new).unwrap_or_default(),
+            bit_depth: bit_depth.map(LazyAttribute::new).unwrap_or_default(),
+            sample_rate: sample_rate.map(LazyAttribute::new).unwrap_or_default(),
+            characteristics: characteristics.map(LazyAttribute::new).unwrap_or_default(),
+            channels: channels.map(LazyAttribute::new).unwrap_or_default(),
             output_line,
             output_line_is_dirty: false,
         }
@@ -1037,87 +1064,76 @@ impl<'a> Media<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn uri(&self) -> Option<&str> {
-        if let Some(uri) = &self.uri {
-            Some(uri)
-        } else {
-            self.attribute_list
-                .get(URI)
-                .and_then(AttributeValue::quoted)
+        match &self.uri {
+            LazyAttribute::UserDefined(s) => Some(s.as_ref()),
+            LazyAttribute::Unparsed(v) => v.quoted(),
+            LazyAttribute::None => None,
         }
     }
     /// Corresponds to the `LANGUAGE` attribute.
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn language(&self) -> Option<&str> {
-        if let Some(language) = &self.language {
-            Some(language)
-        } else {
-            self.attribute_list
-                .get(LANGUAGE)
-                .and_then(AttributeValue::quoted)
+        match &self.language {
+            LazyAttribute::UserDefined(s) => Some(s.as_ref()),
+            LazyAttribute::Unparsed(v) => v.quoted(),
+            LazyAttribute::None => None,
         }
     }
     /// Corresponds to the `ASSOC-LANGUAGE` attribute.
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn assoc_language(&self) -> Option<&str> {
-        if let Some(assoc_language) = &self.assoc_language {
-            Some(assoc_language)
-        } else {
-            self.attribute_list
-                .get(ASSOC_LANGUAGE)
-                .and_then(AttributeValue::quoted)
+        match &self.assoc_language {
+            LazyAttribute::UserDefined(s) => Some(s.as_ref()),
+            LazyAttribute::Unparsed(v) => v.quoted(),
+            LazyAttribute::None => None,
         }
     }
     /// Corresponds to the `STABLE-RENDITION-ID` attribute.
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn stable_rendition_id(&self) -> Option<&str> {
-        if let Some(stable_rendition_id) = &self.stable_rendition_id {
-            Some(stable_rendition_id)
-        } else {
-            self.attribute_list
-                .get(STABLE_RENDITION_ID)
-                .and_then(AttributeValue::quoted)
+        match &self.stable_rendition_id {
+            LazyAttribute::UserDefined(s) => Some(s.as_ref()),
+            LazyAttribute::Unparsed(v) => v.quoted(),
+            LazyAttribute::None => None,
         }
     }
     /// Corresponds to the `DEFAULT` attribute.
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn default(&self) -> bool {
-        if let Some(default) = self.default {
-            default
-        } else {
-            matches!(
-                self.attribute_list.get(DEFAULT),
-                Some(AttributeValue::Unquoted(UnquotedAttributeValue(YES)))
-            )
+        match &self.default {
+            LazyAttribute::UserDefined(b) => *b,
+            LazyAttribute::Unparsed(v) => {
+                matches!(v, AttributeValue::Unquoted(UnquotedAttributeValue(YES)))
+            }
+            LazyAttribute::None => false,
         }
     }
     /// Corresponds to the `AUTOSELECT` attribute.
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn autoselect(&self) -> bool {
-        if let Some(autoselect) = self.autoselect {
-            autoselect
-        } else {
-            matches!(
-                self.attribute_list.get(AUTOSELECT),
-                Some(AttributeValue::Unquoted(UnquotedAttributeValue(YES)))
-            )
+        match &self.autoselect {
+            LazyAttribute::UserDefined(b) => *b,
+            LazyAttribute::Unparsed(v) => {
+                matches!(v, AttributeValue::Unquoted(UnquotedAttributeValue(YES)))
+            }
+            LazyAttribute::None => false,
         }
     }
     /// Corresponds to the `FORCED` attribute.
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn forced(&self) -> bool {
-        if let Some(forced) = self.forced {
-            forced
-        } else {
-            matches!(
-                self.attribute_list.get(FORCED),
-                Some(AttributeValue::Unquoted(UnquotedAttributeValue(YES)))
-            )
+        match &self.forced {
+            LazyAttribute::UserDefined(b) => *b,
+            LazyAttribute::Unparsed(v) => {
+                matches!(v, AttributeValue::Unquoted(UnquotedAttributeValue(YES)))
+            }
+            LazyAttribute::None => false,
         }
     }
     /// Corresponds to the `INSTREAM-ID` attribute.
@@ -1139,52 +1155,44 @@ impl<'a> Media<'a> {
     /// assert_eq!(Some(InstreamId::Cea608(Cea608InstreamId::Cc1)), tag.instream_id().known());
     /// ```
     pub fn instream_id(&self) -> Option<EnumeratedString<'_, InstreamId>> {
-        if let Some(instream_id) = &self.instream_id {
-            Some(EnumeratedString::from(instream_id.as_ref()))
-        } else {
-            self.attribute_list
-                .get(INSTREAM_ID)
-                .and_then(AttributeValue::quoted)
-                .map(EnumeratedString::from)
+        match &self.instream_id {
+            LazyAttribute::UserDefined(s) => Some(EnumeratedString::from(s.as_ref())),
+            LazyAttribute::Unparsed(v) => v.quoted().map(EnumeratedString::from),
+            LazyAttribute::None => None,
         }
     }
     /// Corresponds to the `BIT-DEPTH` attribute.
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn bit_depth(&self) -> Option<u64> {
-        if let Some(bit_depth) = self.bit_depth {
-            Some(bit_depth)
-        } else {
-            self.attribute_list
-                .get(BIT_DEPTH)
-                .and_then(AttributeValue::unquoted)
-                .and_then(|v| v.try_as_decimal_integer().ok())
+        match &self.bit_depth {
+            LazyAttribute::UserDefined(d) => Some(*d),
+            LazyAttribute::Unparsed(v) => {
+                v.unquoted().and_then(|v| v.try_as_decimal_integer().ok())
+            }
+            LazyAttribute::None => None,
         }
     }
     /// Corresponds to the `SAMPLE-RATE` attribute.
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn sample_rate(&self) -> Option<u64> {
-        if let Some(sample_rate) = self.sample_rate {
-            Some(sample_rate)
-        } else {
-            self.attribute_list
-                .get(SAMPLE_RATE)
-                .and_then(AttributeValue::unquoted)
-                .and_then(|v| v.try_as_decimal_integer().ok())
+        match &self.sample_rate {
+            LazyAttribute::UserDefined(d) => Some(*d),
+            LazyAttribute::Unparsed(v) => {
+                v.unquoted().and_then(|v| v.try_as_decimal_integer().ok())
+            }
+            LazyAttribute::None => None,
         }
     }
     /// Corresponds to the `CHARACTERISTICS` attribute.
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn characteristics(&self) -> Option<EnumeratedStringList<'_, MediaCharacteristicTag>> {
-        if let Some(characteristics) = &self.characteristics {
-            Some(EnumeratedStringList::from(characteristics.as_ref()))
-        } else {
-            self.attribute_list
-                .get(CHARACTERISTICS)
-                .and_then(AttributeValue::quoted)
-                .map(EnumeratedStringList::from)
+        match &self.characteristics {
+            LazyAttribute::UserDefined(s) => Some(EnumeratedStringList::from(s.as_ref())),
+            LazyAttribute::Unparsed(v) => v.quoted().map(EnumeratedStringList::from),
+            LazyAttribute::None => None,
         }
     }
     /// Corresponds to the `CHANNELS` attribute.
@@ -1226,13 +1234,10 @@ impl<'a> Media<'a> {
     /// }
     /// ```
     pub fn channels(&self) -> Option<Channels<'_>> {
-        if let Some(channels) = &self.channels {
-            Some(Channels::from(channels.as_ref()))
-        } else {
-            self.attribute_list
-                .get(CHANNELS)
-                .and_then(AttributeValue::quoted)
-                .map(Channels::from)
+        match &self.channels {
+            LazyAttribute::UserDefined(s) => Some(Channels::from(s.as_ref())),
+            LazyAttribute::Unparsed(v) => v.quoted().map(Channels::from),
+            LazyAttribute::None => None,
         }
     }
 
@@ -1240,7 +1245,6 @@ impl<'a> Media<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_media_type(&mut self, media_type: impl Into<Cow<'a, str>>) {
-        self.attribute_list.remove(TYPE);
         self.media_type = media_type.into();
         self.output_line_is_dirty = true;
     }
@@ -1248,7 +1252,6 @@ impl<'a> Media<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_name(&mut self, name: impl Into<Cow<'a, str>>) {
-        self.attribute_list.remove(NAME);
         self.name = name.into();
         self.output_line_is_dirty = true;
     }
@@ -1256,7 +1259,6 @@ impl<'a> Media<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_group_id(&mut self, group_id: impl Into<Cow<'a, str>>) {
-        self.attribute_list.remove(GROUP_ID);
         self.group_id = group_id.into();
         self.output_line_is_dirty = true;
     }
@@ -1264,152 +1266,133 @@ impl<'a> Media<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_uri(&mut self, uri: impl Into<Cow<'a, str>>) {
-        self.attribute_list.remove(URI);
-        self.uri = Some(uri.into());
+        self.uri.set(uri.into());
         self.output_line_is_dirty = true;
     }
     /// Unsets the `URI` attribute (sets it to `None`).
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_uri(&mut self) {
-        self.attribute_list.remove(URI);
-        self.uri = None;
+        self.uri.unset();
         self.output_line_is_dirty = true;
     }
     /// Sets the `LANGUAGE` attribute.
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_language(&mut self, language: impl Into<Cow<'a, str>>) {
-        self.attribute_list.remove(LANGUAGE);
-        self.language = Some(language.into());
+        self.language.set(language.into());
         self.output_line_is_dirty = true;
     }
     /// Unsets the `LANGUAGE` attribute (sets it to `None`).
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_language(&mut self) {
-        self.attribute_list.remove(LANGUAGE);
-        self.language = None;
+        self.language.unset();
         self.output_line_is_dirty = true;
     }
     /// Sets the `ASSOC-LANGUAGE` attribute.
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_assoc_language(&mut self, assoc_language: impl Into<Cow<'a, str>>) {
-        self.attribute_list.remove(ASSOC_LANGUAGE);
-        self.assoc_language = Some(assoc_language.into());
+        self.assoc_language.set(assoc_language.into());
         self.output_line_is_dirty = true;
     }
     /// Unsets the `ASSOC-LANGUAGE` attribute (sets it to `None`).
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_assoc_language(&mut self) {
-        self.attribute_list.remove(ASSOC_LANGUAGE);
-        self.assoc_language = None;
+        self.assoc_language.unset();
         self.output_line_is_dirty = true;
     }
     /// Sets the `STABLE-RENDITION-ID` attribute.
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_stable_rendition_id(&mut self, stable_rendition_id: impl Into<Cow<'a, str>>) {
-        self.attribute_list.remove(STABLE_RENDITION_ID);
-        self.stable_rendition_id = Some(stable_rendition_id.into());
+        self.stable_rendition_id.set(stable_rendition_id.into());
         self.output_line_is_dirty = true;
     }
     /// Unsets the `STABLE-RENDITION-ID` attribute (sets it to `None`).
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_stable_rendition_id(&mut self) {
-        self.attribute_list.remove(STABLE_RENDITION_ID);
-        self.stable_rendition_id = None;
+        self.stable_rendition_id.unset();
         self.output_line_is_dirty = true;
     }
     /// Sets the `DEFAULT` attribute.
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_default(&mut self, default: bool) {
-        self.attribute_list.remove(DEFAULT);
-        self.default = Some(default);
+        self.default.set(default);
         self.output_line_is_dirty = true;
     }
     /// Sets the `AUTOSELECT` attribute.
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_autoselect(&mut self, autoselect: bool) {
-        self.attribute_list.remove(AUTOSELECT);
-        self.autoselect = Some(autoselect);
+        self.autoselect.set(autoselect);
         self.output_line_is_dirty = true;
     }
     /// Sets the `FORCED` attribute.
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_forced(&mut self, forced: bool) {
-        self.attribute_list.remove(FORCED);
-        self.forced = Some(forced);
+        self.forced.set(forced);
         self.output_line_is_dirty = true;
     }
     /// Sets the `INSTREAM-ID` attribute.
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_instream_id(&mut self, instream_id: impl Into<Cow<'a, str>>) {
-        self.attribute_list.remove(INSTREAM_ID);
-        self.instream_id = Some(instream_id.into());
+        self.instream_id.set(instream_id.into());
         self.output_line_is_dirty = true;
     }
     /// Unsets the `INSTREAM-ID` attribute (sets it to `None`).
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_instream_id(&mut self) {
-        self.attribute_list.remove(INSTREAM_ID);
-        self.instream_id = None;
+        self.instream_id.unset();
         self.output_line_is_dirty = true;
     }
     /// Sets the `BIT-DEPTH` attribute.
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_bit_depth(&mut self, bit_depth: u64) {
-        self.attribute_list.remove(BIT_DEPTH);
-        self.bit_depth = Some(bit_depth);
+        self.bit_depth.set(bit_depth);
         self.output_line_is_dirty = true;
     }
     /// Unsets the `BIT-DEPTH` attribute (sets it to `None`).
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_bit_depth(&mut self) {
-        self.attribute_list.remove(BIT_DEPTH);
-        self.bit_depth = None;
+        self.bit_depth.unset();
         self.output_line_is_dirty = true;
     }
     /// Sets the `SAMPLE-RATE` attribute.
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_sample_rate(&mut self, sample_rate: u64) {
-        self.attribute_list.remove(SAMPLE_RATE);
-        self.sample_rate = Some(sample_rate);
+        self.sample_rate.set(sample_rate);
         self.output_line_is_dirty = true;
     }
     /// Unsets the `SAMPLE-RATE` attribute (sets it to `None`).
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_sample_rate(&mut self) {
-        self.attribute_list.remove(SAMPLE_RATE);
-        self.sample_rate = None;
+        self.sample_rate.unset();
         self.output_line_is_dirty = true;
     }
     /// Sets the `CHARACTERISTICS` attribute.
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_characteristics(&mut self, characteristics: impl Into<Cow<'a, str>>) {
-        self.attribute_list.remove(CHARACTERISTICS);
-        self.characteristics = Some(characteristics.into());
+        self.characteristics.set(characteristics.into());
         self.output_line_is_dirty = true;
     }
     /// Unsets the `CHARACTERISTICS` attribute (sets it to `None`).
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_characteristics(&mut self) {
-        self.attribute_list.remove(CHARACTERISTICS);
-        self.characteristics = None;
+        self.characteristics.unset();
         self.output_line_is_dirty = true;
     }
     /// Sets the `CHANNELS` attribute.
@@ -1488,16 +1471,14 @@ impl<'a> Media<'a> {
     /// }
     /// ```
     pub fn set_channels(&mut self, channels: impl Into<Cow<'a, str>>) {
-        self.attribute_list.remove(CHANNELS);
-        self.channels = Some(channels.into());
+        self.channels.set(channels.into());
         self.output_line_is_dirty = true;
     }
     /// Unsets the `CHANNELS` attribute (sets it to `None`).
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_channels(&mut self) {
-        self.attribute_list.remove(CHANNELS);
-        self.channels = None;
+        self.channels.unset();
         self.output_line_is_dirty = true;
     }
 
