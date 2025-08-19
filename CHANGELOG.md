@@ -17,6 +17,11 @@ The format is based on [Keep a Changelog], and this project adheres to
   attribute list offers). This can be used if order of attributes is
   important for the user.
 
+### Changed
+
+- Internally all "attribute list" tags now use the ordered attribute
+  list method for finding attributes (non-breaking change).
+
 ## [0.5.0] - 2025-08-16
 
 ### Changed
