@@ -1,8 +1,11 @@
 use crate::{
     error::{ParseTagValueError, ValidationError},
-    tag::{AttributeValue, UnknownTag, hls::into_inner_tag},
+    tag::{
+        UnknownTag,
+        hls::{LazyAttribute, into_inner_tag},
+    },
 };
-use std::{borrow::Cow, collections::HashMap, marker::PhantomData};
+use std::{borrow::Cow, marker::PhantomData};
 
 /// The attribute list for the tag (`#EXT-X-RENDITION-REPORT:<attribute-list>`).
 ///
@@ -121,10 +124,9 @@ impl<'a> Default
 pub struct RenditionReport<'a> {
     uri: Cow<'a, str>,
     last_msn: u64,
-    last_part: Option<u64>,
-    attribute_list: HashMap<&'a str, AttributeValue<'a>>, // Original attribute list
-    output_line: Cow<'a, [u8]>,                           // Used with Writer
-    output_line_is_dirty: bool,                           // If should recalculate output_line
+    last_part: LazyAttribute<'a, u64>,
+    output_line: Cow<'a, [u8]>, // Used with Writer
+    output_line_is_dirty: bool, // If should recalculate output_line
 }
 
 impl<'a> PartialEq for RenditionReport<'a> {
@@ -142,22 +144,32 @@ impl<'a> TryFrom<UnknownTag<'a>> for RenditionReport<'a> {
         let attribute_list = tag
             .value()
             .ok_or(ParseTagValueError::UnexpectedEmpty)?
-            .try_as_attribute_list()?;
-        let Some(uri) = attribute_list.get(URI).and_then(AttributeValue::quoted) else {
+            .try_as_ordered_attribute_list()?;
+        let mut uri = None;
+        let mut last_msn = None;
+        let mut last_part = LazyAttribute::None;
+        for (name, value) in attribute_list {
+            match name {
+                URI => uri = value.quoted(),
+                LAST_MSN => {
+                    last_msn = value
+                        .unquoted()
+                        .and_then(|v| v.try_as_decimal_integer().ok())
+                }
+                LAST_PART => last_part.found(value),
+                _ => (),
+            }
+        }
+        let Some(uri) = uri else {
             return Err(super::ValidationError::MissingRequiredAttribute(URI));
         };
-        let Some(last_msn) = attribute_list
-            .get(LAST_MSN)
-            .and_then(AttributeValue::unquoted)
-            .and_then(|v| v.try_as_decimal_integer().ok())
-        else {
+        let Some(last_msn) = last_msn else {
             return Err(super::ValidationError::MissingRequiredAttribute(LAST_MSN));
         };
         Ok(Self {
             uri: Cow::Borrowed(uri),
             last_msn,
-            last_part: None,
-            attribute_list,
+            last_part,
             output_line: Cow::Borrowed(tag.original_input),
             output_line_is_dirty: false,
         })
@@ -176,8 +188,7 @@ impl<'a> RenditionReport<'a> {
         Self {
             uri,
             last_msn,
-            last_part,
-            attribute_list: HashMap::new(),
+            last_part: last_part.map(LazyAttribute::new).unwrap_or_default(),
             output_line,
             output_line_is_dirty: false,
         }
@@ -234,13 +245,12 @@ impl<'a> RenditionReport<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn last_part(&self) -> Option<u64> {
-        if let Some(last_part) = self.last_part {
-            Some(last_part)
-        } else {
-            self.attribute_list
-                .get(LAST_PART)
-                .and_then(AttributeValue::unquoted)
-                .and_then(|v| v.try_as_decimal_integer().ok())
+        match &self.last_part {
+            LazyAttribute::UserDefined(n) => Some(*n),
+            LazyAttribute::Unparsed(v) => {
+                v.unquoted().and_then(|v| v.try_as_decimal_integer().ok())
+            }
+            LazyAttribute::None => None,
         }
     }
 
@@ -248,7 +258,6 @@ impl<'a> RenditionReport<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_uri(&mut self, uri: impl Into<Cow<'a, str>>) {
-        self.attribute_list.remove(URI);
         self.uri = uri.into();
         self.output_line_is_dirty = true;
     }
@@ -257,7 +266,6 @@ impl<'a> RenditionReport<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_last_msn(&mut self, last_msn: u64) {
-        self.attribute_list.remove(LAST_MSN);
         self.last_msn = last_msn;
         self.output_line_is_dirty = true;
     }
@@ -266,8 +274,7 @@ impl<'a> RenditionReport<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_last_part(&mut self, last_part: u64) {
-        self.attribute_list.remove(LAST_PART);
-        self.last_part = Some(last_part);
+        self.last_part.set(last_part);
         self.output_line_is_dirty = true;
     }
 
@@ -275,8 +282,7 @@ impl<'a> RenditionReport<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_last_part(&mut self) {
-        self.attribute_list.remove(LAST_PART);
-        self.last_part = None;
+        self.last_part.unset();
         self.output_line_is_dirty = true;
     }
 

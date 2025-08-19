@@ -1,12 +1,12 @@
 use crate::{
     error::{ParseTagValueError, UnrecognizedEnumerationError, ValidationError},
     tag::{
-        AttributeValue, UnknownTag,
-        hls::{EnumeratedString, into_inner_tag},
+        UnknownTag,
+        hls::{EnumeratedString, LazyAttribute, into_inner_tag},
     },
     utils::AsStaticCow,
 };
-use std::{borrow::Cow, collections::HashMap, fmt::Display, marker::PhantomData};
+use std::{borrow::Cow, fmt::Display, marker::PhantomData};
 
 /// Corresponds to the `#EXT-X-KEY:METHOD` attribute.
 ///
@@ -190,13 +190,12 @@ impl<'a> Default for KeyBuilder<'a, KeyMethodNeedsToBeSet> {
 #[derive(Debug, Clone)]
 pub struct Key<'a> {
     method: Cow<'a, str>,
-    uri: Option<Cow<'a, str>>,
-    iv: Option<Cow<'a, str>>,
-    keyformat: Option<Cow<'a, str>>,
-    keyformatversions: Option<Cow<'a, str>>,
-    attribute_list: HashMap<&'a str, AttributeValue<'a>>, // Original attribute list
-    output_line: Cow<'a, [u8]>,                           // Used with Writer
-    output_line_is_dirty: bool,                           // If should recalculate output_line
+    uri: LazyAttribute<'a, Cow<'a, str>>,
+    iv: LazyAttribute<'a, Cow<'a, str>>,
+    keyformat: LazyAttribute<'a, Cow<'a, str>>,
+    keyformatversions: LazyAttribute<'a, Cow<'a, str>>,
+    output_line: Cow<'a, [u8]>, // Used with Writer
+    output_line_is_dirty: bool, // If should recalculate output_line
 }
 
 impl<'a> PartialEq for Key<'a> {
@@ -216,21 +215,31 @@ impl<'a> TryFrom<UnknownTag<'a>> for Key<'a> {
         let attribute_list = tag
             .value()
             .ok_or(ParseTagValueError::UnexpectedEmpty)?
-            .try_as_attribute_list()?;
-        let Some(method) = attribute_list
-            .get(METHOD)
-            .and_then(AttributeValue::unquoted)
-            .and_then(|v| v.try_as_utf_8().ok())
-        else {
+            .try_as_ordered_attribute_list()?;
+        let mut method = None;
+        let mut uri = LazyAttribute::None;
+        let mut iv = LazyAttribute::None;
+        let mut keyformat = LazyAttribute::None;
+        let mut keyformatversions = LazyAttribute::None;
+        for (name, value) in attribute_list {
+            match name {
+                METHOD => method = value.unquoted().and_then(|v| v.try_as_utf_8().ok()),
+                URI => uri.found(value),
+                IV => iv.found(value),
+                KEYFORMAT => keyformat.found(value),
+                KEYFORMATVERSIONS => keyformatversions.found(value),
+                _ => (),
+            }
+        }
+        let Some(method) = method else {
             return Err(super::ValidationError::MissingRequiredAttribute(METHOD));
         };
         Ok(Self {
             method: Cow::Borrowed(method),
-            uri: None,
-            iv: None,
-            keyformat: None,
-            keyformatversions: None,
-            attribute_list,
+            uri,
+            iv,
+            keyformat,
+            keyformatversions,
             output_line: Cow::Borrowed(tag.original_input),
             output_line_is_dirty: false,
         })
@@ -250,11 +259,12 @@ impl<'a> Key<'a> {
         } = attribute_list;
         Self {
             method,
-            uri,
-            iv,
-            keyformat,
-            keyformatversions,
-            attribute_list: HashMap::new(),
+            uri: uri.map(LazyAttribute::new).unwrap_or_default(),
+            iv: iv.map(LazyAttribute::new).unwrap_or_default(),
+            keyformat: keyformat.map(LazyAttribute::new).unwrap_or_default(),
+            keyformatversions: keyformatversions
+                .map(LazyAttribute::new)
+                .unwrap_or_default(),
             output_line,
             output_line_is_dirty: false,
         }
@@ -293,12 +303,10 @@ impl<'a> Key<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn uri(&self) -> Option<&str> {
-        if let Some(uri) = &self.uri {
-            Some(uri)
-        } else {
-            self.attribute_list
-                .get(URI)
-                .and_then(AttributeValue::quoted)
+        match &self.uri {
+            LazyAttribute::UserDefined(s) => Some(s.as_ref()),
+            LazyAttribute::Unparsed(v) => v.quoted(),
+            LazyAttribute::None => None,
         }
     }
 
@@ -306,13 +314,10 @@ impl<'a> Key<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn iv(&self) -> Option<&str> {
-        if let Some(iv) = &self.iv {
-            Some(iv)
-        } else {
-            self.attribute_list
-                .get(IV)
-                .and_then(AttributeValue::unquoted)
-                .and_then(|v| v.try_as_utf_8().ok())
+        match &self.iv {
+            LazyAttribute::UserDefined(s) => Some(s.as_ref()),
+            LazyAttribute::Unparsed(v) => v.unquoted().and_then(|v| v.try_as_utf_8().ok()),
+            LazyAttribute::None => None,
         }
     }
 
@@ -320,13 +325,10 @@ impl<'a> Key<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn keyformat(&self) -> &str {
-        if let Some(keyformat) = &self.keyformat {
-            keyformat
-        } else {
-            self.attribute_list
-                .get(KEYFORMAT)
-                .and_then(AttributeValue::quoted)
-                .unwrap_or("identity")
+        match &self.keyformat {
+            LazyAttribute::UserDefined(s) => s.as_ref(),
+            LazyAttribute::Unparsed(v) => v.quoted().unwrap_or("identity"),
+            LazyAttribute::None => "identity",
         }
     }
 
@@ -334,12 +336,10 @@ impl<'a> Key<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn keyformatversions(&self) -> Option<&str> {
-        if let Some(keyformatversions) = &self.keyformatversions {
-            Some(keyformatversions)
-        } else {
-            self.attribute_list
-                .get(KEYFORMATVERSIONS)
-                .and_then(AttributeValue::quoted)
+        match &self.keyformatversions {
+            LazyAttribute::UserDefined(s) => Some(s.as_ref()),
+            LazyAttribute::Unparsed(v) => v.quoted(),
+            LazyAttribute::None => None,
         }
     }
 
@@ -347,7 +347,6 @@ impl<'a> Key<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_method(&mut self, method: impl Into<Cow<'a, str>>) {
-        self.attribute_list.remove(METHOD);
         self.method = method.into();
         self.output_line_is_dirty = true;
     }
@@ -356,8 +355,7 @@ impl<'a> Key<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_uri(&mut self, uri: impl Into<Cow<'a, str>>) {
-        self.attribute_list.remove(URI);
-        self.uri = Some(uri.into());
+        self.uri.set(uri.into());
         self.output_line_is_dirty = true;
     }
 
@@ -365,8 +363,7 @@ impl<'a> Key<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_uri(&mut self) {
-        self.attribute_list.remove(URI);
-        self.uri = None;
+        self.uri.unset();
         self.output_line_is_dirty = true;
     }
 
@@ -374,8 +371,7 @@ impl<'a> Key<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_iv(&mut self, iv: impl Into<Cow<'a, str>>) {
-        self.attribute_list.remove(IV);
-        self.iv = Some(iv.into());
+        self.iv.set(iv.into());
         self.output_line_is_dirty = true;
     }
 
@@ -383,8 +379,7 @@ impl<'a> Key<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_iv(&mut self) {
-        self.attribute_list.remove(IV);
-        self.iv = None;
+        self.iv.unset();
         self.output_line_is_dirty = true;
     }
 
@@ -392,8 +387,7 @@ impl<'a> Key<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_keyformat(&mut self, keyformat: impl Into<Cow<'a, str>>) {
-        self.attribute_list.remove(KEYFORMAT);
-        self.keyformat = Some(keyformat.into());
+        self.keyformat.set(keyformat.into());
         self.output_line_is_dirty = true;
     }
 
@@ -401,8 +395,7 @@ impl<'a> Key<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_keyformat(&mut self) {
-        self.attribute_list.remove(KEYFORMAT);
-        self.keyformat = None;
+        self.keyformat.unset();
         self.output_line_is_dirty = true;
     }
 
@@ -410,8 +403,7 @@ impl<'a> Key<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_keyformatversions(&mut self, keyformatversions: impl Into<Cow<'a, str>>) {
-        self.attribute_list.remove(KEYFORMATVERSIONS);
-        self.keyformatversions = Some(keyformatversions.into());
+        self.keyformatversions.set(keyformatversions.into());
         self.output_line_is_dirty = true;
     }
 
@@ -419,8 +411,7 @@ impl<'a> Key<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_keyformatversions(&mut self) {
-        self.attribute_list.remove(KEYFORMATVERSIONS);
-        self.keyformatversions = None;
+        self.keyformatversions.unset();
         self.output_line_is_dirty = true;
     }
 

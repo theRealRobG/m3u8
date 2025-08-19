@@ -1,14 +1,14 @@
 use crate::{
     error::{ParseTagValueError, ValidationError},
     tag::{
-        AttributeValue, DecimalResolution, UnknownTag,
+        DecimalResolution, UnknownTag,
         hls::{
-            EnumeratedString, into_inner_tag,
+            EnumeratedString, LazyAttribute, into_inner_tag,
             stream_inf::{HdcpLevel, VideoLayout, VideoRange},
         },
     },
 };
-use std::{borrow::Cow, collections::HashMap, marker::PhantomData};
+use std::{borrow::Cow, marker::PhantomData};
 
 /// The attribute list for the tag (`#EXT-X-I-FRAME-STREAM-INF:<attribute-list>`)
 ///
@@ -317,21 +317,20 @@ impl<'a> Default
 pub struct IFrameStreamInf<'a> {
     uri: Cow<'a, str>,
     bandwidth: u64,
-    average_bandwidth: Option<u64>,
-    score: Option<f64>,
-    codecs: Option<Cow<'a, str>>,
-    supplemental_codecs: Option<Cow<'a, str>>,
-    resolution: Option<DecimalResolution>,
-    hdcp_level: Option<Cow<'a, str>>,
-    allowed_cpc: Option<Cow<'a, str>>,
-    video_range: Option<Cow<'a, str>>,
-    req_video_layout: Option<Cow<'a, str>>,
-    stable_variant_id: Option<Cow<'a, str>>,
-    video: Option<Cow<'a, str>>,
-    pathway_id: Option<Cow<'a, str>>,
-    attribute_list: HashMap<&'a str, AttributeValue<'a>>, // Original attribute list
-    output_line: Cow<'a, [u8]>,                           // Used with Writer
-    output_line_is_dirty: bool,                           // If should recalculate output_line
+    average_bandwidth: LazyAttribute<'a, u64>,
+    score: LazyAttribute<'a, f64>,
+    codecs: LazyAttribute<'a, Cow<'a, str>>,
+    supplemental_codecs: LazyAttribute<'a, Cow<'a, str>>,
+    resolution: LazyAttribute<'a, DecimalResolution>,
+    hdcp_level: LazyAttribute<'a, Cow<'a, str>>,
+    allowed_cpc: LazyAttribute<'a, Cow<'a, str>>,
+    video_range: LazyAttribute<'a, Cow<'a, str>>,
+    req_video_layout: LazyAttribute<'a, Cow<'a, str>>,
+    stable_variant_id: LazyAttribute<'a, Cow<'a, str>>,
+    video: LazyAttribute<'a, Cow<'a, str>>,
+    pathway_id: LazyAttribute<'a, Cow<'a, str>>,
+    output_line: Cow<'a, [u8]>, // Used with Writer
+    output_line_is_dirty: bool, // If should recalculate output_line
 }
 
 impl<'a> PartialEq for IFrameStreamInf<'a> {
@@ -360,33 +359,65 @@ impl<'a> TryFrom<UnknownTag<'a>> for IFrameStreamInf<'a> {
         let attribute_list = tag
             .value()
             .ok_or(ParseTagValueError::UnexpectedEmpty)?
-            .try_as_attribute_list()?;
-        let Some(uri) = attribute_list.get(URI).and_then(AttributeValue::quoted) else {
+            .try_as_ordered_attribute_list()?;
+        let mut uri = None;
+        let mut bandwidth = None;
+        let mut average_bandwidth = LazyAttribute::None;
+        let mut score = LazyAttribute::None;
+        let mut codecs = LazyAttribute::None;
+        let mut supplemental_codecs = LazyAttribute::None;
+        let mut resolution = LazyAttribute::None;
+        let mut hdcp_level = LazyAttribute::None;
+        let mut allowed_cpc = LazyAttribute::None;
+        let mut video_range = LazyAttribute::None;
+        let mut req_video_layout = LazyAttribute::None;
+        let mut stable_variant_id = LazyAttribute::None;
+        let mut video = LazyAttribute::None;
+        let mut pathway_id = LazyAttribute::None;
+        for (name, value) in attribute_list {
+            match name {
+                URI => uri = value.quoted(),
+                BANDWIDTH => {
+                    bandwidth = value
+                        .unquoted()
+                        .and_then(|v| v.try_as_decimal_integer().ok())
+                }
+                AVERAGE_BANDWIDTH => average_bandwidth.found(value),
+                SCORE => score.found(value),
+                CODECS => codecs.found(value),
+                SUPPLEMENTAL_CODECS => supplemental_codecs.found(value),
+                RESOLUTION => resolution.found(value),
+                HDCP_LEVEL => hdcp_level.found(value),
+                ALLOWED_CPC => allowed_cpc.found(value),
+                VIDEO_RANGE => video_range.found(value),
+                REQ_VIDEO_LAYOUT => req_video_layout.found(value),
+                STABLE_VARIANT_ID => stable_variant_id.found(value),
+                VIDEO => video.found(value),
+                PATHWAY_ID => pathway_id.found(value),
+                _ => (),
+            }
+        }
+        let Some(uri) = uri else {
             return Err(super::ValidationError::MissingRequiredAttribute(URI));
         };
-        let Some(bandwidth) = attribute_list
-            .get(BANDWIDTH)
-            .and_then(AttributeValue::unquoted)
-            .and_then(|v| v.try_as_decimal_integer().ok())
-        else {
+        let Some(bandwidth) = bandwidth else {
             return Err(super::ValidationError::MissingRequiredAttribute(BANDWIDTH));
         };
         Ok(Self {
             uri: Cow::Borrowed(uri),
             bandwidth,
-            average_bandwidth: None,
-            score: None,
-            codecs: None,
-            supplemental_codecs: None,
-            resolution: None,
-            hdcp_level: None,
-            allowed_cpc: None,
-            video_range: None,
-            req_video_layout: None,
-            stable_variant_id: None,
-            video: None,
-            pathway_id: None,
-            attribute_list,
+            average_bandwidth,
+            score,
+            codecs,
+            supplemental_codecs,
+            resolution,
+            hdcp_level,
+            allowed_cpc,
+            video_range,
+            req_video_layout,
+            stable_variant_id,
+            video,
+            pathway_id,
             output_line: Cow::Borrowed(tag.original_input),
             output_line_is_dirty: false,
         })
@@ -416,19 +447,24 @@ impl<'a> IFrameStreamInf<'a> {
         Self {
             uri,
             bandwidth,
-            average_bandwidth,
-            score,
-            codecs,
-            supplemental_codecs,
-            resolution,
-            hdcp_level,
-            allowed_cpc,
-            video_range,
-            req_video_layout,
-            stable_variant_id,
-            video,
-            pathway_id,
-            attribute_list: HashMap::new(),
+            average_bandwidth: average_bandwidth
+                .map(LazyAttribute::new)
+                .unwrap_or_default(),
+            score: score.map(LazyAttribute::new).unwrap_or_default(),
+            codecs: codecs.map(LazyAttribute::new).unwrap_or_default(),
+            supplemental_codecs: supplemental_codecs
+                .map(LazyAttribute::new)
+                .unwrap_or_default(),
+            resolution: resolution.map(LazyAttribute::new).unwrap_or_default(),
+            hdcp_level: hdcp_level.map(LazyAttribute::new).unwrap_or_default(),
+            allowed_cpc: allowed_cpc.map(LazyAttribute::new).unwrap_or_default(),
+            video_range: video_range.map(LazyAttribute::new).unwrap_or_default(),
+            req_video_layout: req_video_layout.map(LazyAttribute::new).unwrap_or_default(),
+            stable_variant_id: stable_variant_id
+                .map(LazyAttribute::new)
+                .unwrap_or_default(),
+            video: video.map(LazyAttribute::new).unwrap_or_default(),
+            pathway_id: pathway_id.map(LazyAttribute::new).unwrap_or_default(),
             output_line,
             output_line_is_dirty: false,
         }
@@ -492,13 +528,12 @@ impl<'a> IFrameStreamInf<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn average_bandwidth(&self) -> Option<u64> {
-        if let Some(average_bandwidth) = self.average_bandwidth {
-            Some(average_bandwidth)
-        } else {
-            self.attribute_list
-                .get(AVERAGE_BANDWIDTH)
-                .and_then(AttributeValue::unquoted)
-                .and_then(|v| v.try_as_decimal_integer().ok())
+        match &self.average_bandwidth {
+            LazyAttribute::UserDefined(b) => Some(*b),
+            LazyAttribute::Unparsed(v) => {
+                v.unquoted().and_then(|v| v.try_as_decimal_integer().ok())
+            }
+            LazyAttribute::None => None,
         }
     }
 
@@ -506,13 +541,12 @@ impl<'a> IFrameStreamInf<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn score(&self) -> Option<f64> {
-        if let Some(score) = self.score {
-            Some(score)
-        } else {
-            self.attribute_list
-                .get(SCORE)
-                .and_then(AttributeValue::unquoted)
-                .and_then(|v| v.try_as_decimal_floating_point().ok())
+        match &self.score {
+            LazyAttribute::UserDefined(s) => Some(*s),
+            LazyAttribute::Unparsed(v) => v
+                .unquoted()
+                .and_then(|v| v.try_as_decimal_floating_point().ok()),
+            LazyAttribute::None => None,
         }
     }
 
@@ -520,12 +554,10 @@ impl<'a> IFrameStreamInf<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn codecs(&self) -> Option<&str> {
-        if let Some(codecs) = &self.codecs {
-            Some(codecs)
-        } else {
-            self.attribute_list
-                .get(CODECS)
-                .and_then(AttributeValue::quoted)
+        match &self.codecs {
+            LazyAttribute::UserDefined(s) => Some(s.as_ref()),
+            LazyAttribute::Unparsed(v) => v.quoted(),
+            LazyAttribute::None => None,
         }
     }
 
@@ -533,12 +565,10 @@ impl<'a> IFrameStreamInf<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn supplemental_codecs(&self) -> Option<&str> {
-        if let Some(supplemental_codecs) = &self.supplemental_codecs {
-            Some(supplemental_codecs)
-        } else {
-            self.attribute_list
-                .get(SUPPLEMENTAL_CODECS)
-                .and_then(AttributeValue::quoted)
+        match &self.supplemental_codecs {
+            LazyAttribute::UserDefined(s) => Some(s.as_ref()),
+            LazyAttribute::Unparsed(v) => v.quoted(),
+            LazyAttribute::None => None,
         }
     }
 
@@ -546,13 +576,12 @@ impl<'a> IFrameStreamInf<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn resolution(&self) -> Option<DecimalResolution> {
-        if let Some(decimal_resolution) = self.resolution {
-            Some(decimal_resolution)
-        } else {
-            self.attribute_list
-                .get(RESOLUTION)
-                .and_then(AttributeValue::unquoted)
-                .and_then(|v| v.try_as_decimal_resolution().ok())
+        match &self.resolution {
+            LazyAttribute::UserDefined(r) => Some(*r),
+            LazyAttribute::Unparsed(v) => v
+                .unquoted()
+                .and_then(|v| v.try_as_decimal_resolution().ok()),
+            LazyAttribute::None => None,
         }
     }
 
@@ -574,14 +603,13 @@ impl<'a> IFrameStreamInf<'a> {
     /// assert_eq!(Some(HdcpLevel::Type0), tag.hdcp_level().known());
     /// ```
     pub fn hdcp_level(&self) -> Option<EnumeratedString<'_, HdcpLevel>> {
-        if let Some(hdcp_level) = &self.hdcp_level {
-            Some(EnumeratedString::from(hdcp_level.as_ref()))
-        } else {
-            self.attribute_list
-                .get(HDCP_LEVEL)
-                .and_then(AttributeValue::unquoted)
+        match &self.hdcp_level {
+            LazyAttribute::UserDefined(s) => Some(EnumeratedString::from(s.as_ref())),
+            LazyAttribute::Unparsed(v) => v
+                .unquoted()
                 .and_then(|v| v.try_as_utf_8().ok())
-                .map(EnumeratedString::from)
+                .map(EnumeratedString::from),
+            LazyAttribute::None => None,
         }
     }
 
@@ -589,12 +617,10 @@ impl<'a> IFrameStreamInf<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn allowed_cpc(&self) -> Option<&str> {
-        if let Some(allowed_cpc) = &self.allowed_cpc {
-            Some(allowed_cpc)
-        } else {
-            self.attribute_list
-                .get(ALLOWED_CPC)
-                .and_then(AttributeValue::quoted)
+        match &self.allowed_cpc {
+            LazyAttribute::UserDefined(s) => Some(s.as_ref()),
+            LazyAttribute::Unparsed(v) => v.quoted(),
+            LazyAttribute::None => None,
         }
     }
 
@@ -616,14 +642,13 @@ impl<'a> IFrameStreamInf<'a> {
     /// assert_eq!(Some(VideoRange::Pq), tag.video_range().known());
     /// ```
     pub fn video_range(&self) -> Option<EnumeratedString<'_, VideoRange>> {
-        if let Some(video_range) = &self.video_range {
-            Some(EnumeratedString::from(video_range.as_ref()))
-        } else {
-            self.attribute_list
-                .get(VIDEO_RANGE)
-                .and_then(AttributeValue::unquoted)
+        match &self.video_range {
+            LazyAttribute::UserDefined(s) => Some(EnumeratedString::from(s.as_ref())),
+            LazyAttribute::Unparsed(v) => v
+                .unquoted()
                 .and_then(|v| v.try_as_utf_8().ok())
-                .map(EnumeratedString::from)
+                .map(EnumeratedString::from),
+            LazyAttribute::None => None,
         }
     }
 
@@ -634,13 +659,10 @@ impl<'a> IFrameStreamInf<'a> {
     /// See [`crate::tag::hls::StreamInf::req_video_layout`] for more information on usage of
     /// [`VideoLayout`].
     pub fn req_video_layout(&self) -> Option<VideoLayout<'_>> {
-        if let Some(req_video_layout) = &self.req_video_layout {
-            Some(VideoLayout::from(req_video_layout.as_ref()))
-        } else {
-            self.attribute_list
-                .get(REQ_VIDEO_LAYOUT)
-                .and_then(AttributeValue::quoted)
-                .map(VideoLayout::from)
+        match &self.req_video_layout {
+            LazyAttribute::UserDefined(s) => Some(VideoLayout::from(s.as_ref())),
+            LazyAttribute::Unparsed(v) => v.quoted().map(VideoLayout::from),
+            LazyAttribute::None => None,
         }
     }
 
@@ -648,12 +670,10 @@ impl<'a> IFrameStreamInf<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn stable_variant_id(&self) -> Option<&str> {
-        if let Some(stable_variant_id) = &self.stable_variant_id {
-            Some(stable_variant_id)
-        } else {
-            self.attribute_list
-                .get(STABLE_VARIANT_ID)
-                .and_then(AttributeValue::quoted)
+        match &self.stable_variant_id {
+            LazyAttribute::UserDefined(s) => Some(s.as_ref()),
+            LazyAttribute::Unparsed(v) => v.quoted(),
+            LazyAttribute::None => None,
         }
     }
 
@@ -661,12 +681,10 @@ impl<'a> IFrameStreamInf<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn video(&self) -> Option<&str> {
-        if let Some(video) = &self.video {
-            Some(video)
-        } else {
-            self.attribute_list
-                .get(VIDEO)
-                .and_then(AttributeValue::quoted)
+        match &self.video {
+            LazyAttribute::UserDefined(s) => Some(s.as_ref()),
+            LazyAttribute::Unparsed(v) => v.quoted(),
+            LazyAttribute::None => None,
         }
     }
 
@@ -674,12 +692,10 @@ impl<'a> IFrameStreamInf<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn pathway_id(&self) -> Option<&str> {
-        if let Some(pathway_id) = &self.pathway_id {
-            Some(pathway_id)
-        } else {
-            self.attribute_list
-                .get(PATHWAY_ID)
-                .and_then(AttributeValue::quoted)
+        match &self.pathway_id {
+            LazyAttribute::UserDefined(s) => Some(s.as_ref()),
+            LazyAttribute::Unparsed(v) => v.quoted(),
+            LazyAttribute::None => None,
         }
     }
 
@@ -689,7 +705,6 @@ impl<'a> IFrameStreamInf<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_uri(&mut self, uri: impl Into<Cow<'a, str>>) {
-        self.attribute_list.remove(URI);
         self.uri = uri.into();
         self.output_line_is_dirty = true;
     }
@@ -698,7 +713,6 @@ impl<'a> IFrameStreamInf<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_bandwidth(&mut self, bandwidth: u64) {
-        self.attribute_list.remove(BANDWIDTH);
         self.bandwidth = bandwidth;
         self.output_line_is_dirty = true;
     }
@@ -707,8 +721,7 @@ impl<'a> IFrameStreamInf<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_average_bandwidth(&mut self, average_bandwidth: u64) {
-        self.attribute_list.remove(AVERAGE_BANDWIDTH);
-        self.average_bandwidth = Some(average_bandwidth);
+        self.average_bandwidth.set(average_bandwidth);
         self.output_line_is_dirty = true;
     }
 
@@ -716,8 +729,7 @@ impl<'a> IFrameStreamInf<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_average_bandwidth(&mut self) {
-        self.attribute_list.remove(AVERAGE_BANDWIDTH);
-        self.average_bandwidth = None;
+        self.average_bandwidth.unset();
         self.output_line_is_dirty = true;
     }
 
@@ -725,8 +737,7 @@ impl<'a> IFrameStreamInf<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_score(&mut self, score: f64) {
-        self.attribute_list.remove(SCORE);
-        self.score = Some(score);
+        self.score.set(score);
         self.output_line_is_dirty = true;
     }
 
@@ -734,8 +745,7 @@ impl<'a> IFrameStreamInf<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_score(&mut self) {
-        self.attribute_list.remove(SCORE);
-        self.score = None;
+        self.score.unset();
         self.output_line_is_dirty = true;
     }
 
@@ -743,8 +753,7 @@ impl<'a> IFrameStreamInf<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_codecs(&mut self, codecs: impl Into<Cow<'a, str>>) {
-        self.attribute_list.remove(CODECS);
-        self.codecs = Some(codecs.into());
+        self.codecs.set(codecs.into());
         self.output_line_is_dirty = true;
     }
 
@@ -752,8 +761,7 @@ impl<'a> IFrameStreamInf<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_codecs(&mut self) {
-        self.attribute_list.remove(CODECS);
-        self.codecs = None;
+        self.codecs.unset();
         self.output_line_is_dirty = true;
     }
 
@@ -761,8 +769,7 @@ impl<'a> IFrameStreamInf<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_supplemental_codecs(&mut self, supplemental_codecs: impl Into<Cow<'a, str>>) {
-        self.attribute_list.remove(SUPPLEMENTAL_CODECS);
-        self.supplemental_codecs = Some(supplemental_codecs.into());
+        self.supplemental_codecs.set(supplemental_codecs.into());
         self.output_line_is_dirty = true;
     }
 
@@ -770,8 +777,7 @@ impl<'a> IFrameStreamInf<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_supplemental_codecs(&mut self) {
-        self.attribute_list.remove(SUPPLEMENTAL_CODECS);
-        self.supplemental_codecs = None;
+        self.supplemental_codecs.unset();
         self.output_line_is_dirty = true;
     }
 
@@ -779,8 +785,7 @@ impl<'a> IFrameStreamInf<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_resolution(&mut self, resolution: DecimalResolution) {
-        self.attribute_list.remove(RESOLUTION);
-        self.resolution = Some(resolution);
+        self.resolution.set(resolution);
         self.output_line_is_dirty = true;
     }
 
@@ -788,8 +793,7 @@ impl<'a> IFrameStreamInf<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_resolution(&mut self) {
-        self.attribute_list.remove(RESOLUTION);
-        self.resolution = None;
+        self.resolution.unset();
         self.output_line_is_dirty = true;
     }
 
@@ -797,8 +801,7 @@ impl<'a> IFrameStreamInf<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_hdcp_level(&mut self, hdcp_level: impl Into<Cow<'a, str>>) {
-        self.attribute_list.remove(HDCP_LEVEL);
-        self.hdcp_level = Some(hdcp_level.into());
+        self.hdcp_level.set(hdcp_level.into());
         self.output_line_is_dirty = true;
     }
 
@@ -806,8 +809,7 @@ impl<'a> IFrameStreamInf<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_hdcp_level(&mut self) {
-        self.attribute_list.remove(HDCP_LEVEL);
-        self.hdcp_level = None;
+        self.hdcp_level.unset();
         self.output_line_is_dirty = true;
     }
 
@@ -815,8 +817,7 @@ impl<'a> IFrameStreamInf<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_allowed_cpc(&mut self, allowed_cpc: impl Into<Cow<'a, str>>) {
-        self.attribute_list.remove(ALLOWED_CPC);
-        self.allowed_cpc = Some(allowed_cpc.into());
+        self.allowed_cpc.set(allowed_cpc.into());
         self.output_line_is_dirty = true;
     }
 
@@ -824,8 +825,7 @@ impl<'a> IFrameStreamInf<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_allowed_cpc(&mut self) {
-        self.attribute_list.remove(ALLOWED_CPC);
-        self.allowed_cpc = None;
+        self.allowed_cpc.unset();
         self.output_line_is_dirty = true;
     }
 
@@ -833,8 +833,7 @@ impl<'a> IFrameStreamInf<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_video_range(&mut self, video_range: impl Into<Cow<'a, str>>) {
-        self.attribute_list.remove(VIDEO_RANGE);
-        self.video_range = Some(video_range.into());
+        self.video_range.set(video_range.into());
         self.output_line_is_dirty = true;
     }
 
@@ -842,8 +841,7 @@ impl<'a> IFrameStreamInf<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_video_range(&mut self) {
-        self.attribute_list.remove(VIDEO_RANGE);
-        self.video_range = None;
+        self.video_range.unset();
         self.output_line_is_dirty = true;
     }
 
@@ -854,8 +852,7 @@ impl<'a> IFrameStreamInf<'a> {
     /// See [`crate::tag::hls::StreamInf::set_req_video_layout`] for more information on how to use
     /// this method.
     pub fn set_req_video_layout(&mut self, req_video_layout: impl Into<Cow<'a, str>>) {
-        self.attribute_list.remove(REQ_VIDEO_LAYOUT);
-        self.req_video_layout = Some(req_video_layout.into());
+        self.req_video_layout.set(req_video_layout.into());
         self.output_line_is_dirty = true;
     }
 
@@ -863,8 +860,7 @@ impl<'a> IFrameStreamInf<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_req_video_layout(&mut self) {
-        self.attribute_list.remove(REQ_VIDEO_LAYOUT);
-        self.req_video_layout = None;
+        self.req_video_layout.unset();
         self.output_line_is_dirty = true;
     }
 
@@ -872,8 +868,7 @@ impl<'a> IFrameStreamInf<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_stable_variant_id(&mut self, stable_variant_id: impl Into<Cow<'a, str>>) {
-        self.attribute_list.remove(STABLE_VARIANT_ID);
-        self.stable_variant_id = Some(stable_variant_id.into());
+        self.stable_variant_id.set(stable_variant_id.into());
         self.output_line_is_dirty = true;
     }
 
@@ -881,8 +876,7 @@ impl<'a> IFrameStreamInf<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_stable_variant_id(&mut self) {
-        self.attribute_list.remove(STABLE_VARIANT_ID);
-        self.stable_variant_id = None;
+        self.stable_variant_id.unset();
         self.output_line_is_dirty = true;
     }
 
@@ -890,8 +884,7 @@ impl<'a> IFrameStreamInf<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_video(&mut self, video: impl Into<Cow<'a, str>>) {
-        self.attribute_list.remove(VIDEO);
-        self.video = Some(video.into());
+        self.video.set(video.into());
         self.output_line_is_dirty = true;
     }
 
@@ -899,8 +892,7 @@ impl<'a> IFrameStreamInf<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_video(&mut self) {
-        self.attribute_list.remove(VIDEO);
-        self.video = None;
+        self.video.unset();
         self.output_line_is_dirty = true;
     }
 
@@ -908,8 +900,7 @@ impl<'a> IFrameStreamInf<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_pathway_id(&mut self, pathway_id: impl Into<Cow<'a, str>>) {
-        self.attribute_list.remove(PATHWAY_ID);
-        self.pathway_id = Some(pathway_id.into());
+        self.pathway_id.set(pathway_id.into());
         self.output_line_is_dirty = true;
     }
 
@@ -917,8 +908,7 @@ impl<'a> IFrameStreamInf<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_pathway_id(&mut self) {
-        self.attribute_list.remove(PATHWAY_ID);
-        self.pathway_id = None;
+        self.pathway_id.unset();
         self.output_line_is_dirty = true;
     }
 

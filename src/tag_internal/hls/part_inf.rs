@@ -1,6 +1,6 @@
 use crate::{
     error::{ParseTagValueError, ValidationError},
-    tag::{AttributeValue, UnknownTag, hls::into_inner_tag},
+    tag::{UnknownTag, hls::into_inner_tag},
 };
 use std::borrow::Cow;
 
@@ -27,12 +27,16 @@ impl<'a> TryFrom<UnknownTag<'a>> for PartInf<'a> {
         let attribute_list = tag
             .value()
             .ok_or(ParseTagValueError::UnexpectedEmpty)?
-            .try_as_attribute_list()?;
-        let Some(part_target) = attribute_list
-            .get(PART_TARGET)
-            .and_then(AttributeValue::unquoted)
-            .and_then(|v| v.try_as_decimal_floating_point().ok())
-        else {
+            .try_as_ordered_attribute_list()?;
+        let Some(part_target) = attribute_list.iter().find_map(|(name, value)| {
+            if *name == PART_TARGET {
+                value
+                    .unquoted()
+                    .and_then(|v| v.try_as_decimal_floating_point().ok())
+            } else {
+                None
+            }
+        }) else {
             return Err(super::ValidationError::MissingRequiredAttribute(
                 PART_TARGET,
             ));

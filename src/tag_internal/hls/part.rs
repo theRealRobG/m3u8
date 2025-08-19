@@ -1,8 +1,11 @@
 use crate::{
     error::{ParseTagValueError, ValidationError},
-    tag::{AttributeValue, UnknownTag, UnquotedAttributeValue, hls::into_inner_tag},
+    tag::{
+        AttributeValue, UnknownTag, UnquotedAttributeValue,
+        hls::{LazyAttribute, into_inner_tag},
+    },
 };
-use std::{borrow::Cow, collections::HashMap, fmt::Display, marker::PhantomData};
+use std::{borrow::Cow, fmt::Display, marker::PhantomData};
 
 /// The attribute list for the tag (`#EXT-X-PART:<attribute-list>`).
 ///
@@ -131,12 +134,11 @@ impl<'a> Default for PartBuilder<'a, PartUriNeedsToBeSet, PartDurationNeedsToBeS
 pub struct Part<'a> {
     uri: Cow<'a, str>,
     duration: f64,
-    independent: Option<bool>,
-    byterange: Option<PartByterange>,
-    gap: Option<bool>,
-    attribute_list: HashMap<&'a str, AttributeValue<'a>>, // Original attribute list
-    output_line: Cow<'a, [u8]>,                           // Used with Writer
-    output_line_is_dirty: bool,                           // If should recalculate output_line
+    independent: LazyAttribute<'a, bool>,
+    byterange: LazyAttribute<'a, PartByterange>,
+    gap: LazyAttribute<'a, bool>,
+    output_line: Cow<'a, [u8]>, // Used with Writer
+    output_line_is_dirty: bool, // If should recalculate output_line
 }
 /// Corresponds to the value of the `#EXT-X-PART:BYTERANGE` attribute.
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -177,24 +179,38 @@ impl<'a> TryFrom<UnknownTag<'a>> for Part<'a> {
         let attribute_list = tag
             .value()
             .ok_or(ParseTagValueError::UnexpectedEmpty)?
-            .try_as_attribute_list()?;
-        let Some(uri) = attribute_list.get(URI).and_then(AttributeValue::quoted) else {
+            .try_as_ordered_attribute_list()?;
+        let mut uri = None;
+        let mut duration = None;
+        let mut independent = LazyAttribute::None;
+        let mut byterange = LazyAttribute::None;
+        let mut gap = LazyAttribute::None;
+        for (name, value) in attribute_list {
+            match name {
+                URI => uri = value.quoted(),
+                DURATION => {
+                    duration = value
+                        .unquoted()
+                        .and_then(|v| v.try_as_decimal_floating_point().ok())
+                }
+                INDEPENDENT => independent.found(value),
+                BYTERANGE => byterange.found(value),
+                GAP => gap.found(value),
+                _ => (),
+            }
+        }
+        let Some(uri) = uri else {
             return Err(super::ValidationError::MissingRequiredAttribute(URI));
         };
-        let Some(duration) = attribute_list
-            .get(DURATION)
-            .and_then(AttributeValue::unquoted)
-            .and_then(|v| v.try_as_decimal_floating_point().ok())
-        else {
+        let Some(duration) = duration else {
             return Err(super::ValidationError::MissingRequiredAttribute(DURATION));
         };
         Ok(Self {
             uri: Cow::Borrowed(uri),
             duration,
-            independent: None,
-            byterange: None,
-            gap: None,
-            attribute_list,
+            independent,
+            byterange,
+            gap,
             output_line: Cow::Borrowed(tag.original_input),
             output_line_is_dirty: false,
         })
@@ -215,10 +231,9 @@ impl<'a> Part<'a> {
         Self {
             uri,
             duration,
-            independent: Some(independent),
-            byterange,
-            gap: Some(gap),
-            attribute_list: HashMap::new(),
+            independent: LazyAttribute::new(independent),
+            byterange: byterange.map(LazyAttribute::new).unwrap_or_default(),
+            gap: LazyAttribute::new(gap),
             output_line,
             output_line_is_dirty: false,
         }
@@ -272,13 +287,12 @@ impl<'a> Part<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn independent(&self) -> bool {
-        if let Some(independent) = self.independent {
-            independent
-        } else {
-            matches!(
-                self.attribute_list.get(INDEPENDENT),
-                Some(AttributeValue::Unquoted(UnquotedAttributeValue(YES)))
-            )
+        match &self.independent {
+            LazyAttribute::UserDefined(b) => *b,
+            LazyAttribute::Unparsed(v) => {
+                matches!(v, AttributeValue::Unquoted(UnquotedAttributeValue(YES)))
+            }
+            LazyAttribute::None => false,
         }
     }
 
@@ -286,24 +300,21 @@ impl<'a> Part<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn byterange(&self) -> Option<PartByterange> {
-        if let Some(byterange) = self.byterange {
-            Some(byterange)
-        } else {
-            self.attribute_list
-                .get(BYTERANGE)
-                .and_then(AttributeValue::quoted)
-                .and_then(|range| {
-                    let mut parts = range.splitn(2, '@');
-                    let Some(Ok(length)) = parts.next().map(str::parse::<u64>) else {
-                        return None;
-                    };
-                    let offset = match parts.next().map(str::parse::<u64>) {
-                        Some(Ok(d)) => Some(d),
-                        None => None,
-                        Some(Err(_)) => return None,
-                    };
-                    Some(PartByterange { length, offset })
-                })
+        match &self.byterange {
+            LazyAttribute::UserDefined(b) => Some(*b),
+            LazyAttribute::Unparsed(v) => v.quoted().and_then(|range| {
+                let mut parts = range.splitn(2, '@');
+                let Some(Ok(length)) = parts.next().map(str::parse::<u64>) else {
+                    return None;
+                };
+                let offset = match parts.next().map(str::parse::<u64>) {
+                    Some(Ok(d)) => Some(d),
+                    None => None,
+                    Some(Err(_)) => return None,
+                };
+                Some(PartByterange { length, offset })
+            }),
+            LazyAttribute::None => None,
         }
     }
 
@@ -311,13 +322,12 @@ impl<'a> Part<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn gap(&self) -> bool {
-        if let Some(gap) = self.gap {
-            gap
-        } else {
-            matches!(
-                self.attribute_list.get(GAP),
-                Some(AttributeValue::Unquoted(UnquotedAttributeValue(YES)))
-            )
+        match &self.gap {
+            LazyAttribute::UserDefined(b) => *b,
+            LazyAttribute::Unparsed(v) => {
+                matches!(v, AttributeValue::Unquoted(UnquotedAttributeValue(YES)))
+            }
+            LazyAttribute::None => false,
         }
     }
 
@@ -325,7 +335,6 @@ impl<'a> Part<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_uri(&mut self, uri: impl Into<Cow<'a, str>>) {
-        self.attribute_list.remove(URI);
         self.uri = uri.into();
         self.output_line_is_dirty = true;
     }
@@ -333,7 +342,6 @@ impl<'a> Part<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_duration(&mut self, duration: f64) {
-        self.attribute_list.remove(DURATION);
         self.duration = duration;
         self.output_line_is_dirty = true;
     }
@@ -341,32 +349,28 @@ impl<'a> Part<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_independent(&mut self, independent: bool) {
-        self.attribute_list.remove(INDEPENDENT);
-        self.independent = Some(independent);
+        self.independent.set(independent);
         self.output_line_is_dirty = true;
     }
     /// Sets the `BYTERANGE` attribute.
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_byterange(&mut self, byterange: PartByterange) {
-        self.attribute_list.remove(BYTERANGE);
-        self.byterange = Some(byterange);
+        self.byterange.set(byterange);
         self.output_line_is_dirty = true;
     }
     /// Unsets the `BYTERANGE` attribute (sets it to `None`).
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_byterange(&mut self) {
-        self.attribute_list.remove(BYTERANGE);
-        self.byterange = None;
+        self.byterange.unset();
         self.output_line_is_dirty = true;
     }
     /// Sets the `GAP` attribute.
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_gap(&mut self, gap: bool) {
-        self.attribute_list.remove(GAP);
-        self.gap = Some(gap);
+        self.gap.set(gap);
         self.output_line_is_dirty = true;
     }
 

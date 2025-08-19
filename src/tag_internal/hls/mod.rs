@@ -5,7 +5,7 @@
 
 use crate::{
     error::ValidationError,
-    tag::{IntoInnerTag, TagInner, UnknownTag},
+    tag::{AttributeValue, IntoInnerTag, TagInner, UnknownTag},
 };
 use std::fmt::Debug;
 
@@ -546,6 +546,37 @@ pub enum TagType {
     MediaMetadata,
     /// <https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.6>
     MultivariantPlaylist,
+}
+
+// This is used by all the tag implementations as a means of delaying the parsing of the attribute
+// until the value is retrieved from one of the get methods.
+#[derive(Debug, PartialEq, Clone)]
+enum LazyAttribute<'a, T> {
+    UserDefined(T),
+    Unparsed(AttributeValue<'a>),
+    None,
+}
+impl<T> Default for LazyAttribute<'_, T> {
+    fn default() -> Self {
+        Self::None
+    }
+}
+impl<'a, T> LazyAttribute<'a, T> {
+    fn new(t: T) -> Self {
+        Self::UserDefined(t)
+    }
+
+    fn set(&mut self, t: T) {
+        *self = Self::UserDefined(t);
+    }
+
+    fn found(&mut self, value: AttributeValue<'a>) {
+        *self = Self::Unparsed(value);
+    }
+
+    fn unset(&mut self) {
+        *self = Self::None;
+    }
 }
 
 #[cfg(test)]

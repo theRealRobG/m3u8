@@ -1,8 +1,11 @@
 use crate::{
     error::{ParseTagValueError, ValidationError},
-    tag::{AttributeValue, UnknownTag, hls::into_inner_tag},
+    tag::{
+        UnknownTag,
+        hls::{LazyAttribute, into_inner_tag},
+    },
 };
-use std::{borrow::Cow, collections::HashMap, marker::PhantomData};
+use std::{borrow::Cow, marker::PhantomData};
 
 /// The attribute list for the tag (`#EXT-X-SKIP:<attribute-list>`).
 #[derive(Debug, Clone)]
@@ -85,10 +88,9 @@ impl<'a> Default for SkipBuilder<'a, SkipSkippedSegmentsNeedsToBeSet> {
 #[derive(Debug, Clone)]
 pub struct Skip<'a> {
     skipped_segments: u64,
-    recently_removed_dateranges: Option<Cow<'a, str>>,
-    attribute_list: HashMap<&'a str, AttributeValue<'a>>, // Original attribute list
-    output_line: Cow<'a, [u8]>,                           // Used with Writer
-    output_line_is_dirty: bool,                           // If should recalculate output_line
+    recently_removed_dateranges: LazyAttribute<'a, Cow<'a, str>>,
+    output_line: Cow<'a, [u8]>, // Used with Writer
+    output_line_is_dirty: bool, // If should recalculate output_line
 }
 
 impl<'a> PartialEq for Skip<'a> {
@@ -105,20 +107,28 @@ impl<'a> TryFrom<UnknownTag<'a>> for Skip<'a> {
         let attribute_list = tag
             .value()
             .ok_or(ParseTagValueError::UnexpectedEmpty)?
-            .try_as_attribute_list()?;
-        let Some(skipped_segments) = attribute_list
-            .get(SKIPPED_SEGMENTS)
-            .and_then(AttributeValue::unquoted)
-            .and_then(|v| v.try_as_decimal_integer().ok())
-        else {
+            .try_as_ordered_attribute_list()?;
+        let mut skipped_segments = None;
+        let mut recently_removed_dateranges = LazyAttribute::None;
+        for (name, value) in attribute_list {
+            match name {
+                SKIPPED_SEGMENTS => {
+                    skipped_segments = value
+                        .unquoted()
+                        .and_then(|v| v.try_as_decimal_integer().ok())
+                }
+                RECENTLY_REMOVED_DATERANGES => recently_removed_dateranges.found(value),
+                _ => (),
+            }
+        }
+        let Some(skipped_segments) = skipped_segments else {
             return Err(super::ValidationError::MissingRequiredAttribute(
                 SKIPPED_SEGMENTS,
             ));
         };
         Ok(Self {
             skipped_segments,
-            recently_removed_dateranges: None,
-            attribute_list,
+            recently_removed_dateranges,
             output_line: Cow::Borrowed(tag.original_input),
             output_line_is_dirty: false,
         })
@@ -135,8 +145,9 @@ impl<'a> Skip<'a> {
         } = attribute_list;
         Self {
             skipped_segments,
-            recently_removed_dateranges,
-            attribute_list: HashMap::new(),
+            recently_removed_dateranges: recently_removed_dateranges
+                .map(LazyAttribute::new)
+                .unwrap_or_default(),
             output_line,
             output_line_is_dirty: false,
         }
@@ -173,12 +184,10 @@ impl<'a> Skip<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn recently_removed_dateranges(&self) -> Option<&str> {
-        if let Some(recently_removed_dateranges) = &self.recently_removed_dateranges {
-            Some(recently_removed_dateranges)
-        } else {
-            self.attribute_list
-                .get(RECENTLY_REMOVED_DATERANGES)
-                .and_then(AttributeValue::quoted)
+        match &self.recently_removed_dateranges {
+            LazyAttribute::UserDefined(s) => Some(s.as_ref()),
+            LazyAttribute::Unparsed(v) => v.quoted(),
+            LazyAttribute::None => None,
         }
     }
 
@@ -186,7 +195,6 @@ impl<'a> Skip<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_skipped_segments(&mut self, skipped_segments: u64) {
-        self.attribute_list.remove(SKIPPED_SEGMENTS);
         self.skipped_segments = skipped_segments;
         self.output_line_is_dirty = true;
     }
@@ -198,8 +206,8 @@ impl<'a> Skip<'a> {
         &mut self,
         recently_removed_dateranges: impl Into<Cow<'a, str>>,
     ) {
-        self.attribute_list.remove(RECENTLY_REMOVED_DATERANGES);
-        self.recently_removed_dateranges = Some(recently_removed_dateranges.into());
+        self.recently_removed_dateranges
+            .set(recently_removed_dateranges.into());
         self.output_line_is_dirty = true;
     }
 
@@ -207,8 +215,7 @@ impl<'a> Skip<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn unset_recently_removed_dateranges(&mut self) {
-        self.attribute_list.remove(RECENTLY_REMOVED_DATERANGES);
-        self.recently_removed_dateranges = None;
+        self.recently_removed_dateranges.unset();
         self.output_line_is_dirty = true;
     }
 

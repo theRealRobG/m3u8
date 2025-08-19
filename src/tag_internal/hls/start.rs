@@ -1,8 +1,11 @@
 use crate::{
     error::{ParseTagValueError, ValidationError},
-    tag::{AttributeValue, UnknownTag, UnquotedAttributeValue, hls::into_inner_tag},
+    tag::{
+        AttributeValue, UnknownTag, UnquotedAttributeValue,
+        hls::{LazyAttribute, into_inner_tag},
+    },
 };
-use std::{borrow::Cow, collections::HashMap, marker::PhantomData};
+use std::{borrow::Cow, marker::PhantomData};
 
 /// The attribute list for the tag (`#EXT-X-START:<attribute-list>`).
 ///
@@ -81,10 +84,9 @@ impl Default for StartBuilder<StartTimeOffsetNeedsToBeSet> {
 #[derive(Debug, Clone)]
 pub struct Start<'a> {
     time_offset: f64,
-    precise: Option<bool>,
-    attribute_list: HashMap<&'a str, AttributeValue<'a>>, // Original attribute list
-    output_line: Cow<'a, [u8]>,                           // Used with Writer
-    output_line_is_dirty: bool,                           // If should recalculate output_line
+    precise: LazyAttribute<'a, bool>,
+    output_line: Cow<'a, [u8]>, // Used with Writer
+    output_line_is_dirty: bool, // If should recalculate output_line
 }
 
 impl<'a> PartialEq for Start<'a> {
@@ -100,20 +102,28 @@ impl<'a> TryFrom<UnknownTag<'a>> for Start<'a> {
         let attribute_list = tag
             .value()
             .ok_or(ParseTagValueError::UnexpectedEmpty)?
-            .try_as_attribute_list()?;
-        let Some(time_offset) = attribute_list
-            .get(TIME_OFFSET)
-            .and_then(AttributeValue::unquoted)
-            .and_then(|v| v.try_as_decimal_floating_point().ok())
-        else {
+            .try_as_ordered_attribute_list()?;
+        let mut time_offset = None;
+        let mut precise = LazyAttribute::None;
+        for (name, value) in attribute_list {
+            match name {
+                TIME_OFFSET => {
+                    time_offset = value
+                        .unquoted()
+                        .and_then(|v| v.try_as_decimal_floating_point().ok())
+                }
+                PRECISE => precise.found(value),
+                _ => (),
+            }
+        }
+        let Some(time_offset) = time_offset else {
             return Err(super::ValidationError::MissingRequiredAttribute(
                 TIME_OFFSET,
             ));
         };
         Ok(Self {
             time_offset,
-            precise: None,
-            attribute_list,
+            precise,
             output_line: Cow::Borrowed(tag.original_input),
             output_line_is_dirty: false,
         })
@@ -130,8 +140,7 @@ impl<'a> Start<'a> {
         } = attribute_list;
         Self {
             time_offset,
-            precise: Some(precise),
-            attribute_list: HashMap::new(),
+            precise: LazyAttribute::new(precise),
             output_line,
             output_line_is_dirty: false,
         }
@@ -168,13 +177,12 @@ impl<'a> Start<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn precise(&self) -> bool {
-        if let Some(precise) = self.precise {
-            precise
-        } else {
-            matches!(
-                self.attribute_list.get(PRECISE),
-                Some(AttributeValue::Unquoted(UnquotedAttributeValue(YES)))
-            )
+        match &self.precise {
+            LazyAttribute::UserDefined(b) => *b,
+            LazyAttribute::Unparsed(v) => {
+                matches!(v, AttributeValue::Unquoted(UnquotedAttributeValue(YES)))
+            }
+            LazyAttribute::None => false,
         }
     }
 
@@ -182,7 +190,6 @@ impl<'a> Start<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_time_offset(&mut self, time_offset: f64) {
-        self.attribute_list.remove(TIME_OFFSET);
         self.time_offset = time_offset;
         self.output_line_is_dirty = true;
     }
@@ -191,8 +198,7 @@ impl<'a> Start<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_precise(&mut self, precise: bool) {
-        self.attribute_list.remove(PRECISE);
-        self.precise = Some(precise);
+        self.precise.set(precise);
         self.output_line_is_dirty = true;
     }
 
