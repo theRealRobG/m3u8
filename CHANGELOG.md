@@ -10,6 +10,16 @@ The format is based on [Keep a Changelog], and this project adheres to
 
 ## [Unreleased]
 
+### Changed
+
+- BREAKING CHANGE: `Daterange::start_date` return type has been changed
+  from `DateTime` to `Option<DateTime>`. This is based on the update in
+  draft 18 where it was clarified that all daterange attributes, other
+  than `ID`, are optional on an instance of the tag because the values
+  are inherited from previous instances of the tag. Given that parsing
+  in this library occurs line-by-line, we must consider this optional
+  now.
+
 ## [0.6.0] - 2025-08-19
 
 ### Added
