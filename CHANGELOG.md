@@ -19,6 +19,10 @@ The format is based on [Keep a Changelog], and this project adheres to
   are inherited from previous instances of the tag. Given that parsing
   in this library occurs line-by-line, we must consider this optional
   now.
+- BREAKING CHANGE: `IFrameStreamInf::allowed_cpc` return type has been
+  changed from `Option<&str>` to `Option<AllowedCpc<'_>>`. This should
+  always have been the case; however, when adding this type for
+  `StreamInf`, the `IFrameStreamInf` was forgotten about.
 
 ## [0.6.0] - 2025-08-19
 
