@@ -119,7 +119,7 @@ impl<'a> Default
 
 /// Corresponds to the `#EXT-X-RENDITION-REPORT` tag.
 ///
-/// <https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.5.4>
+/// <https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-18#section-4.4.5.4>
 #[derive(Debug, Clone)]
 pub struct RenditionReport<'a> {
     uri: Cow<'a, str>,

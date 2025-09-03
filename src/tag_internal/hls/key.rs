@@ -186,7 +186,7 @@ impl<'a> Default for KeyBuilder<'a, KeyMethodNeedsToBeSet> {
 
 /// Corresponds to the `#EXT-X-KEY` tag.
 ///
-/// <https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.4.4>
+/// <https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-18#section-4.4.4.4>
 #[derive(Debug, Clone)]
 pub struct Key<'a> {
     method: Cow<'a, str>,

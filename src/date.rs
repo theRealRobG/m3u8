@@ -142,7 +142,7 @@ pub struct DateTime {
     /// length, though HLS recommends milliscond accuracy via the [EXT-X-PROGRAM-DATE-TIME]
     /// documentation).
     ///
-    /// [EXT-X-PROGRAM-DATE-TIME]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.4.6
+    /// [EXT-X-PROGRAM-DATE-TIME]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-18#section-4.4.4.6
     pub time_second: f64,
     /// The timezone offset.
     pub timezone_offset: DateTimeTimezoneOffset,

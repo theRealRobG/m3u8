@@ -43,7 +43,7 @@ assert_eq!(reader.read_line(), Ok(None));
 ```
 
 The above example demonstrates that a `HlsLine` is an with several potential cases. As per section
-[4.1. Definition of a Playlist](https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.1):
+[4.1. Definition of a Playlist](https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-18#section-4.1):
 > Each line is a URI, is blank, or starts with the character '#'. Lines that start with the
 > character '#' are either comments or tags. Tags begin with #EXT.
 
@@ -304,7 +304,7 @@ assert_eq!(
 ### Enumerated strings
 
 HLS defines an `enumerated-string` in
-[section 4.2](https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.2) as:
+[section 4.2](https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-18#section-4.2) as:
 >*  enumerated-string: an unquoted character string from a set that is
 >   explicitly defined by the AttributeName.  An enumerated-string
 >   will never contain double quotes ("), commas (,), or whitespace.
@@ -368,7 +368,7 @@ match reader.read_line() {
 ### Enumerated string lists
 
 HLS defines an `enumerated-string-list` in
-[section 4.2](https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.2) as:
+[section 4.2](https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-18#section-4.2) as:
 >*  enumerated-string-list: a quoted-string containing a comma-
 >   separated list of enumerated-strings from a set that is explicitly
 >   defined by the AttributeName.  Each enumerated-string in the list

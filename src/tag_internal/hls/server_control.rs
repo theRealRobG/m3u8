@@ -135,7 +135,7 @@ impl Default for ServerControlBuilder<ServerControlAttributeNeedsToBeSet> {
 
 /// Corresponds to the `#EXT-X-SERVER-CONTROL` tag.
 ///
-/// <https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.3.8>
+/// <https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-18#section-4.4.3.8>
 #[derive(Debug, Clone)]
 pub struct ServerControl<'a> {
     can_skip_until: LazyAttribute<'a, f64>,

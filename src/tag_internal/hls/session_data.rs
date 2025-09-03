@@ -244,7 +244,7 @@ impl<'a> Default
 
 /// Corresponds to the `#EXT-X-SESSION-DATA` tag.
 ///
-/// <https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.6.4>
+/// <https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-18#section-4.4.6.4>
 #[derive(Debug, Clone)]
 pub struct SessionData<'a> {
     data_id: Cow<'a, str>,

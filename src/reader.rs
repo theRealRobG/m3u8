@@ -620,7 +620,7 @@ mod tests {
 
 #[cfg(test)]
 // Example taken from HLS specification with one custom tag added.
-// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-9.1
+// https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-18#section-9.1
 const EXAMPLE_MANIFEST: &str = r#"#EXTM3U
 #EXT-X-TARGETDURATION:10
 #EXT-X-VERSION:3

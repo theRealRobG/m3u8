@@ -140,7 +140,7 @@ use std::{
 /// # Ok::<(), Box<dyn Error>>(())
 /// ```
 ///
-/// [9.4. Multivariant Playlist]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-9.4
+/// [9.4. Multivariant Playlist]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-18#section-9.4
 #[derive(Debug, Clone)]
 pub struct Writer<W>
 where

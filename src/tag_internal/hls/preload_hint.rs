@@ -171,7 +171,7 @@ impl<'a> Default
 
 /// Corresponds to the `#EXT-X-PRELOAD-HINT` tag.
 ///
-/// <https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.5.3>
+/// <https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-18#section-4.4.5.3>
 #[derive(Debug, Clone)]
 pub struct PreloadHint<'a> {
     hint_type: Cow<'a, str>,

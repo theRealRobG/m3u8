@@ -573,7 +573,7 @@ impl<'a> UnquotedAttributeValue<'a> {
 
 /// The HLS playlist type, as defined in [`#EXT-X-PLAYLIST-TYPE`].
 ///
-/// [`#EXT-X-PLAYLIST-TYPE`]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.3.5
+/// [`#EXT-X-PLAYLIST-TYPE`]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-18#section-4.4.3.5
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum HlsPlaylistType {
     /// If the `EXT-X-PLAYLIST-TYPE` value is EVENT, Media Segments can only be added to the end of
@@ -722,7 +722,7 @@ pub enum WritableAttributeValue<'a> {
     /// From [Section 4.2], this represents:
     /// * decimal-integer
     ///
-    /// [Section 4.2]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.2
+    /// [Section 4.2]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-18#section-4.2
     DecimalInteger(u64),
     /// A signed float.
     ///
@@ -730,14 +730,14 @@ pub enum WritableAttributeValue<'a> {
     /// * decimal-floating-point
     /// * signed-decimal-floating-point
     ///
-    /// [Section 4.2]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.2
+    /// [Section 4.2]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-18#section-4.2
     SignedDecimalFloatingPoint(f64),
     /// A decimal resolution.
     ///
     /// From [Section 4.2], this represents:
     /// * decimal-resolution
     ///
-    /// [Section 4.2]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.2
+    /// [Section 4.2]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-18#section-4.2
     DecimalResolution(DecimalResolution),
     /// A quoted string.
     ///
@@ -745,7 +745,7 @@ pub enum WritableAttributeValue<'a> {
     /// * quoted-string
     /// * enumerated-string-list
     ///
-    /// [Section 4.2]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.2
+    /// [Section 4.2]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-18#section-4.2
     QuotedString(Cow<'a, str>),
     /// An unquoted string.
     ///
@@ -753,7 +753,7 @@ pub enum WritableAttributeValue<'a> {
     /// * hexadecimal-sequence
     /// * enumerated-string
     ///
-    /// [Section 4.2]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.2
+    /// [Section 4.2]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-18#section-4.2
     ///
     /// Note, this case can be used as an "escape hatch" to write any of the other cases that
     /// resolve from unquoted, but those are provided as convenience.
