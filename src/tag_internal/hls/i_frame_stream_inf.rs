@@ -3,7 +3,7 @@ use crate::{
     tag::{
         DecimalResolution, UnknownTag,
         hls::{
-            EnumeratedString, LazyAttribute, into_inner_tag,
+            AllowedCpc, EnumeratedString, LazyAttribute, into_inner_tag,
             stream_inf::{HdcpLevel, VideoLayout, VideoRange},
         },
     },
@@ -217,6 +217,24 @@ impl<'a, UriStatus, BandwidthStatus> IFrameStreamInfBuilder<'a, UriStatus, Bandw
     }
 
     /// Add the provided `allowed_cpc` to the attributes built into `IFrameStreamInf`.
+    ///
+    /// Note that [`AllowedCpc`] implements `Into<Cow<str>>` and therefore can be used directly
+    /// here. `AllowedCpc` has several convenience initializers to help make this easier. For
+    /// example, when setting FairPlay values specifically, the array format can be used:
+    /// ```
+    /// # use quick_m3u8::tag::hls::{IFrameStreamInfBuilder, AllowedCpc, FairPlayCpcLabel};
+    /// let builder = IFrameStreamInfBuilder::new()
+    ///     .with_allowed_cpc(AllowedCpc::from([
+    ///         FairPlayCpcLabel::AppleMain, FairPlayCpcLabel::Main
+    ///     ]));
+    /// ```
+    /// Alternatively, a string slice can be used, but care should be taken to follow the correct
+    /// syntax defined for `ALLOWED-CPC`.
+    /// ```
+    /// # use quick_m3u8::tag::hls::IFrameStreamInfBuilder;
+    /// let builder = IFrameStreamInfBuilder::new()
+    ///     .with_allowed_cpc("com.apple.streamingkeydelivery:AppleMain/Main");
+    /// ```
     pub fn with_allowed_cpc(mut self, allowed_cpc: impl Into<Cow<'a, str>>) -> Self {
         self.attribute_list.allowed_cpc = Some(allowed_cpc.into());
         self
@@ -615,11 +633,12 @@ impl<'a> IFrameStreamInf<'a> {
 
     /// Corresponds to the `ALLOWED-CPC` attribute.
     ///
-    /// See [`Self`] for a link to the HLS documentation for this attribute.
-    pub fn allowed_cpc(&self) -> Option<&str> {
+    /// See [`Self`] for a link to the HLS documentation for this attribute. See
+    /// [`crate::tag::hls::StreamInf::allowed_cpc`] for more details on usage of this method.
+    pub fn allowed_cpc(&self) -> Option<AllowedCpc<'_>> {
         match &self.allowed_cpc {
-            LazyAttribute::UserDefined(s) => Some(s.as_ref()),
-            LazyAttribute::Unparsed(v) => v.quoted(),
+            LazyAttribute::UserDefined(s) => Some(AllowedCpc::from(s.as_ref())),
+            LazyAttribute::Unparsed(v) => v.quoted().map(AllowedCpc::from),
             LazyAttribute::None => None,
         }
     }
@@ -1099,7 +1118,11 @@ mod tests {
             @Attr="RESOLUTION=100x100"
         ),
         (hdcp_level, @Option EnumeratedString::Known(HdcpLevel::None), @Attr="HDCP-LEVEL=NONE"),
-        (allowed_cpc, @Option "EXAMPLE", @Attr="ALLOWED-CPC=\"EXAMPLE\""),
+        (
+            allowed_cpc,
+            @Option AllowedCpc::from("com.example.drm2:HW"),
+            @Attr="ALLOWED-CPC=\"com.example.drm2:HW\""
+        ),
         (video_range, @Option EnumeratedString::Known(VideoRange::Hlg), @Attr="VIDEO-RANGE=HLG"),
         (
             req_video_layout,
