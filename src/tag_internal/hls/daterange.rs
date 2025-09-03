@@ -80,7 +80,7 @@ struct DaterangeAttributeList<'a> {
     /// Corresponds to the `START-DATE` attribute.
     ///
     /// See [`Daterange`] for a link to the HLS documentation for this attribute.
-    start_date: DateTime,
+    start_date: Option<DateTime>,
     /// Corresponds to the `CLASS` attribute.
     ///
     /// See [`Daterange`] for a link to the HLS documentation for this attribute.
@@ -126,15 +126,9 @@ struct DaterangeAttributeList<'a> {
 /// Placeholder struct for [`DaterangeBuilder`] indicating that `id` needs to be set.
 #[derive(Debug, Clone, Copy)]
 pub struct DaterangeIdNeedsToBeSet;
-/// Placeholder struct for [`DaterangeBuilder`] indicating that `start_date` needs to be set.
-#[derive(Debug, Clone, Copy)]
-pub struct DaterangeStartDateNeedsToBeSet;
 /// Placeholder struct for [`DaterangeBuilder`] indicating that `id` has been set.
 #[derive(Debug, Clone, Copy)]
 pub struct DaterangeIdHasBeenSet;
-/// Placeholder struct for [`DaterangeBuilder`] indicating that `start_date` has been set.
-#[derive(Debug, Clone, Copy)]
-pub struct DaterangeStartDateHasBeenSet;
 
 /// A builder for convenience in constructing a [`Daterange`].
 ///
@@ -142,12 +136,11 @@ pub struct DaterangeStartDateHasBeenSet;
 ///
 /// [Sguaba]: https://github.com/helsing-ai/sguaba/blob/8dadfe066197551b0601e01676f8d13ef1168785/src/directions.rs#L271-L291
 #[derive(Debug, Clone)]
-pub struct DaterangeBuilder<'a, IdStatus, StartDateStatus> {
+pub struct DaterangeBuilder<'a, IdStatus> {
     attribute_list: DaterangeAttributeList<'a>,
     id_status: PhantomData<IdStatus>,
-    start_date_status: PhantomData<StartDateStatus>,
 }
-impl<'a> DaterangeBuilder<'a, DaterangeIdNeedsToBeSet, DaterangeStartDateNeedsToBeSet> {
+impl<'a> DaterangeBuilder<'a, DaterangeIdNeedsToBeSet> {
     /// Create a new builder.
     pub fn new() -> Self {
         Self {
@@ -166,41 +159,32 @@ impl<'a> DaterangeBuilder<'a, DaterangeIdNeedsToBeSet, DaterangeStartDateNeedsTo
                 scte35_in: Default::default(),
             },
             id_status: PhantomData,
-            start_date_status: PhantomData,
         }
     }
 }
-impl<'a> DaterangeBuilder<'a, DaterangeIdHasBeenSet, DaterangeStartDateHasBeenSet> {
+impl<'a> DaterangeBuilder<'a, DaterangeIdHasBeenSet> {
     /// Finish building and construct the `Daterange`.
     pub fn finish(self) -> Daterange<'a> {
         Daterange::new(self.attribute_list)
     }
 }
-impl<'a, IdStatus, StartDateStatus> DaterangeBuilder<'a, IdStatus, StartDateStatus> {
+impl<'a, IdStatus> DaterangeBuilder<'a, IdStatus> {
     /// Add the provided `id` to the attributes built into `Daterange`.
     pub fn with_id(
         mut self,
         id: impl Into<Cow<'a, str>>,
-    ) -> DaterangeBuilder<'a, DaterangeIdHasBeenSet, StartDateStatus> {
+    ) -> DaterangeBuilder<'a, DaterangeIdHasBeenSet> {
         self.attribute_list.id = id.into();
         DaterangeBuilder {
             attribute_list: self.attribute_list,
             id_status: PhantomData,
-            start_date_status: PhantomData,
         }
     }
 
     /// Add the provided `start_date` to the attributes built into `Daterange`.
-    pub fn with_start_date(
-        mut self,
-        start_date: DateTime,
-    ) -> DaterangeBuilder<'a, IdStatus, DaterangeStartDateHasBeenSet> {
-        self.attribute_list.start_date = start_date;
-        DaterangeBuilder {
-            attribute_list: self.attribute_list,
-            id_status: PhantomData,
-            start_date_status: PhantomData,
-        }
+    pub fn with_start_date(mut self, start_date: DateTime) -> Self {
+        self.attribute_list.start_date = Some(start_date);
+        self
     }
 
     /// Add the provided `class` to the attributes built into `Daterange`.
@@ -317,7 +301,7 @@ impl<'a, IdStatus, StartDateStatus> DaterangeBuilder<'a, IdStatus, StartDateStat
         self
     }
 }
-impl<'a> Default for DaterangeBuilder<'a, DaterangeIdNeedsToBeSet, DaterangeStartDateNeedsToBeSet> {
+impl<'a> Default for DaterangeBuilder<'a, DaterangeIdNeedsToBeSet> {
     fn default() -> Self {
         Self::new()
     }
@@ -329,7 +313,7 @@ impl<'a> Default for DaterangeBuilder<'a, DaterangeIdNeedsToBeSet, DaterangeStar
 #[derive(Debug, Clone)]
 pub struct Daterange<'a> {
     id: Cow<'a, str>,
-    start_date: DateTime,
+    start_date: LazyAttribute<'a, DateTime>,
     class: LazyAttribute<'a, Cow<'a, str>>,
     cue: LazyAttribute<'a, Cow<'a, str>>,
     end_date: LazyAttribute<'a, DateTime>,
@@ -370,7 +354,7 @@ impl<'a> TryFrom<UnknownTag<'a>> for Daterange<'a> {
             .ok_or(ParseTagValueError::UnexpectedEmpty)?
             .try_as_ordered_attribute_list()?;
         let mut id = None;
-        let mut start_date = None;
+        let mut start_date = LazyAttribute::None;
         let mut class = LazyAttribute::None;
         let mut cue = LazyAttribute::None;
         let mut end_date = LazyAttribute::None;
@@ -384,7 +368,7 @@ impl<'a> TryFrom<UnknownTag<'a>> for Daterange<'a> {
         for (name, value) in attribute_list {
             match name {
                 ID => id = value.quoted(),
-                START_DATE => start_date = value.quoted().and_then(|s| date::parse(s).ok()),
+                START_DATE => start_date.found(value),
                 CLASS => class.found(value),
                 CUE => cue.found(value),
                 END_DATE => end_date.found(value),
@@ -402,9 +386,6 @@ impl<'a> TryFrom<UnknownTag<'a>> for Daterange<'a> {
         }
         let Some(id) = id else {
             return Err(ValidationError::MissingRequiredAttribute(ID));
-        };
-        let Some(start_date) = start_date else {
-            return Err(ValidationError::MissingRequiredAttribute(START_DATE));
         };
         Ok(Self {
             id: Cow::Borrowed(id),
@@ -445,7 +426,7 @@ impl<'a> Daterange<'a> {
         } = attribute_list;
         Self {
             id,
-            start_date,
+            start_date: start_date.map(LazyAttribute::new).unwrap_or_default(),
             class: class.map(LazyAttribute::new).unwrap_or_default(),
             cue: cue.map(LazyAttribute::new).unwrap_or_default(),
             end_date: end_date.map(LazyAttribute::new).unwrap_or_default(),
@@ -482,22 +463,13 @@ impl<'a> Daterange<'a> {
     ///     )
     ///     .finish();
     /// ```
-    /// Note that the `finish` method is only callable if the builder has set `id` AND `start_date`.
-    /// Each of the following fail to compile:
+    /// Note that the `finish` method is only callable if the builder has set `id`. The following
+    /// will fail to compile:
     /// ```compile_fail
     /// # use quick_m3u8::tag::hls::Daterange;
     /// let daterange = Daterange::builder().finish();
     /// ```
-    /// ```compile_fail
-    /// # use quick_m3u8::tag::hls::Daterange;
-    /// let daterange = Daterange::builder().with_id("id").finish();
-    /// ```
-    /// ```compile_fail
-    /// # use quick_m3u8::tag::hls::Daterange;
-    /// let daterange = Daterange::builder().with_start_date(Default::default()).finish();
-    /// ```
-    pub fn builder() -> DaterangeBuilder<'a, DaterangeIdNeedsToBeSet, DaterangeStartDateNeedsToBeSet>
-    {
+    pub fn builder() -> DaterangeBuilder<'a, DaterangeIdNeedsToBeSet> {
         DaterangeBuilder::new()
     }
 
@@ -524,8 +496,12 @@ impl<'a> Daterange<'a> {
     /// Corresponds to the `START-DATE` attribute.
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
-    pub fn start_date(&self) -> DateTime {
-        self.start_date
+    pub fn start_date(&self) -> Option<DateTime> {
+        match &self.start_date {
+            LazyAttribute::UserDefined(s) => Some(*s),
+            LazyAttribute::Unparsed(v) => v.quoted().and_then(|s| date::parse(s).ok()),
+            LazyAttribute::None => None,
+        }
     }
 
     /// Corresponds to the `CUE` attribute.
@@ -830,7 +806,15 @@ impl<'a> Daterange<'a> {
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
     pub fn set_start_date(&mut self, start_date: DateTime) {
-        self.start_date = start_date;
+        self.start_date.set(start_date);
+        self.output_line_is_dirty = true;
+    }
+
+    /// Unsets the `START-DATE` attribute (set it to `None`).
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
+    pub fn unset_start_date(&mut self) {
+        self.start_date.unset();
         self.output_line_is_dirty = true;
     }
 
@@ -1148,14 +1132,10 @@ fn calculate_line(attribute_list: &DaterangeAttributeList) -> Vec<u8> {
         scte35_out,
         scte35_in,
     } = attribute_list;
-    let mut line = format!(
-        "#EXT{}:{}=\"{}\",{}=\"{}\"",
-        TagName::Daterange.as_str(),
-        ID,
-        id,
-        START_DATE,
-        start_date,
-    );
+    let mut line = format!("#EXT{}:{}=\"{}\"", TagName::Daterange.as_str(), ID, id,);
+    if let Some(start_date) = start_date {
+        line.push_str(format!(",{START_DATE}=\"{start_date}\"").as_str());
+    }
     if let Some(class) = class {
         line.push_str(format!(",{CLASS}=\"{class}\"").as_str());
     }
@@ -1379,7 +1359,7 @@ mod tests {
             .with_scte35_in("0xABCD")
             .finish(),
         (id, "another-id", @Attr="ID=\"another-id\""),
-        (start_date, DateTime::default(), @Attr="START-DATE=\"1970-01-01T00:00:00.000Z\""),
+        (start_date, @Option DateTime::default(), @Attr="START-DATE=\"1970-01-01T00:00:00.000Z\""),
         (class, @Option "com.test.class", @Attr="CLASS=\"com.test.class\""),
         (cue, @Option EnumeratedStringList::from([Cue::Once, Cue::Pre]), @Attr="CUE=\"ONCE,PRE\""),
         (end_date, @Option DateTime::default(), @Attr="END-DATE=\"1970-01-01T00:00:00.000Z\""),

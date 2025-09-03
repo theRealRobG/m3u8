@@ -164,7 +164,6 @@ use std::marker::PhantomData;
 ///                 let id = format!("ADVERT:{}", tag.id());
 ///                 let builder = Daterange::builder()
 ///                     .with_id(id)
-///                     .with_start_date(tag.start_date())
 ///                     .with_class("com.apple.hls.interstitial")
 ///                     .with_cue(Cue::Once)
 ///                     .with_extension_attribute(
@@ -177,6 +176,16 @@ use std::marker::PhantomData;
 ///                         "X-RESTRICT",
 ///                         ExtensionAttributeValue::QuotedString(Cow::Borrowed("SKIP,JUMP")),
 ///                     );
+///                 // START-DATE has been clarified to be optional as of draft 18, so we need to
+///                 // check for existence. In reality, I should store the start dates of all found
+///                 // dateranges, to properly set the correct START-DATE on this interstitial tag;
+///                 // however, this is just a basic example and that's not the point I'm trying to
+///                 // illustrate, so leaving that out for now.
+///                 let builder = if let Some(start_date) = tag.start_date() {
+///                     builder.with_start_date(start_date)
+///                 } else {
+///                     builder
+///                 };
 ///                 let interstitial_daterange = if duration_from_daterange(&tag) == 0.0 {
 ///                     builder
 ///                         .with_extension_attribute(
