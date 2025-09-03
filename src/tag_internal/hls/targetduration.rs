@@ -6,7 +6,7 @@ use std::borrow::Cow;
 
 /// Corresponds to the `#EXT-X-TARGETDURATION` tag.
 ///
-/// <https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.3.1>
+/// <https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-18#section-4.4.3.1>
 #[derive(Debug, Clone)]
 pub struct Targetduration<'a> {
     target_duration: u64,

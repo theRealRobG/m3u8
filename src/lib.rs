@@ -181,10 +181,10 @@
 //!
 //! [M3U8]: https://datatracker.ietf.org/doc/draft-pantos-hls-rfc8216bis/
 //! [quick-xml]: https://crates.io/crates/quick-xml
-//! [EXT-X-TARGETDURATION]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.3.1
-//! [attribute-lists]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.2
-//! [Simple Media Playlist]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-9.1
-//! [Section 4.1]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.1
+//! [EXT-X-TARGETDURATION]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-18#section-4.4.3.1
+//! [attribute-lists]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-18#section-4.2
+//! [Simple Media Playlist]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-18#section-9.1
+//! [Section 4.1]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-18#section-4.1
 
 pub mod config;
 pub mod date;

@@ -147,7 +147,7 @@ where
 /// if we were using `Vec`), and so this abstraction has little cost over working with the `&str`
 /// directly, but provides many convenience properties.
 ///
-/// [4.2. Attribute Lists]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.2
+/// [4.2. Attribute Lists]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-18#section-4.2
 #[derive(Debug, Clone, PartialEq)]
 pub struct EnumeratedStringList<'a, T> {
     inner: Cow<'a, str>,

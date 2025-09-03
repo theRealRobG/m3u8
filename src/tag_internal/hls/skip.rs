@@ -84,7 +84,7 @@ impl<'a> Default for SkipBuilder<'a, SkipSkippedSegmentsNeedsToBeSet> {
 
 /// Corresponds to the `#EXT-X-SKIP` tag.
 ///
-/// <https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.5.2>
+/// <https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-18#section-4.4.5.2>
 #[derive(Debug, Clone)]
 pub struct Skip<'a> {
     skipped_segments: u64,

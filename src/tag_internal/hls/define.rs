@@ -192,7 +192,7 @@ into_inner_tag!(Queryparam);
 
 /// Corresponds to the `#EXT-X-DEFINE` tag.
 ///
-/// <https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.2.3>
+/// <https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-18#section-4.4.2.3>
 #[derive(Debug, PartialEq, Clone)]
 pub enum Define<'a> {
     /// The `#EXT-X-DEFINE` tag is being used with `NAME` and `VALUE`.

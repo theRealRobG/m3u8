@@ -27,7 +27,7 @@ use std::{borrow::Cow, cmp::PartialEq, fmt::Debug};
 /// library to define their own custom tag specification that can be then parsed into a strongly
 /// typed structure within a `HlsLine::KnownTag` by the library.
 ///
-/// [Section 4.1. Definition of a Playlist]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.1
+/// [Section 4.1. Definition of a Playlist]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-18#section-4.1
 #[derive(Debug, PartialEq, Clone)]
 #[allow(clippy::large_enum_variant)] // See comment on crate::tag::known::Tag.
 pub enum HlsLine<'a, Custom = NoCustomTag>

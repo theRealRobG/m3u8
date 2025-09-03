@@ -5,7 +5,7 @@ use crate::{
 
 /// Corresponds to the `#EXT-X-INDEPENDENT-SEGMENTS` tag.
 ///
-/// <https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-17#section-4.4.2.1>
+/// <https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-18#section-4.4.2.1>
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct IndependentSegments;
 
