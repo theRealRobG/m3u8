@@ -28,13 +28,13 @@ impl<'a> TryFrom<UnknownTag<'a>> for Byterange<'a> {
     type Error = ValidationError;
 
     fn try_from(tag: UnknownTag<'a>) -> Result<Self, Self::Error> {
-        let (length, offset) = tag
+        let range = tag
             .value()
             .ok_or(ParseTagValueError::UnexpectedEmpty)?
             .try_as_decimal_integer_range()?;
         Ok(Self {
-            length,
-            offset,
+            length: range.length,
+            offset: range.offset,
             output_line: Cow::Borrowed(tag.original_input),
             output_line_is_dirty: false,
         })

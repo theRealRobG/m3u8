@@ -584,8 +584,8 @@ mod tests {
     use crate::{
         date_time,
         tag::{
-            DecimalResolution, HlsPlaylistType, TagValue,
-            hls::{daterange::ExtensionAttributeValue, map::MapByterange, part::PartByterange},
+            DecimalIntegerRange, DecimalResolution, HlsPlaylistType, TagValue,
+            hls::{daterange::ExtensionAttributeValue, map::MapByterange},
         },
     };
     use pretty_assertions::assert_eq;
@@ -877,7 +877,7 @@ mod tests {
                     .with_uri("part.1.mp4")
                     .with_duration(0.5)
                     .with_independent()
-                    .with_byterange(PartByterange {
+                    .with_byterange(DecimalIntegerRange {
                         length: 1024,
                         offset: Some(512)
                     })
@@ -894,7 +894,7 @@ mod tests {
                 Part::builder()
                     .with_uri("part.1.mp4")
                     .with_duration(0.5)
-                    .with_byterange(PartByterange {
+                    .with_byterange(DecimalIntegerRange {
                         length: 1024,
                         offset: None
                     })

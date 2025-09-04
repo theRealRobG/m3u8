@@ -682,6 +682,29 @@ impl Display for ParseDecimalIntegerRangeError {
 }
 impl Error for ParseDecimalIntegerRangeError {}
 
+/// An error when trying to parse the `EXT-X-MAP:BYTERANGE` attribute.
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum ParseMapByterangeError {
+    /// An error parsing the decimal integer range.
+    RangeParseError(ParseDecimalIntegerRangeError),
+    /// The offset component was missing but it is needed for `MapByterange`.
+    MissingOffset,
+}
+impl Display for ParseMapByterangeError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::RangeParseError(e) => e.fmt(f),
+            Self::MissingOffset => write!(f, "missing offset component"),
+        }
+    }
+}
+impl Error for ParseMapByterangeError {}
+impl From<ParseDecimalIntegerRangeError> for ParseMapByterangeError {
+    fn from(value: ParseDecimalIntegerRangeError) -> Self {
+        Self::RangeParseError(value)
+    }
+}
+
 /// An error found when trying to parse a float from a byte slice (`&[u8]`).
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct ParseFloatError;
