@@ -1,7 +1,7 @@
 use crate::{
-    error::{ParseTagValueError, ValidationError},
+    error::{ParseMapByterangeError, ParseTagValueError, ValidationError},
     tag::{
-        UnknownTag,
+        DecimalIntegerRange, UnknownTag,
         hls::{LazyAttribute, into_inner_tag},
     },
 };
@@ -113,6 +113,22 @@ impl Display for MapByterange {
         write!(f, "{}@{}", self.length, self.offset)
     }
 }
+impl TryFrom<&[u8]> for MapByterange {
+    type Error = ParseMapByterangeError;
+
+    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+        let DecimalIntegerRange { length, offset } = DecimalIntegerRange::try_from(value)?;
+        let offset = offset.ok_or(ParseMapByterangeError::MissingOffset)?;
+        Ok(Self { length, offset })
+    }
+}
+impl TryFrom<&str> for MapByterange {
+    type Error = ParseMapByterangeError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        Self::try_from(value.as_bytes())
+    }
+}
 
 impl<'a> TryFrom<UnknownTag<'a>> for Map<'a> {
     type Error = ValidationError;
@@ -189,16 +205,7 @@ impl<'a> Map<'a> {
     pub fn byterange(&self) -> Option<MapByterange> {
         match &self.byterange {
             LazyAttribute::UserDefined(b) => Some(*b),
-            LazyAttribute::Unparsed(v) => v.quoted().and_then(|byterange_str| {
-                let mut parts = byterange_str.splitn(2, '@');
-                let Some(Ok(length)) = parts.next().map(str::parse::<u64>) else {
-                    return None;
-                };
-                let Some(Ok(offset)) = parts.next().map(str::parse::<u64>) else {
-                    return None;
-                };
-                Some(MapByterange { length, offset })
-            }),
+            LazyAttribute::Unparsed(v) => v.quoted().and_then(|s| MapByterange::try_from(s).ok()),
             LazyAttribute::None => None,
         }
     }

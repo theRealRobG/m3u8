@@ -1,11 +1,11 @@
 use crate::{
     error::{ParseTagValueError, ValidationError},
     tag::{
-        AttributeValue, UnknownTag, UnquotedAttributeValue,
+        AttributeValue, DecimalIntegerRange, UnknownTag, UnquotedAttributeValue,
         hls::{LazyAttribute, into_inner_tag},
     },
 };
-use std::{borrow::Cow, fmt::Display, marker::PhantomData};
+use std::{borrow::Cow, marker::PhantomData};
 
 /// The attribute list for the tag (`#EXT-X-PART:<attribute-list>`).
 ///
@@ -27,7 +27,7 @@ struct PartAttributeList<'a> {
     /// Corresponds to the `BYTERANGE` attribute.
     ///
     /// See [`Part`] for a link to the HLS documentation for this attribute.
-    byterange: Option<PartByterange>,
+    byterange: Option<DecimalIntegerRange>,
     /// Corresponds to the `GAP` attribute.
     ///
     /// See [`Part`] for a link to the HLS documentation for this attribute.
@@ -111,7 +111,7 @@ impl<'a, UriStatus, DurationStatus> PartBuilder<'a, UriStatus, DurationStatus> {
         self
     }
     /// Add the provided `byterange` to the attributes built into `Part`.
-    pub fn with_byterange(mut self, byterange: PartByterange) -> Self {
+    pub fn with_byterange(mut self, byterange: DecimalIntegerRange) -> Self {
         self.attribute_list.byterange = Some(byterange);
         self
     }
@@ -135,31 +135,10 @@ pub struct Part<'a> {
     uri: Cow<'a, str>,
     duration: f64,
     independent: LazyAttribute<'a, bool>,
-    byterange: LazyAttribute<'a, PartByterange>,
+    byterange: LazyAttribute<'a, DecimalIntegerRange>,
     gap: LazyAttribute<'a, bool>,
     output_line: Cow<'a, [u8]>, // Used with Writer
     output_line_is_dirty: bool, // If should recalculate output_line
-}
-/// Corresponds to the value of the `#EXT-X-PART:BYTERANGE` attribute.
-#[derive(Debug, PartialEq, Clone, Copy)]
-pub struct PartByterange {
-    /// Corresponds to the length component in the value (`n` in `<n>[@<o>]`).
-    ///
-    /// See [`Part`] for a link to the HLS documentation for this attribute.
-    pub length: u64,
-    /// Corresponds to the offset component in the value (`o` in `<n>[@<o>]`).
-    ///
-    /// See [`Part`] for a link to the HLS documentation for this attribute.
-    pub offset: Option<u64>,
-}
-impl Display for PartByterange {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Some(offset) = self.offset {
-            write!(f, "{}@{}", self.length, offset)
-        } else {
-            write!(f, "{}", self.length)
-        }
-    }
 }
 
 impl<'a> PartialEq for Part<'a> {
@@ -243,12 +222,12 @@ impl<'a> Part<'a> {
     ///
     /// For example, we could construct a `Part` as such:
     /// ```
-    /// # use quick_m3u8::tag::hls::{Part, PartByterange};
+    /// # use quick_m3u8::tag::{DecimalIntegerRange, hls::Part};
     /// let part = Part::builder()
     ///     .with_uri("part.100.0.mp4")
     ///     .with_duration(0.5)
     ///     .with_independent()
-    ///     .with_byterange(PartByterange { length: 1024, offset: None })
+    ///     .with_byterange(DecimalIntegerRange { length: 1024, offset: None })
     ///     .finish();
     /// ```
     /// Note that the `finish` method is only callable if the builder has set `uri` AND `duration`.
@@ -299,21 +278,12 @@ impl<'a> Part<'a> {
     /// Corresponds to the `BYTERANGE` attribute.
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
-    pub fn byterange(&self) -> Option<PartByterange> {
+    pub fn byterange(&self) -> Option<DecimalIntegerRange> {
         match &self.byterange {
             LazyAttribute::UserDefined(b) => Some(*b),
-            LazyAttribute::Unparsed(v) => v.quoted().and_then(|range| {
-                let mut parts = range.splitn(2, '@');
-                let Some(Ok(length)) = parts.next().map(str::parse::<u64>) else {
-                    return None;
-                };
-                let offset = match parts.next().map(str::parse::<u64>) {
-                    Some(Ok(d)) => Some(d),
-                    None => None,
-                    Some(Err(_)) => return None,
-                };
-                Some(PartByterange { length, offset })
-            }),
+            LazyAttribute::Unparsed(v) => v
+                .quoted()
+                .and_then(|s| DecimalIntegerRange::try_from(s).ok()),
             LazyAttribute::None => None,
         }
     }
@@ -355,7 +325,7 @@ impl<'a> Part<'a> {
     /// Sets the `BYTERANGE` attribute.
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
-    pub fn set_byterange(&mut self, byterange: PartByterange) {
+    pub fn set_byterange(&mut self, byterange: DecimalIntegerRange) {
         self.byterange.set(byterange);
         self.output_line_is_dirty = true;
     }
@@ -443,7 +413,7 @@ mod tests {
                 .with_uri("part.1.0.mp4")
                 .with_duration(0.5)
                 .with_independent()
-                .with_byterange(PartByterange {
+                .with_byterange(DecimalIntegerRange {
                     length: 1024,
                     offset: None
                 })
@@ -462,7 +432,7 @@ mod tests {
                 .with_uri("part.1.0.mp4")
                 .with_duration(0.5)
                 .with_independent()
-                .with_byterange(PartByterange { length: 1024, offset: Some(512) })
+                .with_byterange(DecimalIntegerRange { length: 1024, offset: Some(512) })
                 .with_gap()
                 .finish()
                 .into_inner()
@@ -474,14 +444,14 @@ mod tests {
         Part::builder()
             .with_uri("part.1.0.mp4")
             .with_duration(0.5)
-            .with_byterange(PartByterange { length: 1024, offset: Some(512) })
+            .with_byterange(DecimalIntegerRange { length: 1024, offset: Some(512) })
             .finish(),
         (uri, "example", @Attr="URI=\"example\""),
         (duration, 1.0, @Attr="DURATION=1"),
         (independent, true, @Attr="INDEPENDENT=YES"),
         (
             byterange,
-            @Option PartByterange { length: 100, offset: Some(200) },
+            @Option DecimalIntegerRange { length: 100, offset: Some(200) },
             @Attr="BYTERANGE=\"100@200\""
         ),
         (gap, true, @Attr="GAP=YES")

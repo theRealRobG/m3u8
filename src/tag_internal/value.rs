@@ -107,28 +107,24 @@ impl<'a> TagValue<'a> {
     ///
     /// For example:
     /// ```
+    /// # use quick_m3u8::tag::DecimalIntegerRange;
     /// let tag = quick_m3u8::custom_parsing::tag::parse("#EXT-X-EXAMPLE:1024@512")?.parsed;
     /// if let Some(value) = tag.value() {
-    ///     assert_eq!((1024, Some(512)), value.try_as_decimal_integer_range()?);
+    ///     assert_eq!(
+    ///         DecimalIntegerRange {
+    ///             length: 1024,
+    ///             offset: Some(512)
+    ///         },
+    ///         value.try_as_decimal_integer_range()?
+    ///     );
     /// }
     /// # else { panic!("unexpected empty value" ); }
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     pub fn try_as_decimal_integer_range(
         &self,
-    ) -> Result<(u64, Option<u64>), ParseDecimalIntegerRangeError> {
-        match memchr(b'@', self.0) {
-            Some(n) => {
-                let length = parse_u64(&self.0[..n])
-                    .map_err(ParseDecimalIntegerRangeError::InvalidLength)?;
-                let offset = parse_u64(&self.0[(n + 1)..])
-                    .map_err(ParseDecimalIntegerRangeError::InvalidOffset)?;
-                Ok((length, Some(offset)))
-            }
-            None => parse_u64(self.0)
-                .map(|length| (length, None))
-                .map_err(ParseDecimalIntegerRangeError::InvalidLength),
-        }
+    ) -> Result<DecimalIntegerRange, ParseDecimalIntegerRangeError> {
+        DecimalIntegerRange::try_from(self.0)
     }
 
     /// Attempt to convert the tag value bytes into a playlist type.
@@ -806,6 +802,69 @@ impl TryFrom<&str> for DecimalResolution {
     }
 }
 
+/// Represents the decimal-integer-range that is found in several places, from tag values to
+/// attribute values, and has structure `<n>[@<o>]`.
+///
+/// For example:
+/// ```
+/// # use quick_m3u8::tag::DecimalIntegerRange;
+/// assert_eq!(
+///     DecimalIntegerRange {
+///         length: 1024,
+///         offset: Some(512)
+///     },
+///     DecimalIntegerRange::try_from("1024@512")?
+/// );
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub struct DecimalIntegerRange {
+    /// Corresponds to the length component in the value (`n` in `<n>@<o>`).
+    pub length: u64,
+    /// Corresponds to the offset component in the value (`o` in `<n>@<o>`).
+    pub offset: Option<u64>,
+}
+impl Display for DecimalIntegerRange {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(offset) = self.offset {
+            write!(f, "{}@{}", self.length, offset)
+        } else {
+            write!(f, "{}", self.length)
+        }
+    }
+}
+impl TryFrom<&[u8]> for DecimalIntegerRange {
+    type Error = ParseDecimalIntegerRangeError;
+
+    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+        match memchr(b'@', value) {
+            Some(n) => {
+                let length =
+                    parse_u64(&value[..n]).map_err(ParseDecimalIntegerRangeError::InvalidLength)?;
+                let offset = parse_u64(&value[(n + 1)..])
+                    .map_err(ParseDecimalIntegerRangeError::InvalidOffset)?;
+                Ok(Self {
+                    length,
+                    offset: Some(offset),
+                })
+            }
+            None => parse_u64(value)
+                .map(|length| Self {
+                    length,
+                    offset: None,
+                })
+                .map_err(ParseDecimalIntegerRangeError::InvalidLength),
+        }
+    }
+}
+impl TryFrom<&str> for DecimalIntegerRange {
+    type Error = ParseDecimalIntegerRangeError;
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        Self::try_from(s.as_bytes())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::date_time;
@@ -831,7 +890,13 @@ mod tests {
     #[test]
     fn decimal_integer_range() {
         let value = TagValue(b"42@42");
-        assert_eq!(Ok((42, Some(42))), value.try_as_decimal_integer_range());
+        assert_eq!(
+            Ok(DecimalIntegerRange {
+                length: 42,
+                offset: Some(42)
+            }),
+            value.try_as_decimal_integer_range()
+        );
     }
 
     #[test]
