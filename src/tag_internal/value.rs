@@ -12,7 +12,7 @@ use crate::{
     },
     utils::parse_u64,
 };
-use memchr::{memchr, memchr_iter, memchr3_iter};
+use memchr::{memchr, memchr3_iter};
 use std::{borrow::Cow, collections::HashMap, fmt::Display};
 
 /// A wrapper struct that provides many convenience methods for converting a tag value into a more
@@ -533,15 +533,7 @@ impl<'a> UnquotedAttributeValue<'a> {
     pub fn try_as_decimal_resolution(
         &self,
     ) -> Result<DecimalResolution, DecimalResolutionParseError> {
-        let mut x_iter = memchr_iter(b'x', self.0);
-        let Some(i) = x_iter.next() else {
-            return Err(DecimalResolutionParseError::MissingHeight);
-        };
-        let width =
-            parse_u64(&self.0[..i]).map_err(|_| DecimalResolutionParseError::InvalidWidth)?;
-        let height = parse_u64(&self.0[(i + 1)..])
-            .map_err(|_| DecimalResolutionParseError::InvalidHeight)?;
-        Ok(DecimalResolution { width, height })
+        DecimalResolution::try_from(self.0)
     }
 
     /// Attempt to convert the attribute value bytes into a UTF-8 string.
@@ -792,24 +784,25 @@ impl Display for DecimalResolution {
         write!(f, "{}x{}", self.width, self.height)
     }
 }
+impl TryFrom<&[u8]> for DecimalResolution {
+    type Error = DecimalResolutionParseError;
+
+    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+        let Some(i) = memchr(b'x', value) else {
+            return Err(DecimalResolutionParseError::MissingSeparator);
+        };
+        let width =
+            parse_u64(&value[..i]).map_err(|_| DecimalResolutionParseError::InvalidWidth)?;
+        let height =
+            parse_u64(&value[(i + 1)..]).map_err(|_| DecimalResolutionParseError::InvalidHeight)?;
+        Ok(DecimalResolution { width, height })
+    }
+}
 impl TryFrom<&str> for DecimalResolution {
     type Error = DecimalResolutionParseError;
 
     fn try_from(s: &str) -> Result<Self, Self::Error> {
-        let mut split = s.splitn(2, 'x');
-        let Some(width_str) = split.next() else {
-            return Err(DecimalResolutionParseError::MissingWidth);
-        };
-        let width = width_str
-            .parse()
-            .map_err(|_| DecimalResolutionParseError::InvalidWidth)?;
-        let Some(height_str) = split.next() else {
-            return Err(DecimalResolutionParseError::MissingHeight);
-        };
-        let height = height_str
-            .parse()
-            .map_err(|_| DecimalResolutionParseError::InvalidHeight)?;
-        Ok(DecimalResolution { width, height })
+        Self::try_from(s.as_bytes())
     }
 }
 
