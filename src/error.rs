@@ -714,21 +714,18 @@ impl Error for UnrecognizedEnumerationError<'_> {}
 /// An error found when trying to parse a decimal resolution (`<width>x<height>`).
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum DecimalResolutionParseError {
-    /// The width component was missing.
-    MissingWidth,
     /// The width component was not a valid integer.
     InvalidWidth,
-    /// The height component was missing.
-    MissingHeight,
+    /// The `x` separator character was missing.
+    MissingSeparator,
     /// The height component was not a valid integer.
     InvalidHeight,
 }
 impl Display for DecimalResolutionParseError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::MissingWidth => write!(f, "missing width"),
             Self::InvalidWidth => write!(f, "not a number for width"),
-            Self::MissingHeight => write!(f, "missing height"),
+            Self::MissingSeparator => write!(f, "missing `x` separator"),
             Self::InvalidHeight => write!(f, "not a number for height"),
         }
     }
