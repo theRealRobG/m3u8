@@ -23,6 +23,16 @@ The format is based on [Keep a Changelog], and this project adheres to
   changed from `Option<&str>` to `Option<AllowedCpc<'_>>`. This should
   always have been the case; however, when adding this type for
   `StreamInf`, the `IFrameStreamInf` was forgotten about.
+- BREAKING CHANGE: `DecimalResolutionParseError` removed the
+  `MissingWidth` case, and renamed `MissingHeight` to `MissingSeparator`
+  to better indicate the source of the error (the `x` separator not
+  found).
+- BREAKING CHANGE: `PartByterange` was removed in favor of the new more
+  common type `DecimalIntegerRange` that is used for all types following
+  the same scheme (`<n>[@<o>]`). This allowed for the parsing to be
+  consolidated, and now, the `TryFrom<&str>` methods are public, so
+  users of the library do not have to reimplement the parsing if they
+  want to use the types directly with custom data.
 
 ## [0.6.0] - 2025-08-19
 
