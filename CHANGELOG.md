@@ -10,6 +10,15 @@ The format is based on [Keep a Changelog], and this project adheres to
 
 ## [Unreleased]
 
+### Added
+- Better support for HLS Interstitial attributes in EXT-X-DATERANGE via
+  a dedicated struct that holds all the extension properties, and enums
+  for all the enumerated string values that have been defined in
+  Appendix D.
+- Better support for Preloading HLS Date Range Resources (Appendix F)
+  via a dedicated struct that holds all the extension properties with
+  friendlier types (`&str` rather than `ExtensionAttributeValue`).
+
 ### Changed
 
 - BREAKING CHANGE: `Daterange::start_date` return type has been changed
