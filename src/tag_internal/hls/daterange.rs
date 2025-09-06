@@ -68,6 +68,579 @@ const PRE: &str = "PRE";
 const POST: &str = "POST";
 const ONCE: &str = "ONCE";
 
+/// Corresponds to the `#EXT-X-DATERANGE:X-SNAP` attribute defined in the
+/// `com.apple.hls.interstitial` extension attributes defined in [Appendix D].
+///
+/// [Appendix D]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-18#appendix-D
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Snap {
+    /// If the list contains OUT then the client SHOULD locate the segment boundary closest to the
+    /// START-DATE of the interstitial in the Media Playlist of the primary content and transition
+    /// to the interstitial at that boundary. If more than one Media Playlist is contributing to
+    /// playback (audio plus video for example), the client SHOULD transition at the earliest
+    /// segment boundary.
+    Out,
+    /// If the list contains IN then the client SHOULD locate the segment boundary closest to the
+    /// scheduled resumption point from the interstitial in the Media Playlist of the primary
+    /// content and resume playback of primary content at that boundary. If more than one Media
+    /// Playlist is contributing to playback, the client SHOULD transition at the latest segment
+    /// boundary.
+    In,
+}
+impl<'a> TryFrom<&'a str> for Snap {
+    type Error = UnrecognizedEnumerationError<'a>;
+    fn try_from(value: &'a str) -> Result<Self, Self::Error> {
+        match value {
+            OUT => Ok(Self::Out),
+            IN => Ok(Self::In),
+            _ => Err(UnrecognizedEnumerationError::new(value)),
+        }
+    }
+}
+impl Display for Snap {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_cow())
+    }
+}
+impl AsStaticCow for Snap {
+    fn as_cow(&self) -> Cow<'static, str> {
+        match self {
+            Self::Out => Cow::Borrowed(OUT),
+            Self::In => Cow::Borrowed(IN),
+        }
+    }
+}
+impl From<Snap> for Cow<'_, str> {
+    fn from(value: Snap) -> Self {
+        value.as_cow()
+    }
+}
+impl From<Snap> for EnumeratedString<'_, Snap> {
+    fn from(value: Snap) -> Self {
+        Self::Known(value)
+    }
+}
+const OUT: &str = "OUT";
+const IN: &str = "IN";
+
+/// Corresponds to the `#EXT-X-DATERANGE:X-RESTRICT` attribute defined in the
+/// `com.apple.hls.interstitial` extension attributes defined in [Appendix D].
+///
+/// [Appendix D]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-18#appendix-D
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Restrict {
+    /// If the list contains SKIP then while the interstitial is being played, the client MUST NOT
+    /// allow the user to seek forward from the current playhead position or set the rate to greater
+    /// than the regular playback rate until playback reaches the end of the interstitial.
+    Skip,
+    /// If the list contains JUMP then the client MUST NOT allow the user to seek from a position in
+    /// the primary asset earlier than the START-DATE attribute to a position after it without first
+    /// playing the interstitial asset, even if the interstitial at START-DATE was played through
+    /// earlier. If the user attempts to seek across more than one interstitial, the client SHOULD
+    /// choose at least one interstitial to play before allowing the seek to complete.
+    Jump,
+}
+impl<'a> TryFrom<&'a str> for Restrict {
+    type Error = UnrecognizedEnumerationError<'a>;
+    fn try_from(value: &'a str) -> Result<Self, Self::Error> {
+        match value {
+            SKIP => Ok(Self::Skip),
+            JUMP => Ok(Self::Jump),
+            _ => Err(UnrecognizedEnumerationError::new(value)),
+        }
+    }
+}
+impl Display for Restrict {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_cow())
+    }
+}
+impl AsStaticCow for Restrict {
+    fn as_cow(&self) -> Cow<'static, str> {
+        match self {
+            Self::Skip => Cow::Borrowed(SKIP),
+            Self::Jump => Cow::Borrowed(JUMP),
+        }
+    }
+}
+impl From<Restrict> for Cow<'_, str> {
+    fn from(value: Restrict) -> Self {
+        value.as_cow()
+    }
+}
+impl From<Restrict> for EnumeratedString<'_, Restrict> {
+    fn from(value: Restrict) -> Self {
+        Self::Known(value)
+    }
+}
+const SKIP: &str = "SKIP";
+const JUMP: &str = "JUMP";
+
+/// Corresponds to the `#EXT-X-DATERANGE:X-TIMELINE-OCCUPIES` attribute defined in the
+/// `com.apple.hls.interstitial` extension attributes defined in [Appendix D].
+///
+/// [Appendix D]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-18#appendix-D
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum TimelineOccupies {
+    /// Indicates that the interstitial should be represented in a timeline UI as a single point.
+    Point,
+    /// Indicates that the interstitial should be represented in a timeline UI as a range.
+    Range,
+}
+impl<'a> TryFrom<&'a str> for TimelineOccupies {
+    type Error = UnrecognizedEnumerationError<'a>;
+    fn try_from(value: &'a str) -> Result<Self, Self::Error> {
+        match value {
+            POINT => Ok(Self::Point),
+            RANGE => Ok(Self::Range),
+            _ => Err(UnrecognizedEnumerationError::new(value)),
+        }
+    }
+}
+impl Display for TimelineOccupies {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_cow())
+    }
+}
+impl AsStaticCow for TimelineOccupies {
+    fn as_cow(&self) -> Cow<'static, str> {
+        match self {
+            Self::Point => Cow::Borrowed(POINT),
+            Self::Range => Cow::Borrowed(RANGE),
+        }
+    }
+}
+impl From<TimelineOccupies> for Cow<'_, str> {
+    fn from(value: TimelineOccupies) -> Self {
+        value.as_cow()
+    }
+}
+impl From<TimelineOccupies> for EnumeratedString<'_, TimelineOccupies> {
+    fn from(value: TimelineOccupies) -> Self {
+        Self::Known(value)
+    }
+}
+const POINT: &str = "POINT";
+const RANGE: &str = "RANGE";
+
+/// Corresponds to the `#EXT-X-DATERANGE:X-TIMELINE-STYLE` attribute defined in the
+/// `com.apple.hls.interstitial` extension attributes defined in [Appendix D].
+///
+/// [Appendix D]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-18#appendix-D
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum TimelineStyle {
+    /// Indicates that the interstitial is intended to be presented in a timeline UI as being
+    /// distinct from primary content.
+    Highlight,
+    /// Indicates that the interstitial is intended to be presented in a timeline UI as not
+    /// differentiated from primary content.
+    Primary,
+}
+impl<'a> TryFrom<&'a str> for TimelineStyle {
+    type Error = UnrecognizedEnumerationError<'a>;
+    fn try_from(value: &'a str) -> Result<Self, Self::Error> {
+        match value {
+            HIGHLIGHT => Ok(Self::Highlight),
+            PRIMARY => Ok(Self::Primary),
+            _ => Err(UnrecognizedEnumerationError::new(value)),
+        }
+    }
+}
+impl Display for TimelineStyle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_cow())
+    }
+}
+impl AsStaticCow for TimelineStyle {
+    fn as_cow(&self) -> Cow<'static, str> {
+        match self {
+            Self::Highlight => Cow::Borrowed(HIGHLIGHT),
+            Self::Primary => Cow::Borrowed(PRIMARY),
+        }
+    }
+}
+impl From<TimelineStyle> for Cow<'_, str> {
+    fn from(value: TimelineStyle) -> Self {
+        value.as_cow()
+    }
+}
+impl From<TimelineStyle> for EnumeratedString<'_, TimelineStyle> {
+    fn from(value: TimelineStyle) -> Self {
+        Self::Known(value)
+    }
+}
+const HIGHLIGHT: &str = "HIGHLIGHT";
+const PRIMARY: &str = "PRIMARY";
+
+/// The value of the `EXT-X-DATERANGE:CLASS` attribute that indicates that the daterange should be
+/// treated as per the definitions within [Interstitials].
+///
+/// [Interstitials]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-18#appendix-D
+pub const INTERSTITIAL_CLASS: &str = "com.apple.hls.interstitial";
+/// Corresponds to the attributes defined for HLS Interstitials in [Appnedix D].
+///
+/// [Appendix D]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-18#appendix-D
+#[derive(Debug, Clone)]
+pub struct InterstitialExtensionAttributes<'a, 'b> {
+    asset_uri: &'b LazyAttribute<'a, ExtensionAttributeValue<'a>>,
+    asset_list: &'b LazyAttribute<'a, ExtensionAttributeValue<'a>>,
+    resume_offset: &'b LazyAttribute<'a, ExtensionAttributeValue<'a>>,
+    playout_limit: &'b LazyAttribute<'a, ExtensionAttributeValue<'a>>,
+    snap: &'b LazyAttribute<'a, ExtensionAttributeValue<'a>>,
+    restrict: &'b LazyAttribute<'a, ExtensionAttributeValue<'a>>,
+    content_may_vary: &'b LazyAttribute<'a, ExtensionAttributeValue<'a>>,
+    timeline_occupies: &'b LazyAttribute<'a, ExtensionAttributeValue<'a>>,
+    timeline_style: &'b LazyAttribute<'a, ExtensionAttributeValue<'a>>,
+    skip_control_offset: &'b LazyAttribute<'a, ExtensionAttributeValue<'a>>,
+    skip_control_duration: &'b LazyAttribute<'a, ExtensionAttributeValue<'a>>,
+    skip_control_label_id: &'b LazyAttribute<'a, ExtensionAttributeValue<'a>>,
+}
+impl<'a, 'b> PartialEq for InterstitialExtensionAttributes<'a, 'b> {
+    fn eq(&self, other: &Self) -> bool {
+        self.asset_uri() == other.asset_uri()
+            && self.asset_list() == other.asset_list()
+            && self.resume_offset() == other.resume_offset()
+            && self.playout_limit() == other.playout_limit()
+            && self.snap() == other.snap()
+            && self.restrict() == other.restrict()
+            && self.content_may_vary() == other.content_may_vary()
+            && self.timeline_occupies() == other.timeline_occupies()
+            && self.timeline_style() == other.timeline_style()
+            && self.skip_control_offset() == other.skip_control_offset()
+            && self.skip_control_duration() == other.skip_control_duration()
+            && self.skip_control_label_id() == other.skip_control_label_id()
+    }
+}
+macro_rules! interstitial_getter {
+    (@Doc = $doc:literal $name:ident @String) => {
+        interstitial_getter!(@Private $name, &str, @String, $doc);
+    };
+    (@Doc = $doc:literal $name:ident @EnumeratedString<$type:ty>) => {
+        interstitial_getter!(@Private $name, EnumeratedString<'_, $type>, @EnumeratedString, $doc);
+    };
+    (@Doc = $doc:literal $name:ident @EnumeratedStringList<$type:ty>) => {
+        interstitial_getter!(
+            @Private $name,
+            EnumeratedStringList<'_, $type>,
+            @EnumeratedStringList,
+            $doc
+        );
+    };
+    (@Doc = $doc:literal $name:ident @Number) => {
+        interstitial_getter!(@Private $name, f64, @Number, $doc);
+    };
+    (
+        @Private $name:ident,
+        $type:ty,
+        @$type_ident:ident,
+        $doc:literal
+    ) => {
+        #[doc = $doc]
+        pub fn $name(&self) -> Option<$type> {
+            #[allow(unused_variables)]
+            match self.$name {
+                LazyAttribute::UserDefined(v) => match v {
+                    ExtensionAttributeValue::QuotedString(cow) => ext_get_quoted!(@$type_ident cow),
+                    ExtensionAttributeValue::HexadecimalSequence(_) => None,
+                    ExtensionAttributeValue::SignedDecimalFloatingPoint(d) => ext_get_float!(@$type_ident d),
+                },
+                LazyAttribute::Unparsed(v) => get_lazy_unparsed!(@$type_ident v),
+                LazyAttribute::None => None,
+            }
+        }
+    };
+}
+macro_rules! ext_get_quoted {
+    (@String $cow:expr) => {
+        Some($cow.as_ref())
+    };
+    (@EnumeratedString $cow:expr) => {
+        Some(EnumeratedString::from($cow.as_ref()))
+    };
+    (@EnumeratedStringList $cow:expr) => {
+        Some(EnumeratedStringList::from($cow.as_ref()))
+    };
+    (@Number $cow:expr) => {
+        None
+    };
+}
+macro_rules! ext_get_float {
+    (@String $d:expr) => {
+        None
+    };
+    (@EnumeratedString $d:expr) => {
+        None
+    };
+    (@EnumeratedStringList $d:expr) => {
+        None
+    };
+    (@Number $d:expr) => {
+        Some(*$d)
+    };
+}
+macro_rules! get_lazy_unparsed {
+    (@String $v:expr) => {
+        $v.quoted()
+    };
+    (@EnumeratedString $v:expr) => {
+        $v.quoted().map(EnumeratedString::from)
+    };
+    (@EnumeratedStringList $v:expr) => {
+        $v.quoted().map(EnumeratedStringList::from)
+    };
+    (@Number $v:expr) => {
+        $v.unquoted()
+            .and_then(|s| s.try_as_decimal_floating_point().ok())
+    };
+}
+impl<'a, 'b> InterstitialExtensionAttributes<'a, 'b> {
+    interstitial_getter!(@Doc = "Corresponds to the `X-ASSET-URI` attribute."
+        asset_uri @String);
+    interstitial_getter!(@Doc = "Corresponds to the `X-ASSET-LIST` attribute."
+        asset_list @String);
+    interstitial_getter!(@Doc = "Corresponds to the `X-RESUME-OFFSET` attribute."
+        resume_offset @Number);
+    interstitial_getter!(@Doc = "Corresponds to the `X-PLAYOUT-LIMIT` attribute."
+        playout_limit @Number);
+    interstitial_getter!(@Doc = "Corresponds to the `X-SNAP` attribute."
+        snap @EnumeratedStringList<Snap>);
+    interstitial_getter!(@Doc = "Corresponds to the `X-RESTRICT` attribute."
+        restrict @EnumeratedStringList<Restrict>);
+    interstitial_getter!(@Doc = "Corresponds to the `X-TIMELINE-OCCUPIES` attribute."
+        timeline_occupies @EnumeratedString<TimelineOccupies>);
+    interstitial_getter!(@Doc = "Corresponds to the `X-TIMELINE-STYLE` attribute."
+        timeline_style @EnumeratedString<TimelineStyle>);
+    interstitial_getter!(@Doc = "Corresponds to the `X-SKIP-CONTROL-LABEL-ID` attribute."
+        skip_control_label_id @String);
+    // Note, that while the documentation indicates that X-SKIP-CONTROL-OFFSET and
+    // X-SKIP-CONTROL-DURATION are both "decimal integer", and so should be represented as a `u64`,
+    // we keep them as `f64` because the spec also states that the extension attribute value "MUST
+    // have the form of a quoted-string, a hexadecimal-sequence, or signed-decimal-floating-point."
+    // Since the user can set `f64` when constructing `ExtensionAttributeValue`, we avoid any
+    // truncation of the value in the case that a float has been set, and leave that repsonsibility
+    // to the user.
+    interstitial_getter!(@Doc = "Corresponds to the `X-SKIP-CONTROL-OFFSET` attribute."
+        skip_control_offset @Number);
+    interstitial_getter!(@Doc = "Corresponds to the `X-SKIP-CONTROL-DURATION` attribute."
+        skip_control_duration @Number);
+
+    // The X-CONTENT-MAY-VARY is different enough that I didn't want to complicate the macro for it,
+    // especialy considering it is just one case.
+
+    /// Corresponds to the `X-CONTENT-MAY-VARY` attribute.
+    pub fn content_may_vary(&self) -> bool {
+        match self.content_may_vary {
+            LazyAttribute::UserDefined(v) => match v {
+                ExtensionAttributeValue::QuotedString(cow) => cow.as_bytes() == YES,
+                ExtensionAttributeValue::HexadecimalSequence(_) => true,
+                ExtensionAttributeValue::SignedDecimalFloatingPoint(_) => true,
+            },
+            LazyAttribute::Unparsed(v) => v.quoted().map(str::as_bytes).unwrap_or(YES) == YES,
+            LazyAttribute::None => true,
+        }
+    }
+}
+impl<'a, 'b> From<&'b [(Cow<'a, str>, LazyAttribute<'a, ExtensionAttributeValue<'a>>)]>
+    for InterstitialExtensionAttributes<'a, 'b>
+{
+    fn from(
+        attributes: &'b [(Cow<'a, str>, LazyAttribute<'a, ExtensionAttributeValue<'a>>)],
+    ) -> Self {
+        let mut asset_uri = &LazyAttribute::None;
+        let mut asset_list = &LazyAttribute::None;
+        let mut resume_offset = &LazyAttribute::None;
+        let mut playout_limit = &LazyAttribute::None;
+        let mut snap = &LazyAttribute::None;
+        let mut restrict = &LazyAttribute::None;
+        let mut content_may_vary = &LazyAttribute::None;
+        let mut timeline_occupies = &LazyAttribute::None;
+        let mut timeline_style = &LazyAttribute::None;
+        let mut skip_control_offset = &LazyAttribute::None;
+        let mut skip_control_duration = &LazyAttribute::None;
+        let mut skip_control_label_id = &LazyAttribute::None;
+        for (key, value) in attributes {
+            match key.as_ref() {
+                X_ASSET_URI => asset_uri = value,
+                X_ASSET_LIST => asset_list = value,
+                X_RESUME_OFFSET => resume_offset = value,
+                X_PLAYOUT_LIMIT => playout_limit = value,
+                X_SNAP => snap = value,
+                X_RESTRICT => restrict = value,
+                X_CONTENT_MAY_VARY => content_may_vary = value,
+                X_TIMELINE_OCCUPIES => timeline_occupies = value,
+                X_TIMELINE_STYLE => timeline_style = value,
+                X_SKIP_CONTROL_OFFSET => skip_control_offset = value,
+                X_SKIP_CONTROL_DURATION => skip_control_duration = value,
+                X_SKIP_CONTROL_LABEL_ID => skip_control_label_id = value,
+                _ => (),
+            }
+        }
+        Self {
+            asset_uri,
+            asset_list,
+            resume_offset,
+            playout_limit,
+            snap,
+            restrict,
+            content_may_vary,
+            timeline_occupies,
+            timeline_style,
+            skip_control_offset,
+            skip_control_duration,
+            skip_control_label_id,
+        }
+    }
+}
+/// Corresponds to the attributes defined for HLS Interstitials in [Appnedix D].
+///
+/// This provides mutable access to the properties. Setting or unsetting values here will set/unset
+/// them on the [`Daterange`] from which this was derived from.
+///
+/// [Appendix D]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-18#appendix-D
+#[derive(Debug, PartialEq)]
+pub struct InterstitialExtensionAttributesMut<'a, 'b> {
+    daterange: &'b mut Daterange<'a>,
+}
+impl<'a, 'b> InterstitialExtensionAttributesMut<'a, 'b> {
+    /// Provides access to the existing values of the interstitial attributes.
+    pub fn attrs(&'b self) -> InterstitialExtensionAttributes<'a, 'b> {
+        InterstitialExtensionAttributes::from(self.daterange.extension_attributes.as_slice())
+    }
+}
+macro_rules! interstitial_setter {
+    (@Doc = $doc:literal $method:ident @String, $name:expr) => {
+        interstitial_setter!(
+            @Private $method,
+            impl Into<Cow<'a, str>>,
+            @Into,
+            $name,
+            QuotedString,
+            @Doc = $doc
+        );
+    };
+    (@Doc = $doc:literal $method:ident @Number, $name:expr) => {
+        interstitial_setter!(
+            @Private $method,
+            f64,
+            @Ident,
+            $name,
+            SignedDecimalFloatingPoint,
+            @Doc = $doc
+        );
+    };
+    (@Doc = $doc:literal $method:ident @Bool, $name:expr) => {
+        interstitial_setter!(
+            @Private $method,
+            bool,
+            @ThenSome,
+            $name,
+            QuotedString,
+            @Doc = $doc
+        );
+    };
+    (
+        @Private $method:ident,
+        $type:ty,
+        @$value_conversion:ident,
+        $name:expr,
+        $ext_attr:ident,
+        @Doc = $doc:literal
+    ) => {
+        #[doc = $doc]
+        pub fn $method(&mut self, value: $type) {
+            #[allow(clippy::redundant_locals)]
+            let value = convert_value!(@$value_conversion value);
+            self.daterange.set_extension_attribute(
+                $name,
+                ExtensionAttributeValue::$ext_attr(value)
+            );
+        }
+    };
+}
+macro_rules! convert_value {
+    (@Into $value:expr) => {
+        $value.into()
+    };
+    (@ThenSome $value:expr) => {
+        $value
+            .then_some(Cow::Borrowed("YES"))
+            .unwrap_or(Cow::Borrowed("NO"))
+    };
+    (@Ident $value:expr) => {
+        $value
+    };
+}
+macro_rules! interstitial_unsetter {
+    (@Doc = $doc:literal $method:ident, $name:expr) => {
+        #[doc = $doc]
+        pub fn $method(&mut self) {
+            self.daterange.unset_extension_attribute($name);
+        }
+    };
+}
+impl<'a, 'b> InterstitialExtensionAttributesMut<'a, 'b> {
+    interstitial_setter!(@Doc = "Sets the `X-ASSET-URI` attribute."
+        set_asset_uri @String, X_ASSET_URI);
+    interstitial_unsetter!(@Doc = "Unsets the `X-ASSET-URI` attribute."
+        unset_asset_uri, X_ASSET_URI);
+    interstitial_setter!(@Doc = "Sets the `X-ASSET-LIST` attribute."
+        set_asset_list @String, X_ASSET_LIST);
+    interstitial_unsetter!(@Doc = "Unsets the `X-ASSET-LIST` attribute."
+        unset_asset_list, X_ASSET_LIST);
+    interstitial_setter!(@Doc = "Sets the `X-RESUME-OFFSET` attribute."
+        set_resume_offset @Number, X_RESUME_OFFSET);
+    interstitial_unsetter!(@Doc = "Unsets the `X-RESUME-OFFSET` attribute."
+        unset_resume_offset, X_RESUME_OFFSET);
+    interstitial_setter!(@Doc = "Sets the `X-PLAYOUT-LIMIT` attribute."
+        set_playout_limit @Number, X_PLAYOUT_LIMIT);
+    interstitial_unsetter!(@Doc = "Unsets the `X-PLAYOUT-LIMIT` attribute."
+        unset_playout_limit, X_PLAYOUT_LIMIT);
+    interstitial_setter!(@Doc = "Sets the `X-SNAP` attribute."
+        set_snap @String, X_SNAP);
+    interstitial_unsetter!(@Doc = "Unsets the `X-SNAP` attribute."
+        unset_snap, X_SNAP);
+    interstitial_setter!(@Doc = "Sets the `X-RESTRICT` attribute."
+        set_restrict @String, X_RESTRICT);
+    interstitial_unsetter!(@Doc = "Unsets the `X-RESTRICT` attribute."
+        unset_restrict, X_RESTRICT);
+    interstitial_setter!(@Doc = "Sets the `X-CONTENT-MAY-VARY` attribute."
+        set_content_may_vary @Bool, X_CONTENT_MAY_VARY);
+    interstitial_unsetter!(@Doc = "Unsets the `X-CONTENT-MAY-VARY` attribute."
+        unset_content_may_vary, X_CONTENT_MAY_VARY);
+    interstitial_setter!(@Doc = "Sets the `X-TIMELINE-OCCUPIES` attribute."
+        set_timeline_occupies @String, X_TIMELINE_OCCUPIES);
+    interstitial_unsetter!(@Doc = "Unsets the `X-TIMELINE-OCCUPIES` attribute."
+        unset_timeline_occupies, X_TIMELINE_OCCUPIES);
+    interstitial_setter!(@Doc = "Sets the `X-TIMELINE-STYLE` attribute."
+        set_timeline_style @String, X_TIMELINE_STYLE);
+    interstitial_unsetter!(@Doc = "Unsets the `X-TIMELINE-STYLE` attribute."
+        unset_timeline_style, X_TIMELINE_STYLE);
+    interstitial_setter!(@Doc = "Sets the `X-SKIP-CONTROL-OFFSET` attribute."
+        set_skip_control_offset @Number, X_SKIP_CONTROL_OFFSET);
+    interstitial_unsetter!(@Doc = "Unsets the `X-SKIP-CONTROL-OFFSET` attribute."
+        unset_skip_control_offset, X_SKIP_CONTROL_OFFSET);
+    interstitial_setter!(@Doc = "Sets the `X-SKIP-CONTROL-DURATION` attribute."
+        set_skip_control_duration @Number, X_SKIP_CONTROL_DURATION);
+    interstitial_unsetter!(@Doc = "Unsets the `X-SKIP-CONTROL-DURATION` attribute."
+        unset_skip_control_duration, X_SKIP_CONTROL_DURATION);
+    interstitial_setter!(@Doc = "Sets the `X-SKIP-CONTROL-LABEL-ID` attribute."
+        set_skip_control_label_id @String, X_SKIP_CONTROL_LABEL_ID);
+    interstitial_unsetter!(@Doc = "Unsets the `X-SKIP-CONTROL-LABEL-ID` attribute."
+        unset_skip_control_label_id, X_SKIP_CONTROL_LABEL_ID);
+}
+const X_ASSET_URI: &str = "X-ASSET-URI";
+const X_ASSET_LIST: &str = "X-ASSET-LIST";
+const X_RESUME_OFFSET: &str = "X-RESUME-OFFSET";
+const X_PLAYOUT_LIMIT: &str = "X-PLAYOUT-LIMIT";
+const X_SNAP: &str = "X-SNAP";
+const X_RESTRICT: &str = "X-RESTRICT";
+const X_CONTENT_MAY_VARY: &str = "X-CONTENT-MAY-VARY";
+const X_TIMELINE_OCCUPIES: &str = "X-TIMELINE-OCCUPIES";
+const X_TIMELINE_STYLE: &str = "X-TIMELINE-STYLE";
+const X_SKIP_CONTROL_OFFSET: &str = "X-SKIP-CONTROL-OFFSET";
+const X_SKIP_CONTROL_DURATION: &str = "X-SKIP-CONTROL-DURATION";
+const X_SKIP_CONTROL_LABEL_ID: &str = "X-SKIP-CONTROL-LABEL-ID";
+
 /// The attribute list for the tag (`#EXT-X-DATERANGE:<attribute-list>`).
 ///
 /// See [`Daterange`] for a link to the HLS documentation for this attribute.
@@ -687,6 +1260,41 @@ impl<'a> Daterange<'a> {
             set.insert(key.as_ref());
         }
         set
+    }
+
+    /// Provides typed access to the extension attributes defined for HLS Interstitials in
+    /// [Appendix D].
+    ///
+    /// This will return `None` if the `CLASS` is not set to `com.apple.hls.interstitial`.
+    ///
+    /// [Appendix D]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-18#appendix-D
+    pub fn interstitial_attributes(&self) -> Option<InterstitialExtensionAttributes<'a, '_>> {
+        if self.class() == Some(INTERSTITIAL_CLASS) {
+            Some(InterstitialExtensionAttributes::from(
+                self.extension_attributes.as_slice(),
+            ))
+        } else {
+            None
+        }
+    }
+
+    /// Provides typed access to the extension attributes defined for HLS Interstitials in
+    /// [Appendix D].
+    ///
+    /// This will return `None` if the `CLASS` is not set to `com.apple.hls.interstitial`.
+    ///
+    /// This provides mutable access to the properties. Setting or unsetting values here will set/unset
+    /// them on the [`Daterange`] from which this was derived from.
+    ///
+    /// [Appendix D]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-18#appendix-D
+    pub fn interstitial_attributes_mut(
+        &mut self,
+    ) -> Option<InterstitialExtensionAttributesMut<'a, '_>> {
+        if self.class() == Some(INTERSTITIAL_CLASS) {
+            Some(InterstitialExtensionAttributesMut { daterange: self })
+        } else {
+            None
+        }
     }
 
     /// Corresponds to the `END-ON-NEXT` attribute.
@@ -1343,6 +1951,122 @@ mod tests {
             EnumeratedStringList::from([Cue::Once, Cue::Pre]),
             daterange.cue().unwrap()
         );
+    }
+
+    #[test]
+    fn interstitial_attributes_are_parsed_correctly_and_mutable() {
+        let daterange_line = concat!(
+            "#EXT-X-DATERANGE:ID=\"ad-1\",X-ASSET-LIST=\"ad-1.json\",X-RESUME-OFFSET=10.0,",
+            "X-PLAYOUT-LIMIT=60.0,X-SNAP=\"OUT,IN\",X-RESTRICT=\"JUMP,SKIP\",",
+            "X-CONTENT-MAY-VARY=\"NO\",X-TIMELINE-OCCUPIES=\"RANGE\",X-TIMELINE-STYLE=\"PRIMARY\",",
+            "X-SKIP-CONTROL-OFFSET=10,X-SKIP-CONTROL-DURATION=20,X-SKIP-CONTROL-LABEL-ID=\"skip\""
+        );
+        let tag = crate::custom_parsing::tag::parse(daterange_line)
+            .expect("parsing should succeed")
+            .parsed;
+        let mut daterange = Daterange::try_from(tag).expect("tag should be valid daterange");
+
+        // attrs are None until CLASS is set.
+        assert_eq!(None, daterange.interstitial_attributes());
+        assert_eq!(None, daterange.interstitial_attributes_mut());
+        daterange.set_class(INTERSTITIAL_CLASS);
+        let interstitial_attrs = daterange
+            .interstitial_attributes()
+            .expect("interstitial attrs should be defined");
+
+        assert_eq!(None, interstitial_attrs.asset_uri());
+        assert_eq!(Some("ad-1.json"), interstitial_attrs.asset_list());
+        assert_eq!(Some(10.0), interstitial_attrs.resume_offset());
+        assert_eq!(Some(60.0), interstitial_attrs.playout_limit());
+        assert_eq!(
+            Some(EnumeratedStringList::from([Snap::Out, Snap::In])),
+            interstitial_attrs.snap()
+        );
+        assert_eq!(
+            Some(EnumeratedStringList::from([Restrict::Jump, Restrict::Skip])),
+            interstitial_attrs.restrict()
+        );
+        assert_eq!(false, interstitial_attrs.content_may_vary());
+        assert_eq!(
+            Some(EnumeratedString::from(TimelineOccupies::Range)),
+            interstitial_attrs.timeline_occupies()
+        );
+        assert_eq!(
+            Some(EnumeratedString::from(TimelineStyle::Primary)),
+            interstitial_attrs.timeline_style()
+        );
+        assert_eq!(Some(10.0), interstitial_attrs.skip_control_offset());
+        assert_eq!(Some(20.0), interstitial_attrs.skip_control_duration());
+        assert_eq!(Some("skip"), interstitial_attrs.skip_control_label_id());
+
+        // Test mutation
+        let mut attrs = daterange
+            .interstitial_attributes_mut()
+            .expect("attrs should be defined");
+        attrs.set_asset_uri("ad-1.m3u8");
+        attrs.unset_asset_list();
+        attrs.set_resume_offset(70.0);
+        attrs.set_playout_limit(50.0);
+        attrs.set_snap(Snap::Out);
+        attrs.set_restrict(Restrict::Jump);
+        attrs.unset_content_may_vary();
+        attrs.set_timeline_occupies(TimelineOccupies::Point);
+        attrs.set_timeline_style(TimelineStyle::Highlight);
+        attrs.set_skip_control_offset(20.0);
+        attrs.set_skip_control_duration(10.0);
+        attrs.set_skip_control_label_id("skippy");
+
+        // Test on mutable ref
+        assert_eq!(Some("ad-1.m3u8"), attrs.attrs().asset_uri());
+        assert_eq!(None, attrs.attrs().asset_list());
+        assert_eq!(Some(70.0), attrs.attrs().resume_offset());
+        assert_eq!(Some(50.0), attrs.attrs().playout_limit());
+        assert_eq!(
+            Some(EnumeratedStringList::from([Snap::Out])),
+            attrs.attrs().snap()
+        );
+        assert_eq!(
+            Some(EnumeratedStringList::from([Restrict::Jump])),
+            attrs.attrs().restrict()
+        );
+        assert_eq!(true, attrs.attrs().content_may_vary());
+        assert_eq!(
+            Some(EnumeratedString::from(TimelineOccupies::Point)),
+            attrs.attrs().timeline_occupies()
+        );
+        assert_eq!(
+            Some(EnumeratedString::from(TimelineStyle::Highlight)),
+            attrs.attrs().timeline_style()
+        );
+        assert_eq!(Some(20.0), attrs.attrs().skip_control_offset());
+        assert_eq!(Some(10.0), attrs.attrs().skip_control_duration());
+        assert_eq!(Some("skippy"), attrs.attrs().skip_control_label_id());
+
+        // Test has been set on daterange too
+        let attrs = daterange
+            .interstitial_attributes()
+            .expect("should have interstitials defined");
+        assert_eq!(Some("ad-1.m3u8"), attrs.asset_uri());
+        assert_eq!(None, attrs.asset_list());
+        assert_eq!(Some(70.0), attrs.resume_offset());
+        assert_eq!(Some(50.0), attrs.playout_limit());
+        assert_eq!(Some(EnumeratedStringList::from([Snap::Out])), attrs.snap());
+        assert_eq!(
+            Some(EnumeratedStringList::from([Restrict::Jump])),
+            attrs.restrict()
+        );
+        assert_eq!(true, attrs.content_may_vary());
+        assert_eq!(
+            Some(EnumeratedString::from(TimelineOccupies::Point)),
+            attrs.timeline_occupies()
+        );
+        assert_eq!(
+            Some(EnumeratedString::from(TimelineStyle::Highlight)),
+            attrs.timeline_style()
+        );
+        assert_eq!(Some(20.0), attrs.skip_control_offset());
+        assert_eq!(Some(10.0), attrs.skip_control_duration());
+        assert_eq!(Some("skippy"), attrs.skip_control_label_id());
     }
 
     mutation_tests!(
