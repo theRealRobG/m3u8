@@ -641,6 +641,129 @@ const X_SKIP_CONTROL_OFFSET: &str = "X-SKIP-CONTROL-OFFSET";
 const X_SKIP_CONTROL_DURATION: &str = "X-SKIP-CONTROL-DURATION";
 const X_SKIP_CONTROL_LABEL_ID: &str = "X-SKIP-CONTROL-LABEL-ID";
 
+/// The value of the `EXT-X-DATERANGE:CLASS` attribute that indicates that the daterange should be
+/// treated as per the definitions within Preloading HLS Date Range Resources in [Appendix F].
+///
+/// [Appendix F]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-18#appendix-F
+pub const PRELOAD_CLASS: &str = "com.apple.hls.preload";
+/// Corresponds to the attributes defined for Preloading HLS Date Range Resources in [Appendix F].
+///
+/// [Appendix F]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-18#appendix-F
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub struct PreloadExtensionAttributes<'a> {
+    uri: &'a str,
+    target_id: &'a str,
+    target_class: &'a str,
+}
+impl<'a, 'b> TryFrom<&'b [(Cow<'a, str>, LazyAttribute<'a, ExtensionAttributeValue<'a>>)]>
+    for PreloadExtensionAttributes<'b>
+{
+    type Error = ValidationError;
+
+    fn try_from(
+        attrs: &'b [(Cow<'a, str>, LazyAttribute<'a, ExtensionAttributeValue<'a>>)],
+    ) -> Result<Self, Self::Error> {
+        let mut uri = None;
+        let mut target_id = None;
+        let mut target_class = None;
+        for (key, value) in attrs {
+            match key.as_ref() {
+                X_URI => uri = Some(value),
+                X_TARGET_ID => target_id = Some(value),
+                X_TARGET_CLASS => target_class = Some(value),
+                _ => (),
+            }
+        }
+        let quoted = |a: &'b LazyAttribute<'_, ExtensionAttributeValue<'_>>| match a {
+            LazyAttribute::UserDefined(v) => match v {
+                ExtensionAttributeValue::QuotedString(cow) => Some(cow.as_ref()),
+                ExtensionAttributeValue::HexadecimalSequence(_) => None,
+                ExtensionAttributeValue::SignedDecimalFloatingPoint(_) => None,
+            },
+            LazyAttribute::Unparsed(v) => v.quoted(),
+            LazyAttribute::None => None,
+        };
+        let uri = uri
+            .and_then(quoted)
+            .ok_or(ValidationError::MissingRequiredAttribute(X_URI))?;
+        let target_id = target_id
+            .and_then(quoted)
+            .ok_or(ValidationError::MissingRequiredAttribute(X_TARGET_ID))?;
+        let target_class = target_class
+            .and_then(quoted)
+            .ok_or(ValidationError::MissingRequiredAttribute(X_TARGET_CLASS))?;
+        Ok(Self {
+            uri,
+            target_id,
+            target_class,
+        })
+    }
+}
+impl<'a> PreloadExtensionAttributes<'a> {
+    /// Corresponds to the `X-URI` attribute.
+    pub fn uri(&self) -> &'a str {
+        self.uri
+    }
+    /// Corresponds to the `X-TARGET-ID` attribute.
+    pub fn target_id(&self) -> &'a str {
+        self.target_id
+    }
+    /// Corresponds to the `X-TARGET-CLASS` attribute.
+    pub fn target_class(&self) -> &'a str {
+        self.target_class
+    }
+}
+/// Corresponds to the attributes defined for Preloading HLS Date Range Resources in [Appendix F].
+///
+/// This provides mutable access to the properties. Setting or unsetting values here will set/unset
+/// them on the [`Daterange`] from which this was derived from.
+///
+/// [Appendix F]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-18#appendix-F
+#[derive(Debug, PartialEq)]
+pub struct PreloadExtensionAttributesMut<'a, 'b> {
+    daterange: &'b mut Daterange<'a>,
+}
+impl<'a, 'b> PreloadExtensionAttributesMut<'a, 'b> {
+    /// Provides access to the existing values of the preload attributes.
+    pub fn attrs(&'b self) -> PreloadExtensionAttributes<'b> {
+        PreloadExtensionAttributes::try_from(self.daterange.extension_attributes.as_slice())
+            .unwrap_or(
+                // The `try_from` must succeed, because we can only create Self if it has succeeded,
+                // and once we have a reference to Self we cannot mutate Daterange due to the
+                // exclusive ref taken by Self. Therefore, this fallback should never be reached.
+                PreloadExtensionAttributes {
+                    uri: "",
+                    target_id: "",
+                    target_class: "",
+                },
+            )
+    }
+}
+impl<'a, 'b> PreloadExtensionAttributesMut<'a, 'b> {
+    /// Sets the `X-URI` attribute.
+    pub fn set_uri(&mut self, uri: impl Into<Cow<'a, str>>) {
+        self.daterange
+            .set_extension_attribute(X_URI, ExtensionAttributeValue::QuotedString(uri.into()));
+    }
+    /// Sets the `X-TARGET-ID` attribute.
+    pub fn set_target_id(&mut self, target_id: impl Into<Cow<'a, str>>) {
+        self.daterange.set_extension_attribute(
+            X_TARGET_ID,
+            ExtensionAttributeValue::QuotedString(target_id.into()),
+        );
+    }
+    /// Sets the `X-TARGET-CLASS` attribute.
+    pub fn set_target_class(&mut self, target_class: impl Into<Cow<'a, str>>) {
+        self.daterange.set_extension_attribute(
+            X_TARGET_CLASS,
+            ExtensionAttributeValue::QuotedString(target_class.into()),
+        );
+    }
+}
+const X_URI: &str = "X-URI";
+const X_TARGET_ID: &str = "X-TARGET-ID";
+const X_TARGET_CLASS: &str = "X-TARGET-CLASS";
+
 /// The attribute list for the tag (`#EXT-X-DATERANGE:<attribute-list>`).
 ///
 /// See [`Daterange`] for a link to the HLS documentation for this attribute.
@@ -1292,6 +1415,37 @@ impl<'a> Daterange<'a> {
     ) -> Option<InterstitialExtensionAttributesMut<'a, '_>> {
         if self.class() == Some(INTERSTITIAL_CLASS) {
             Some(InterstitialExtensionAttributesMut { daterange: self })
+        } else {
+            None
+        }
+    }
+
+    /// Provides typed access to the extension attributes defined for Preloading HLS Date Range
+    /// Resources in [Appendix F].
+    ///
+    /// This will return `None` if the `CLASS` is not set to `com.apple.hls.preload`.
+    ///
+    /// [Appendix F]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-18#appendix-F
+    pub fn preload_attributes(&self) -> Option<PreloadExtensionAttributes<'_>> {
+        if self.class() == Some(PRELOAD_CLASS) {
+            PreloadExtensionAttributes::try_from(self.extension_attributes.as_slice()).ok()
+        } else {
+            None
+        }
+    }
+
+    /// Provides typed access to the extension attributes defined for Preloading HLS Date Range
+    /// Resources in [Appendix F].
+    ///
+    /// This will return `None` if the `CLASS` is not set to `com.apple.hls.preload`.
+    ///
+    /// This provides mutable access to the properties. Setting or unsetting values here will set/unset
+    /// them on the [`Daterange`] from which this was derived from.
+    ///
+    /// [Appendix F]: https://datatracker.ietf.org/doc/html/draft-pantos-hls-rfc8216bis-18#appendix-F
+    pub fn preload_attributes_mut(&mut self) -> Option<PreloadExtensionAttributesMut<'a, '_>> {
+        if self.preload_attributes().is_some() {
+            Some(PreloadExtensionAttributesMut { daterange: self })
         } else {
             None
         }
@@ -2067,6 +2221,57 @@ mod tests {
         assert_eq!(Some(20.0), attrs.skip_control_offset());
         assert_eq!(Some(10.0), attrs.skip_control_duration());
         assert_eq!(Some("skippy"), attrs.skip_control_label_id());
+    }
+
+    #[test]
+    fn preload_attributes_are_parsed_correctly_and_mutable() {
+        let daterange_line = concat!(
+            "#EXT-X-DATERANGE:ID=\"preload-1\",X-URI=\"ad-1.json\",X-TARGET-ID=\"ad-1\",",
+            "X-TARGET-CLASS=\"com.apple.hls.interstitial\""
+        );
+        let tag = crate::custom_parsing::tag::parse(daterange_line)
+            .expect("parsing should succeed")
+            .parsed;
+        let mut daterange = Daterange::try_from(tag).expect("tag should be valid daterange");
+
+        // attrs are None until CLASS is set.
+        assert_eq!(None, daterange.preload_attributes());
+        assert_eq!(None, daterange.preload_attributes_mut());
+        daterange.set_class(PRELOAD_CLASS);
+        let preload_attrs = daterange
+            .preload_attributes()
+            .expect("preload attrs should be defined");
+
+        assert_eq!("ad-1.json", preload_attrs.uri());
+        assert_eq!("ad-1", preload_attrs.target_id());
+        assert_eq!("com.apple.hls.interstitial", preload_attrs.target_class());
+
+        // Test mutation
+        let mut attrs = daterange
+            .preload_attributes_mut()
+            .expect("attrs should be defined");
+        attrs.set_uri("static-ad-1.m3u8");
+        attrs.set_target_id("static-ad-1");
+        attrs.set_target_class("com.example.custom.static.interstitial");
+
+        // Test on mutable ref
+        assert_eq!("static-ad-1.m3u8", attrs.attrs().uri());
+        assert_eq!("static-ad-1", attrs.attrs().target_id());
+        assert_eq!(
+            "com.example.custom.static.interstitial",
+            attrs.attrs().target_class()
+        );
+
+        // Test has been set on daterange too
+        let attrs = daterange
+            .preload_attributes()
+            .expect("should have preload defined");
+        assert_eq!("static-ad-1.m3u8", attrs.uri());
+        assert_eq!("static-ad-1", attrs.target_id());
+        assert_eq!(
+            "com.example.custom.static.interstitial",
+            attrs.target_class()
+        );
     }
 
     mutation_tests!(
