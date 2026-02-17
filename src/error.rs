@@ -74,7 +74,7 @@ pub enum SyntaxError {
     Generic(GenericSyntaxError),
     /// An error experienced while trying to parse [`crate::line::HlsLine::UnknownTag`].
     UnknownTag(UnknownTagSyntaxError),
-    /// An error experienced while trying to parse [`crate::date::DateTime`].
+    /// An error experienced while trying to parse a `DateTime`.
     DateTime(DateTimeSyntaxError),
     /// An error experienced while trying to parse a tag value.
     TagValue(TagValueSyntaxError),
@@ -173,6 +173,45 @@ impl From<Utf8Error> for UnknownTagSyntaxError {
     }
 }
 
+#[cfg(feature = "chrono")]
+/// An error experienced while trying to parse [`chrono::DateTime`].
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum DateTimeSyntaxError {
+    /// Some part of the line could not be decoded as UTF-8.
+    InvalidUtf8(Utf8Error),
+    /// Attempting to parse from RFC3339 failed.
+    ChronoParseError(chrono::ParseError),
+}
+#[cfg(feature = "chrono")]
+impl Display for DateTimeSyntaxError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::InvalidUtf8(e) => e.fmt(f),
+            Self::ChronoParseError(e) => e.fmt(f),
+        }
+    }
+}
+#[cfg(feature = "chrono")]
+impl Error for DateTimeSyntaxError {}
+#[cfg(feature = "chrono")]
+impl From<DateTimeSyntaxError> for SyntaxError {
+    fn from(value: DateTimeSyntaxError) -> Self {
+        Self::DateTime(value)
+    }
+}
+#[cfg(feature = "chrono")]
+impl From<Utf8Error> for DateTimeSyntaxError {
+    fn from(value: Utf8Error) -> Self {
+        Self::InvalidUtf8(value)
+    }
+}
+#[cfg(feature = "chrono")]
+impl From<chrono::ParseError> for DateTimeSyntaxError {
+    fn from(value: chrono::ParseError) -> Self {
+        Self::ChronoParseError(value)
+    }
+}
+#[cfg(not(feature = "chrono"))]
 /// An error experienced while trying to parse [`crate::date::DateTime`].
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum DateTimeSyntaxError {
@@ -211,10 +250,12 @@ pub enum DateTimeSyntaxError {
     /// A generic syntax error that breaks parsing of the line.
     Generic(GenericSyntaxError),
 }
+#[cfg(not(feature = "chrono"))]
 fn option_u8_to_string(u: &Option<u8>) -> String {
     u.map(|b| format!("{}", b as char))
         .unwrap_or("None".to_string())
 }
+#[cfg(not(feature = "chrono"))]
 impl Display for DateTimeSyntaxError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -271,12 +312,15 @@ impl Display for DateTimeSyntaxError {
         }
     }
 }
+#[cfg(not(feature = "chrono"))]
 impl Error for DateTimeSyntaxError {}
+#[cfg(not(feature = "chrono"))]
 impl From<DateTimeSyntaxError> for SyntaxError {
     fn from(value: DateTimeSyntaxError) -> Self {
         Self::DateTime(value)
     }
 }
+#[cfg(not(feature = "chrono"))]
 impl From<GenericSyntaxError> for DateTimeSyntaxError {
     fn from(value: GenericSyntaxError) -> Self {
         Self::Generic(value)

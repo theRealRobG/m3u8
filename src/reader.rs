@@ -230,16 +230,20 @@ use std::marker::PhantomData;
 /// # use quick_m3u8::{
 /// # Reader, HlsLine, Writer,
 /// # config::ParsingOptionsBuilder,
-/// # date::DateTime,
 /// # tag::{KnownTag, UnknownTag, CustomTag, WritableCustomTag, WritableTag},
 /// # tag::hls::{self, Cue, Daterange, ExtensionAttributeValue},
+/// # tag::hls::{DaterangeIdHasBeenSet, DaterangeBuilder},
 /// # error::ValidationError,
 /// # };
 /// # use std::{borrow::Cow, error::Error, io::Write, marker::PhantomData};
 /// # fn advert_id_from_scte35_out(_: &str) -> Option<String> { None }
 /// # fn advert_uri_from_id(_: &str) -> String { String::new() }
 /// # fn generate_uuid() -> &'static str { "" }
-/// # fn calculate_start_date_based_on_inf_durations() -> DateTime { todo!() }
+/// # fn with_start_date_based_on_inf_durations(
+/// #     builder: DaterangeBuilder<'_, DaterangeIdHasBeenSet>
+/// # ) -> DaterangeBuilder<'_, DaterangeIdHasBeenSet> {
+/// #     todo!();
+/// # }
 /// # let output: Vec<u8> = Vec::new();
 /// # let upstream_playlist = b"";
 /// #[derive(Debug, PartialEq, Clone)]
@@ -301,10 +305,8 @@ use std::marker::PhantomData;
 ///             if let Some(advert_id) = advert_id_from_scte35_out(tag.as_ref().cue) {
 ///                 let tag_ref = tag.as_ref();
 ///                 let id = format!("ADVERT:{}", tag_ref.id.unwrap_or(generate_uuid()));
-///                 let start_date = calculate_start_date_based_on_inf_durations();
 ///                 let builder = Daterange::builder()
 ///                     .with_id(id)
-///                     .with_start_date(start_date)
 ///                     .with_class("com.apple.hls.interstitial")
 ///                     .with_cue(Cue::Once)
 ///                     .with_extension_attribute(
@@ -317,6 +319,7 @@ use std::marker::PhantomData;
 ///                         "X-RESTRICT",
 ///                         ExtensionAttributeValue::QuotedString(Cow::Borrowed("SKIP,JUMP")),
 ///                     );
+///                 let builder = with_start_date_based_on_inf_durations(builder);
 ///                 let interstitial_daterange = if tag_ref.duration == Some(0.0) {
 ///                     builder
 ///                         .with_extension_attribute(

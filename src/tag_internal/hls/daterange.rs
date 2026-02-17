@@ -1,5 +1,7 @@
+#[cfg(not(feature = "chrono"))]
+use crate::date::DateTime;
 use crate::{
-    date::{self, DateTime},
+    date::{self, string_from},
     error::{ParseTagValueError, UnrecognizedEnumerationError, ValidationError},
     tag::{
         AttributeValue, UnknownTag, UnquotedAttributeValue,
@@ -773,6 +775,12 @@ struct DaterangeAttributeList<'a> {
     ///
     /// See [`Daterange`] for a link to the HLS documentation for this attribute.
     id: Cow<'a, str>,
+    #[cfg(feature = "chrono")]
+    /// Corresponds to the `START-DATE` attribute.
+    ///
+    /// See [`Daterange`] for a link to the HLS documentation for this attribute.
+    start_date: Option<chrono::DateTime<chrono::FixedOffset>>,
+    #[cfg(not(feature = "chrono"))]
     /// Corresponds to the `START-DATE` attribute.
     ///
     /// See [`Daterange`] for a link to the HLS documentation for this attribute.
@@ -785,6 +793,12 @@ struct DaterangeAttributeList<'a> {
     ///
     /// See [`Daterange`] for a link to the HLS documentation for this attribute.
     cue: Option<Cow<'a, str>>,
+    #[cfg(feature = "chrono")]
+    /// Corresponds to the `END-DATE` attribute.
+    ///
+    /// See [`Daterange`] for a link to the HLS documentation for this attribute.
+    end_date: Option<chrono::DateTime<chrono::FixedOffset>>,
+    #[cfg(not(feature = "chrono"))]
     /// Corresponds to the `END-DATE` attribute.
     ///
     /// See [`Daterange`] for a link to the HLS documentation for this attribute.
@@ -877,6 +891,13 @@ impl<'a, IdStatus> DaterangeBuilder<'a, IdStatus> {
         }
     }
 
+    #[cfg(feature = "chrono")]
+    /// Add the provided `start_date` to the attributes built into `Daterange`.
+    pub fn with_start_date(mut self, start_date: chrono::DateTime<chrono::FixedOffset>) -> Self {
+        self.attribute_list.start_date = Some(start_date);
+        self
+    }
+    #[cfg(not(feature = "chrono"))]
     /// Add the provided `start_date` to the attributes built into `Daterange`.
     pub fn with_start_date(mut self, start_date: DateTime) -> Self {
         self.attribute_list.start_date = Some(start_date);
@@ -895,6 +916,13 @@ impl<'a, IdStatus> DaterangeBuilder<'a, IdStatus> {
         self
     }
 
+    #[cfg(feature = "chrono")]
+    /// Add the provided `end_date` to the attributes built into `Daterange`.
+    pub fn with_end_date(mut self, end_date: chrono::DateTime<chrono::FixedOffset>) -> Self {
+        self.attribute_list.end_date = Some(end_date);
+        self
+    }
+    #[cfg(not(feature = "chrono"))]
     /// Add the provided `end_date` to the attributes built into `Daterange`.
     pub fn with_end_date(mut self, end_date: DateTime) -> Self {
         self.attribute_list.end_date = Some(end_date);
@@ -925,7 +953,7 @@ impl<'a, IdStatus> DaterangeBuilder<'a, IdStatus> {
     /// # use quick_m3u8::date_time;
     /// let daterange = Daterange::builder()
     ///     .with_id("id")
-    ///     .with_start_date(date_time!(2025-08-02 T 21:03:00.000 -05:00))
+    ///     .with_start_date(date_time!(2025-08-02 T 21:03:00.001 -05:00))
     ///     .with_extension_attribute(
     ///         "X-MESSAGE",
     ///         ExtensionAttributeValue::QuotedString("Hello, World!".into()),
@@ -939,11 +967,11 @@ impl<'a, IdStatus> DaterangeBuilder<'a, IdStatus> {
     /// // The order of output of attributes may be mixed so we have to assert that it could be
     /// // either order:
     /// let expected_output_option_1 = concat!(
-    ///     "#EXT-X-DATERANGE:ID=\"id\",START-DATE=\"2025-08-02T21:03:00.000-05:00\",",
+    ///     "#EXT-X-DATERANGE:ID=\"id\",START-DATE=\"2025-08-02T21:03:00.001-05:00\",",
     ///     "X-MESSAGE=\"Hello, World!\",X-ANSWER=42"
     /// ).as_bytes();
     /// let expected_output_option_2 = concat!(
-    ///     "#EXT-X-DATERANGE:ID=\"id\",START-DATE=\"2025-08-02T21:03:00.000-05:00\",",
+    ///     "#EXT-X-DATERANGE:ID=\"id\",START-DATE=\"2025-08-02T21:03:00.001-05:00\",",
     ///     "X-ANSWER=42,X-MESSAGE=\"Hello, World!\""
     /// ).as_bytes();
     /// let inner = daterange.into_inner();
@@ -1009,9 +1037,15 @@ impl<'a> Default for DaterangeBuilder<'a, DaterangeIdNeedsToBeSet> {
 #[derive(Debug, Clone)]
 pub struct Daterange<'a> {
     id: Cow<'a, str>,
+    #[cfg(feature = "chrono")]
+    start_date: LazyAttribute<'a, chrono::DateTime<chrono::FixedOffset>>,
+    #[cfg(not(feature = "chrono"))]
     start_date: LazyAttribute<'a, DateTime>,
     class: LazyAttribute<'a, Cow<'a, str>>,
     cue: LazyAttribute<'a, Cow<'a, str>>,
+    #[cfg(feature = "chrono")]
+    end_date: LazyAttribute<'a, chrono::DateTime<chrono::FixedOffset>>,
+    #[cfg(not(feature = "chrono"))]
     end_date: LazyAttribute<'a, DateTime>,
     duration: LazyAttribute<'a, f64>,
     planned_duration: LazyAttribute<'a, f64>,
@@ -1189,6 +1223,18 @@ impl<'a> Daterange<'a> {
         }
     }
 
+    #[cfg(feature = "chrono")]
+    /// Corresponds to the `START-DATE` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
+    pub fn start_date(&self) -> Option<chrono::DateTime<chrono::FixedOffset>> {
+        match &self.start_date {
+            LazyAttribute::UserDefined(s) => Some(*s),
+            LazyAttribute::Unparsed(v) => v.quoted().and_then(|s| date::parse(s).ok()),
+            LazyAttribute::None => None,
+        }
+    }
+    #[cfg(not(feature = "chrono"))]
     /// Corresponds to the `START-DATE` attribute.
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
@@ -1231,6 +1277,18 @@ impl<'a> Daterange<'a> {
         }
     }
 
+    #[cfg(feature = "chrono")]
+    /// Corresponds to the `END-DATE` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
+    pub fn end_date(&self) -> Option<chrono::DateTime<chrono::FixedOffset>> {
+        match &self.end_date {
+            LazyAttribute::UserDefined(s) => Some(*s),
+            LazyAttribute::Unparsed(v) => v.quoted().and_then(|s| date::parse(s).ok()),
+            LazyAttribute::None => None,
+        }
+    }
+    #[cfg(not(feature = "chrono"))]
     /// Corresponds to the `END-DATE` attribute.
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
@@ -1564,6 +1622,15 @@ impl<'a> Daterange<'a> {
         self.output_line_is_dirty = true;
     }
 
+    #[cfg(feature = "chrono")]
+    /// Sets the `START-DATE` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
+    pub fn set_start_date(&mut self, start_date: chrono::DateTime<chrono::FixedOffset>) {
+        self.start_date.set(start_date);
+        self.output_line_is_dirty = true;
+    }
+    #[cfg(not(feature = "chrono"))]
     /// Sets the `START-DATE` attribute.
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
@@ -1623,6 +1690,15 @@ impl<'a> Daterange<'a> {
         self.output_line_is_dirty = true;
     }
 
+    #[cfg(feature = "chrono")]
+    /// Sets the `END-DATE` attribute.
+    ///
+    /// See [`Self`] for a link to the HLS documentation for this attribute.
+    pub fn set_end_date(&mut self, end_date: chrono::DateTime<chrono::FixedOffset>) {
+        self.end_date.set(end_date);
+        self.output_line_is_dirty = true;
+    }
+    #[cfg(not(feature = "chrono"))]
     /// Sets the `END-DATE` attribute.
     ///
     /// See [`Self`] for a link to the HLS documentation for this attribute.
@@ -1896,7 +1972,7 @@ fn calculate_line(attribute_list: &DaterangeAttributeList) -> Vec<u8> {
     } = attribute_list;
     let mut line = format!("#EXT{}:{}=\"{}\"", TagName::Daterange.as_str(), ID, id,);
     if let Some(start_date) = start_date {
-        line.push_str(format!(",{START_DATE}=\"{start_date}\"").as_str());
+        line.push_str(format!(",{START_DATE}=\"{}\"", string_from(start_date)).as_str());
     }
     if let Some(class) = class {
         line.push_str(format!(",{CLASS}=\"{class}\"").as_str());
@@ -1905,7 +1981,7 @@ fn calculate_line(attribute_list: &DaterangeAttributeList) -> Vec<u8> {
         line.push_str(format!(",{CUE}=\"{cue}\"").as_str());
     }
     if let Some(end_date) = end_date {
-        line.push_str(format!(",{END_DATE}=\"{end_date}\"").as_str());
+        line.push_str(format!(",{END_DATE}=\"{}\"", string_from(end_date)).as_str());
     }
     if let Some(duration) = duration {
         line.push_str(format!(",{DURATION}={duration}").as_str());
@@ -1959,10 +2035,10 @@ mod tests {
     fn new_with_no_optionals_should_be_valid() {
         let tag = Daterange::builder()
             .with_id("some-id")
-            .with_start_date(date_time!(2025-06-14 T 23:41:42.000 -05:00))
+            .with_start_date(date_time!(2025-06-14 T 23:41:42.001 -05:00))
             .finish();
         assert_eq!(
-            b"#EXT-X-DATERANGE:ID=\"some-id\",START-DATE=\"2025-06-14T23:41:42.000-05:00\"",
+            b"#EXT-X-DATERANGE:ID=\"some-id\",START-DATE=\"2025-06-14T23:41:42.001-05:00\"",
             tag.into_inner().value()
         );
     }
@@ -1971,10 +2047,10 @@ mod tests {
     fn new_with_optionals_should_be_valid() {
         let tag = Daterange::builder()
             .with_id("some-id")
-            .with_start_date(date_time!(2025-06-14 T 23:41:42.000 -05:00))
+            .with_start_date(date_time!(2025-06-14 T 23:41:42.001 -05:00))
             .with_class("com.example.class")
             .with_cue(EnumeratedStringList::from([Cue::Once]))
-            .with_end_date(date_time!(2025-06-14 T 23:43:42.000 -05:00))
+            .with_end_date(date_time!(2025-06-14 T 23:43:42.001 -05:00))
             .with_duration(120.0)
             .with_planned_duration(180.0)
             .with_scte35_cmd("0xABCD")
@@ -1984,9 +2060,9 @@ mod tests {
             .finish();
         assert_eq!(
             concat!(
-                "#EXT-X-DATERANGE:ID=\"some-id\",START-DATE=\"2025-06-14T23:41:42.000-05:00\",",
+                "#EXT-X-DATERANGE:ID=\"some-id\",START-DATE=\"2025-06-14T23:41:42.001-05:00\",",
                 "CLASS=\"com.example.class\",CUE=\"ONCE\",",
-                "END-DATE=\"2025-06-14T23:43:42.000-05:00\",DURATION=120,PLANNED-DURATION=180,",
+                "END-DATE=\"2025-06-14T23:43:42.001-05:00\",DURATION=120,PLANNED-DURATION=180,",
                 "SCTE35-CMD=0xABCD,SCTE35-OUT=0xABCD,SCTE35-IN=0xABCD,END-ON-NEXT=YES"
             )
             .as_bytes(),
@@ -1998,7 +2074,7 @@ mod tests {
     fn new_with_optionals_and_some_client_attributes_should_be_valid() {
         let tag = Daterange::builder()
             .with_id("some-id")
-            .with_start_date(date_time!(2025-06-14 T 23:41:42.000 -05:00))
+            .with_start_date(date_time!(2025-06-14 T 23:41:42.001 -05:00))
             .with_extension_attribute(
                 "X-COM-EXAMPLE-A",
                 ExtensionAttributeValue::QuotedString("Example A".into()),
@@ -2022,7 +2098,7 @@ mod tests {
         for (index, split) in tag_as_bytes.split(|b| b == &b',').enumerate() {
             match index {
                 0 => assert_eq!(b"#EXT-X-DATERANGE:ID=\"some-id\"", split),
-                1 => assert_eq!(b"START-DATE=\"2025-06-14T23:41:42.000-05:00\"", split),
+                1 => assert_eq!(b"START-DATE=\"2025-06-14T23:41:42.001-05:00\"", split),
                 2 | 3 | 4 => {
                     if split.starts_with(b"X-COM-EXAMPLE-A") {
                         if found_a {
@@ -2058,7 +2134,7 @@ mod tests {
     fn mutation_should_work() {
         let mut daterange = Daterange::builder()
             .with_id("some-id")
-            .with_start_date(DateTime::default())
+            .with_start_date(default_date())
             .with_cue(EnumeratedStringList::from([Cue::Once]))
             .with_extension_attribute(
                 "X-TO-REMOVE",
@@ -2067,7 +2143,7 @@ mod tests {
             .finish();
         assert_eq!(
             concat!(
-                "#EXT-X-DATERANGE:ID=\"some-id\",START-DATE=\"1970-01-01T00:00:00.000Z\",",
+                "#EXT-X-DATERANGE:ID=\"some-id\",START-DATE=\"2000-01-01T00:00:00.123Z\",",
                 "CUE=\"ONCE\",X-TO-REMOVE=\"remove me\"",
             )
             .as_bytes(),
@@ -2083,7 +2159,7 @@ mod tests {
         daterange.unset_extension_attribute("X-TO-REMOVE");
         assert_eq!(
             concat!(
-                "#EXT-X-DATERANGE:ID=\"another-id\",START-DATE=\"1970-01-01T00:00:00.000Z\",",
+                "#EXT-X-DATERANGE:ID=\"another-id\",START-DATE=\"2000-01-01T00:00:00.123Z\",",
                 "CLASS=\"com.example.test\",X-EXAMPLE=\"TEST\"",
             )
             .as_bytes(),
@@ -2095,7 +2171,7 @@ mod tests {
     fn mutating_cue_works_as_expected() {
         let mut daterange = Daterange::builder()
             .with_id("some-id")
-            .with_start_date(DateTime::default())
+            .with_start_date(default_date())
             .with_cue(EnumeratedStringList::from([Cue::Once]))
             .finish();
         let mut cue = daterange.cue().unwrap();
@@ -2277,10 +2353,10 @@ mod tests {
     mutation_tests!(
         Daterange::builder()
             .with_id("some-id")
-            .with_start_date(date_time!(2025-06-14 T 23:41:42.000 -05:00))
+            .with_start_date(date_time!(2025-06-14 T 23:41:42.001 -05:00))
             .with_class("com.example.class")
             .with_cue(EnumeratedStringList::from([Cue::Once]))
-            .with_end_date(date_time!(2025-06-14 T 23:43:42.000 -05:00))
+            .with_end_date(date_time!(2025-06-14 T 23:43:42.001 -05:00))
             .with_duration(120.0)
             .with_planned_duration(180.0)
             .with_scte35_cmd("0xABCD")
@@ -2288,10 +2364,10 @@ mod tests {
             .with_scte35_in("0xABCD")
             .finish(),
         (id, "another-id", @Attr="ID=\"another-id\""),
-        (start_date, @Option DateTime::default(), @Attr="START-DATE=\"1970-01-01T00:00:00.000Z\""),
+        (start_date, @Option default_date(), @Attr="START-DATE=\"2000-01-01T00:00:00.123Z\""),
         (class, @Option "com.test.class", @Attr="CLASS=\"com.test.class\""),
         (cue, @Option EnumeratedStringList::from([Cue::Once, Cue::Pre]), @Attr="CUE=\"ONCE,PRE\""),
-        (end_date, @Option DateTime::default(), @Attr="END-DATE=\"1970-01-01T00:00:00.000Z\""),
+        (end_date, @Option default_date(), @Attr="END-DATE=\"2000-01-01T00:00:00.123Z\""),
         (duration, @Option 60.0, @Attr="DURATION=60"),
         (planned_duration, @Option 80.0, @Attr="PLANNED-DURATION=80"),
         (scte35_cmd, @Option "0x1234", @Attr="SCTE35-CMD=0x1234"),
@@ -2299,4 +2375,13 @@ mod tests {
         (scte35_in, @Option "0x1234", @Attr="SCTE35-IN=0x1234"),
         (end_on_next, true, @Attr="END-ON-NEXT=YES")
     );
+
+    #[cfg(feature = "chrono")]
+    fn default_date() -> chrono::DateTime<chrono::FixedOffset> {
+        date_time!(2000-01-01 T 00:00:00.123)
+    }
+    #[cfg(not(feature = "chrono"))]
+    fn default_date() -> DateTime {
+        date_time!(2000-01-01 T 00:00:00.123)
+    }
 }
