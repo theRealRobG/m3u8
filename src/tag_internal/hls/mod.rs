@@ -549,16 +549,12 @@ pub enum TagType {
 
 // This is used by all the tag implementations as a means of delaying the parsing of the attribute
 // until the value is retrieved from one of the get methods.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Default)]
 enum LazyAttribute<'a, T> {
     UserDefined(T),
     Unparsed(AttributeValue<'a>),
+    #[default]
     None,
-}
-impl<T> Default for LazyAttribute<'_, T> {
-    fn default() -> Self {
-        Self::None
-    }
 }
 impl<'a, T> LazyAttribute<'a, T> {
     fn new(t: T) -> Self {
