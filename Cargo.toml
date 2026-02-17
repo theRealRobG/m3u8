@@ -10,9 +10,14 @@ categories = ["parser-implementations"]
 edition = "2024"
 exclude = ["/.github", "/benches"]
 
+[features]
+default = []
+chrono = ["dep:chrono"]
+
 [dependencies]
 fast-float2 = "0.2"
 memchr = "2.7"
+chrono = { version = "0.4", optional = true, default-features = false, features = ["std"] }
 
 [dev-dependencies]
 criterion = "0.7"

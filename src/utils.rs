@@ -1,11 +1,13 @@
-use std::borrow::Cow;
-
+#[cfg(not(feature = "chrono"))]
 use crate::{
     date::{DateTime, DateTimeTimezoneOffset},
-    error::{DateTimeSyntaxError, GenericSyntaxError, ParseNumberError},
-    line::ParsedByteSlice,
+    error::{DateTimeSyntaxError, GenericSyntaxError},
 };
-use memchr::{memchr, memchr3};
+use crate::{error::ParseNumberError, line::ParsedByteSlice};
+use memchr::memchr;
+#[cfg(not(feature = "chrono"))]
+use memchr::memchr3;
+use std::borrow::Cow;
 
 pub trait AsStaticCow {
     fn as_cow(&self) -> Cow<'static, str>;
@@ -36,6 +38,7 @@ pub(crate) fn str_from(bytes: &[u8]) -> &str {
     }
 }
 
+#[cfg(not(feature = "chrono"))]
 pub fn parse_date_time_bytes<'a>(
     input: &'a [u8],
 ) -> Result<ParsedByteSlice<'a, DateTime>, DateTimeSyntaxError> {
@@ -195,15 +198,19 @@ macro_rules! parse_num_impl {
 }
 
 parse_num_impl!(parse_u64 -> u64);
+#[cfg(not(feature = "chrono"))]
 parse_num_impl!(parse_u32 -> u32);
+#[cfg(not(feature = "chrono"))]
 parse_num_impl!(parse_u8 -> u8);
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(not(feature = "chrono"))]
     use crate::date_time;
     use pretty_assertions::assert_eq;
 
+    #[cfg(not(feature = "chrono"))]
     #[test]
     fn date_time_parse_with_space_for_day_hour_separator_still_works() {
         assert_eq!(

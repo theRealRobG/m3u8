@@ -3,8 +3,10 @@
 //! The value of a tag (when not empty) is everything after the `:` and before the new line break.
 //! This module provides types of values and methods for parsing into these types from input data.
 
+#[cfg(not(feature = "chrono"))]
+use crate::date::DateTime;
 use crate::{
-    date::{self, DateTime},
+    date,
     error::{
         AttributeListParsingError, DateTimeSyntaxError, DecimalResolutionParseError,
         ParseDecimalFloatingPointWithTitleError, ParseDecimalIntegerRangeError, ParseFloatError,
@@ -191,6 +193,27 @@ impl<'a> TagValue<'a> {
         }
     }
 
+    #[cfg(feature = "chrono")]
+    /// Attempt to convert the tag value bytes into a date time.
+    ///
+    /// For example:
+    /// ```
+    /// # use quick_m3u8::date_time;
+    /// let tag = quick_m3u8::custom_parsing::tag::parse(
+    ///     "#EXT-X-EXAMPLE:2025-08-10T17:27:42.213-05:00"
+    /// )?.parsed;
+    /// if let Some(value) = tag.value() {
+    ///     assert_eq!(date_time!(2025-08-10 T 17:27:42.213 -05:00), value.try_as_date_time()?);
+    /// }
+    /// # else { panic!("unexpected empty value"); }
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn try_as_date_time(
+        &self,
+    ) -> Result<chrono::DateTime<chrono::FixedOffset>, DateTimeSyntaxError> {
+        date::parse_bytes(self.0)
+    }
+    #[cfg(not(feature = "chrono"))]
     /// Attempt to convert the tag value bytes into a date time.
     ///
     /// For example:
@@ -609,6 +632,13 @@ pub enum WritableTagValue<'a> {
     ///
     /// For example, the `#EXT-X-PROGRAM-DATE-TIME:<date-time-msec>` tag has a `DateTime` value
     /// (e.g. `#EXT-X-PROGRAM-DATE-TIME:2010-02-19T14:54:23.031+08:00`).
+    #[cfg(feature = "chrono")]
+    DateTime(chrono::DateTime<chrono::FixedOffset>),
+    #[cfg(not(feature = "chrono"))]
+    /// The value is a date time.
+    ///
+    /// For example, the `#EXT-X-PROGRAM-DATE-TIME:<date-time-msec>` tag has a `DateTime` value
+    /// (e.g. `#EXT-X-PROGRAM-DATE-TIME:2010-02-19T14:54:23.031+08:00`).
     DateTime(DateTime),
     /// The value is an attribute list.
     ///
@@ -646,6 +676,13 @@ where
         Self::DecimalFloatingPointWithOptionalTitle(value.0, value.1.into())
     }
 }
+#[cfg(feature = "chrono")]
+impl From<chrono::DateTime<chrono::FixedOffset>> for WritableTagValue<'_> {
+    fn from(value: chrono::DateTime<chrono::FixedOffset>) -> Self {
+        Self::DateTime(value)
+    }
+}
+#[cfg(not(feature = "chrono"))]
 impl From<DateTime> for WritableTagValue<'_> {
     fn from(value: DateTime) -> Self {
         Self::DateTime(value)

@@ -4,6 +4,7 @@
 //! typed tags as well as writing when using [`crate::Writer`].
 
 use crate::{
+    date,
     error::ValidationError,
     tag::{UnknownTag, WritableAttributeValue, WritableTagValue, hls},
     utils::split_on_new_line,
@@ -983,7 +984,7 @@ pub(crate) fn calculate_output<'a, Custom: WritableCustomTag<'a>>(custom_tag: Cu
         WritableTagValue::DecimalInteger(n) => format!("#EXT{}:{n}", tag.name),
         WritableTagValue::DecimalIntegerRange(n, Some(o)) => format!("#EXT{}:{n}@{o}", tag.name),
         WritableTagValue::DecimalIntegerRange(n, None) => format!("#EXT{}:{n}", tag.name),
-        WritableTagValue::DateTime(d) => format!("#EXT{}:{d}", tag.name),
+        WritableTagValue::DateTime(d) => format!("#EXT{}:{}", tag.name, date::string_from(&d)),
         WritableTagValue::AttributeList(list) => {
             let attrs = list
                 .iter()

@@ -11,16 +11,27 @@ env:
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
-
     steps:
     - uses: actions/checkout@v4
     - name: Build
-      run: cargo build --verbose
+      run: cargo build --verbose --no-default-features
     - name: Test
-      run: cargo test --verbose
+      run: cargo test --verbose --no-default-features
     - name: Lint
-      run: cargo clippy -- -D warnings
+      run: cargo clippy --no-default-features -- -D warnings
     - name: Docs
-      run: RUSTDOCFLAGS="-D warnings" cargo doc
+      run: RUSTDOCFLAGS="-D warnings" cargo doc --no-default-features
+
+  build-chrono:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Build
+      run: cargo build --verbose --features chrono
+    - name: Test
+      run: cargo test --verbose --features chrono
+    - name: Lint
+      run: cargo clippy --features chrono -- -D warnings
+    - name: Docs
+      run: RUSTDOCFLAGS="-D warnings" cargo doc --features chrono
