@@ -10,6 +10,8 @@ The format is based on [Keep a Changelog], and this project adheres to
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-02-16
+
 ### Added
 - Support for using date/time types from Chrono directly within this
   library, but gated behind an optional feature flag `"chrono"`. When
@@ -134,7 +136,8 @@ The format is based on [Keep a Changelog], and this project adheres to
 - Made `EnumeratedStringList::is_empty` behavior match
   `EnumeratedStringListIter::count` is zero behvior.
 
-[unreleased]: https://github.com/theRealRobG/m3u8/compare/0.7.0...HEAD
+[unreleased]: https://github.com/theRealRobG/m3u8/compare/0.8.0...HEAD
+[0.8.0]: https://github.com/theRealRobG/m3u8/compare/0.7.0...0.8.0
 [0.7.0]: https://github.com/theRealRobG/m3u8/compare/0.6.0...0.7.0
 [0.6.0]: https://github.com/theRealRobG/m3u8/compare/0.5.0...0.6.0
 [0.5.0]: https://github.com/theRealRobG/m3u8/compare/0.4.0...0.5.0
