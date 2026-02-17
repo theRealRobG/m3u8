@@ -10,6 +10,15 @@ The format is based on [Keep a Changelog], and this project adheres to
 
 ## [Unreleased]
 
+### Added
+- Support for using date/time types from Chrono directly within this
+  library, but gated behind an optional feature flag `"chrono"`. When
+  enabled, this library will use Chrono for parsing date/times, such as
+  found in `EXT-X-PROGRAM-DATE-TIME` and `EXT-X-DATERANGE`, and expose
+  the Chrono type on those tags. This allows the user to benefit from
+  the full functionality of Chrono when it comes to manipulating and
+  comparing date/times found within m3u8.
+
 ## [0.7.0] - 2025-09-06
 
 ### Added
